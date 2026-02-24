@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 // GET /api/seguridad/permisos?grupoUsuarioId= - Obtener permisos de un grupo
 export async function GET(request: NextRequest) {
@@ -107,7 +108,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Reemplazar todos los permisos en una transaccion
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Eliminar todos los permisos existentes del grupo
       await tx.permisoAcceso.deleteMany({
         where: { grupoUsuarioId: grupoId },

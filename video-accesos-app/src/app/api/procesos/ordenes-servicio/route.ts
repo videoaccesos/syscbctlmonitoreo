@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 // GET /api/procesos/ordenes-servicio - Listar ordenes de servicio con filtros y paginacion
 export async function GET(request: NextRequest) {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generar folio automaticamente
-    const folio = await prisma.$transaction(async (tx) => {
+    const folio = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Buscar el registro de folio con prefijo "OS"
       let folioReg = await tx.folio.findFirst({
         where: { prefijo: "OS" },

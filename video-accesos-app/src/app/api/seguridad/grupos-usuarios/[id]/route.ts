@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 // GET /api/seguridad/grupos-usuarios/[id] - Obtener un grupo por ID con detalles
 export async function GET(
@@ -128,7 +129,7 @@ export async function PUT(
     }
 
     // Actualizar grupo y detalles en una transaccion
-    const grupo = await prisma.$transaction(async (tx) => {
+    const grupo = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Actualizar nombre del grupo
       await tx.grupoUsuario.update({
         where: { id: grupoId },
