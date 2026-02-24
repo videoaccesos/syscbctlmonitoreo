@@ -7,6 +7,7 @@ import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight } from "luci
 interface Tarjeta {
   id: number;
   lectura: string;
+  numeroSerie: string | null;
   tipoId: number;
   estatusId: number;
   fecha: string | null;
@@ -41,7 +42,7 @@ const ESTATUS_BADGE: Record<number, string> = {
   5: "bg-gray-100 text-gray-700",
 };
 
-const emptyForm = { lectura: "", tipoId: "1" };
+const emptyForm = { lectura: "", numeroSerie: "", tipoId: "1" };
 type FormData = typeof emptyForm;
 
 /* ================================================================ */
@@ -133,6 +134,7 @@ export default function TarjetasPage() {
     setEditing(item);
     setForm({
       lectura: item.lectura || "",
+      numeroSerie: item.numeroSerie || "",
       tipoId: String(item.tipoId),
     });
     setError("");

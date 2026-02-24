@@ -558,50 +558,186 @@ export default function PrivadasPage() {
               </div>
 
               {/* Precios + Mensualidad */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Precio Vehicular</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     value={form.precioVehicular}
                     onChange={(e) => setField("precioVehicular", e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
+                    placeholder="0"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Precio Peatonal</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     value={form.precioPeatonal}
                     onChange={(e) => setField("precioPeatonal", e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mensualidad</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.mensualidad}
-                    onChange={(e) => setField("mensualidad", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
+                    placeholder="0"
                   />
                 </div>
               </div>
 
-              {/* Vence Contrato */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensualidad</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={form.precioMensualidad}
+                    onChange={(e) => setField("precioMensualidad", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pago Mensualidad</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={form.pagoMensualidad}
+                    onChange={(e) => setField("pagoMensualidad", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* DNS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 1</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.dns1}
+                    onChange={(e) => setField("dns1", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 2</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.dns2}
+                    onChange={(e) => setField("dns2", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 3</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.dns3}
+                    onChange={(e) => setField("dns3", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Video */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 1</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.video1}
+                    onChange={(e) => setField("video1", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 2</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.video2}
+                    onChange={(e) => setField("video2", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 3</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.video3}
+                    onChange={(e) => setField("video3", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Relay */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 1</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.relay1}
+                    onChange={(e) => setField("relay1", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 2</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.relay2}
+                    onChange={(e) => setField("relay2", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 3</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.relay3}
+                    onChange={(e) => setField("relay3", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Monitoreo, Vence Contrato, Renovacion */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Monitoreo</label>
+                  <select
+                    value={form.monitoreo}
+                    onChange={(e) => setField("monitoreo", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="0">No</option>
+                    <option value="1">Si</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vence Contrato</label>
                   <input
                     type="date"
                     value={form.venceContrato}
                     onChange={(e) => setField("venceContrato", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Renovacion</label>
+                  <input
+                    type="date"
+                    value={form.renovacion}
+                    onChange={(e) => setField("renovacion", e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>

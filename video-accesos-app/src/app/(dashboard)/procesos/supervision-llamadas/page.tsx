@@ -32,7 +32,7 @@ interface RegistroAcceso {
   tipoGestionId: number;
   observaciones: string | null;
   duracion: string | null;
-  creadoEn: string;
+  fechaModificacion: string;
   privada: Privada;
   residencia: {
     id: number;
@@ -47,13 +47,13 @@ interface SupervisionLlamada {
   registroAccesoId: number;
   supervisorId: number;
   fecha: string;
-  saludo: boolean;
-  identificoEmpresa: boolean;
-  identificoOperador: boolean;
-  amable: boolean;
-  gracias: boolean;
-  demanda: boolean;
-  asunto: boolean;
+  saludo: number;
+  identificoEmpresa: number;
+  identificoOperador: number;
+  amable: number;
+  gracias: number;
+  demanda: number;
+  asunto: number;
   tiempoGestion: string | null;
   observaciones: string | null;
   registroAcceso: RegistroAcceso;
@@ -62,13 +62,13 @@ interface SupervisionLlamada {
 interface SupervisionForm {
   registroAccesoId: string;
   supervisorId: string;
-  saludo: boolean;
-  identificoEmpresa: boolean;
-  identificoOperador: boolean;
-  amable: boolean;
-  gracias: boolean;
-  demanda: boolean;
-  asunto: boolean;
+  saludo: number;
+  identificoEmpresa: number;
+  identificoOperador: number;
+  amable: number;
+  gracias: number;
+  demanda: number;
+  asunto: number;
   tiempoGestion: string;
   observaciones: string;
 }
@@ -76,13 +76,13 @@ interface SupervisionForm {
 const emptyForm: SupervisionForm = {
   registroAccesoId: "",
   supervisorId: "",
-  saludo: false,
-  identificoEmpresa: false,
-  identificoOperador: false,
-  amable: false,
-  gracias: false,
-  demanda: false,
-  asunto: false,
+  saludo: 0,
+  identificoEmpresa: 0,
+  identificoOperador: 0,
+  amable: 0,
+  gracias: 0,
+  demanda: 0,
+  asunto: 0,
   tiempoGestion: "",
   observaciones: "",
 };
@@ -217,7 +217,7 @@ export default function SupervisionLlamadasPage() {
   };
 
   const toggleCriterio = (key: keyof SupervisionForm) => {
-    setForm((prev) => ({ ...prev, [key]: !prev[key] }));
+    setForm((prev) => ({ ...prev, [key]: prev[key] === 1 ? 0 : 1 }));
   };
 
   /* ---------- guardar ---------- */
@@ -272,15 +272,18 @@ export default function SupervisionLlamadasPage() {
     }
   };
 
-  const CheckIcon = ({ value }: { value: boolean }) => (
-    <span
-      className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${
-        value ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400"
-      }`}
-    >
-      {value ? <Check className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-    </span>
-  );
+  const CheckIcon = ({ value }: { value: number | boolean }) => {
+    const isTrue = value === 1 || value === true;
+    return (
+      <span
+        className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${
+          isTrue ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400"
+        }`}
+      >
+        {isTrue ? <Check className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+      </span>
+    );
+  };
 
   /* ================================================================ */
   /* RENDER                                                           */
@@ -397,7 +400,7 @@ export default function SupervisionLlamadasPage() {
                     {CRITERIOS.map((c) => (
                       <td key={c.key} className="px-2 py-3 text-center">
                         <CheckIcon
-                          value={item[c.key as keyof SupervisionLlamada] as boolean}
+                          value={item[c.key as keyof SupervisionLlamada] as number}
                         />
                       </td>
                     ))}
@@ -507,7 +510,7 @@ export default function SupervisionLlamadasPage() {
                           </div>
                           <div className="text-xs text-gray-500">
                             Op. {a.empleado?.nroOperador || "-"} |{" "}
-                            {fmtDateTime(a.creadoEn)} | {a.observaciones || "Sin obs."}
+                            {fmtDateTime(a.fechaModificacion)} | {a.observaciones || "Sin obs."}
                           </div>
                         </button>
                       ))}
@@ -566,7 +569,7 @@ export default function SupervisionLlamadasPage() {
                     >
                       <input
                         type="checkbox"
-                        checked={form[c.key as keyof SupervisionForm] as boolean}
+                        checked={(form[c.key as keyof SupervisionForm] as number) === 1}
                         onChange={() => toggleCriterio(c.key as keyof SupervisionForm)}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />

@@ -593,7 +593,7 @@ export default function RegistroAccesosPage() {
                   setResidencias([]);
                   setResidenciaSearch("");
                   setFormSolicitanteId("");
-                  setFormSolicitanteTipo("");
+
                   setFormSolicitanteNombre("");
                 }}
                 className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
@@ -660,7 +660,7 @@ export default function RegistroAccesosPage() {
                       onClick={() => {
                         setSelectedResidencia(null);
                         setFormSolicitanteId("");
-                        setFormSolicitanteTipo("");
+      
                         setFormSolicitanteNombre("");
                       }}
                       className="text-blue-500 hover:text-blue-700"
@@ -709,7 +709,7 @@ export default function RegistroAccesosPage() {
                             onClick={() => {
                               setSelectedResidencia(r);
                               setFormSolicitanteId("");
-                              setFormSolicitanteTipo("");
+            
                               setFormSolicitanteNombre("");
                             }}
                           >
@@ -788,16 +788,12 @@ export default function RegistroAccesosPage() {
                 {formSolicitanteNombre && (
                   <div className="mb-2 rounded-lg bg-green-50 border border-green-200 p-2 flex items-center justify-between">
                     <span className="text-sm text-green-800 font-medium">
-                      {formSolicitanteTipo === "R"
-                        ? "Residente"
-                        : "Visitante"}
-                      : {formSolicitanteNombre}
+                      Solicitante: {formSolicitanteNombre}
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         setFormSolicitanteId("");
-                        setFormSolicitanteTipo("");
                         setFormSolicitanteNombre("");
                       }}
                       className="text-green-500 hover:text-green-700"
@@ -817,7 +813,6 @@ export default function RegistroAccesosPage() {
                       {selectedResidencia.residentes.map((r) => {
                         const nombreCompleto = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`;
                         const isSelected =
-                          formSolicitanteTipo === "R" &&
                           formSolicitanteId === String(r.id);
                         return (
                           <button
@@ -853,7 +848,6 @@ export default function RegistroAccesosPage() {
                       {selectedResidencia.visitantes.map((v) => {
                         const nombreCompleto = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`;
                         const isSelected =
-                          formSolicitanteTipo === "V" &&
                           formSolicitanteId === String(v.id);
                         return (
                           <button
@@ -1312,14 +1306,14 @@ export default function RegistroAccesosPage() {
                     </div>
                   )}
 
-                  {/* Quejas */}
-                  {detalle.quejas && (
+                  {/* OCR */}
+                  {detalle.ocr && (
                     <div className="border-t border-gray-200 pt-4">
                       <p className="text-xs font-medium text-gray-500 mb-1">
-                        Quejas / Sugerencias
+                        OCR
                       </p>
                       <p className="text-sm text-gray-700 bg-yellow-50 rounded-lg p-3">
-                        {detalle.quejas}
+                        {detalle.ocr}
                       </p>
                     </div>
                   )}
