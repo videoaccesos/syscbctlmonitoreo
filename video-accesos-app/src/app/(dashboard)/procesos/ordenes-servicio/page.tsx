@@ -944,11 +944,11 @@ export default function OrdenesServicioPage() {
                     <tbody className="divide-y divide-gray-100">
                       {detailOrder.materiales.map((mat) => (
                         <tr key={`${mat.ordenServicioId}-${mat.materialId}`}>
-                          <td className="px-3 py-2 font-mono">{mat.material.codigo}</td>
-                          <td className="px-3 py-2">{mat.material.descripcion}</td>
+                          <td className="px-3 py-2 font-mono">{mat.material?.codigo || "-"}</td>
+                          <td className="px-3 py-2">{mat.material?.descripcion || "-"}</td>
                           <td className="px-3 py-2 text-right">{mat.cantidad}</td>
                           <td className="px-3 py-2 text-right">
-                            ${Number(mat.material.costo).toFixed(2)}
+                            ${Number(mat.material?.costo || 0).toFixed(2)}
                           </td>
                         </tr>
                       ))}
