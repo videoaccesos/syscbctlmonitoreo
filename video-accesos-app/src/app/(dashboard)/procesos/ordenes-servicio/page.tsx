@@ -41,7 +41,7 @@ interface Seguimiento {
   ordenServicioId: number;
   seguimientoId: number;
   comentario: string;
-  creadoEn: string;
+  fechaModificacion: string;
   usuarioId: number;
 }
 
@@ -49,13 +49,13 @@ interface MaterialOrden {
   ordenServicioId: number;
   materialId: number;
   cantidad: number;
-  creadoEn: string;
+  fechaModificacion: string;
   material: {
     id: number;
     codigo: string;
     descripcion: string;
     costo: number;
-  };
+  } | null;
 }
 
 interface OrdenServicio {
@@ -911,7 +911,7 @@ export default function OrdenesServicioPage() {
                         <div className="flex-1 bg-gray-50 rounded-lg p-3">
                           <p className="text-sm text-gray-900">{seg.comentario}</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {fmtDateTime(seg.creadoEn)}
+                            {fmtDateTime(seg.fechaModificacion)}
                           </p>
                         </div>
                       </div>

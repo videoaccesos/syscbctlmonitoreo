@@ -312,7 +312,6 @@ export default function AsignacionTarjetasPage() {
         body: JSON.stringify({
           tarjetaId: form.tarjetaId,
           residenteId: form.residenteId,
-          tarjetaSecId: form.tarjetaSecId || null,
           fechaVencimiento: form.fechaVencimiento || null,
           tipoLectura: form.tipoLectura || null,
           lecturaEpc: form.lecturaEpc || null,

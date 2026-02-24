@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 
 /* ---------- tipos ---------- */
 interface Material {
@@ -206,6 +206,17 @@ export default function MaterialesPage() {
   /* ================================================================ */
   return (
     <div className="space-y-6">
+      {/* Alerta de no disponible */}
+      <div className="rounded-lg bg-amber-50 border border-amber-300 p-4 flex items-start gap-3">
+        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+        <div>
+          <h3 className="text-sm font-semibold text-amber-800">Catalogo no disponible</h3>
+          <p className="text-sm text-amber-700 mt-1">
+            Este catalogo no esta disponible en la base de datos actual. Las operaciones de lectura y escritura pueden no funcionar correctamente.
+          </p>
+        </div>
+      </div>
+
       {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div>
