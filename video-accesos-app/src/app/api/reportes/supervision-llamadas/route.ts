@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Obtener info de supervisores (empleados)
-    const supervisorIds = [...new Set(supervisiones.map((s) => s.supervisorId))];
+    const supervisorIds = [...new Set(supervisiones.map((s: { supervisorId: number }) => s.supervisorId))];
     const supervisores = supervisorIds.length > 0
       ? await prisma.empleado.findMany({
           where: { id: { in: supervisorIds } },
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Enriquecer datos con nombre de supervisor
-    const data = supervisiones.map((s) => ({
+    const data = supervisiones.map((s: Record<string, unknown> & { supervisorId: number }) => ({
       ...s,
       supervisorNombre: supervisorMap[s.supervisorId] || `ID: ${s.supervisorId}`,
     }));
