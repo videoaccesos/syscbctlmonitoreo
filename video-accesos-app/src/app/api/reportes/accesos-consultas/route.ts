@@ -41,22 +41,22 @@ export async function GET(request: NextRequest) {
       where.empleadoId = parseInt(empleadoId, 10);
     }
 
-    // Filtro de fechas
+    // Filtro de fechas (usando fechaModificacion en lugar de creadoEn)
     if (fechaDesde || fechaHasta) {
-      const creadoEnFilter: Record<string, Date> = {};
+      const fechaModificacionFilter: Record<string, Date> = {};
       if (fechaDesde) {
-        creadoEnFilter.gte = new Date(`${fechaDesde}T00:00:00`);
+        fechaModificacionFilter.gte = new Date(`${fechaDesde}T00:00:00`);
       }
       if (fechaHasta) {
-        creadoEnFilter.lte = new Date(`${fechaHasta}T23:59:59`);
+        fechaModificacionFilter.lte = new Date(`${fechaHasta}T23:59:59`);
       }
-      where.creadoEn = creadoEnFilter;
+      where.fechaModificacion = fechaModificacionFilter;
     } else {
       // Por defecto: mes actual
       const hoy = new Date();
       const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1, 0, 0, 0);
       const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
-      where.creadoEn = {
+      where.fechaModificacion = {
         gte: inicioMes,
         lte: finMes,
       };
@@ -81,20 +81,8 @@ export async function GET(request: NextRequest) {
               nroOperador: true,
             },
           },
-          usuario: {
-            select: {
-              id: true,
-              usuario: true,
-              empleado: {
-                select: {
-                  nombre: true,
-                  apePaterno: true,
-                },
-              },
-            },
-          },
         },
-        orderBy: { creadoEn: "desc" },
+        orderBy: { fechaModificacion: "desc" },
         skip,
         take: limit,
       }),

@@ -32,7 +32,7 @@ export async function GET(
             id: true,
             nroCasa: true,
             calle: true,
-            telefono1: true,
+            telefono: true,
             telefono2: true,
             interfon: true,
             telefonoInterfon: true,
@@ -49,18 +49,6 @@ export async function GET(
             apePaterno: true,
             apeMaterno: true,
             nroOperador: true,
-          },
-        },
-        usuario: {
-          select: {
-            id: true,
-            usuario: true,
-            empleado: {
-              select: {
-                nombre: true,
-                apePaterno: true,
-              },
-            },
           },
         },
         supervisionLlamada: true,
@@ -123,22 +111,22 @@ export async function PUT(
       data.tipoGestionId = parseInt(body.tipoGestionId, 10);
     }
     if (body.solicitanteId !== undefined) {
-      data.solicitanteId = String(body.solicitanteId);
-    }
-    if (body.solicitanteTipo !== undefined) {
-      data.solicitanteTipo = body.solicitanteTipo;
+      data.solicitanteId = String(body.solicitanteId) || "";
     }
     if (body.observaciones !== undefined) {
-      data.observaciones = body.observaciones?.trim() || null;
+      data.observaciones = body.observaciones?.trim() || "";
     }
-    if (body.quejas !== undefined) {
-      data.quejas = body.quejas?.trim() || null;
+    if (body.ocr !== undefined) {
+      data.ocr = body.ocr?.trim() || "";
     }
     if (body.duracion !== undefined) {
-      data.duracion = body.duracion || null;
+      // duracion is DateTime @db.Time(0) - convert string like "00:01:30" to Date
+      data.duracion = body.duracion
+        ? new Date(`1970-01-01T${body.duracion}`)
+        : new Date("1970-01-01T00:00:00");
     }
     if (body.imagen !== undefined) {
-      data.imagen = body.imagen || null;
+      data.imagen = body.imagen || "";
     }
     if (body.estatusId !== undefined) {
       data.estatusId = parseInt(body.estatusId, 10);

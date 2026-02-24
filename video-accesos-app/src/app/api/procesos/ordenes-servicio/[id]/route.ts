@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/procesos/ordenes-servicio/[id] - Obtener orden con seguimientos y materiales
+// GET /api/procesos/ordenes-servicio/[id] - Obtener orden con seguimientos
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -58,19 +58,7 @@ export async function GET(
           select: { id: true, codigo: true, descripcion: true },
         },
         seguimientos: {
-          orderBy: { creadoEn: "asc" },
-        },
-        materiales: {
-          include: {
-            material: {
-              select: {
-                id: true,
-                codigo: true,
-                descripcion: true,
-                costo: true,
-              },
-            },
-          },
+          orderBy: { fecha: "asc" },
         },
       },
     });
@@ -137,18 +125,18 @@ export async function PUT(
     if (body.diagnosticoId !== undefined) {
       data.diagnosticoId = body.diagnosticoId
         ? parseInt(body.diagnosticoId, 10)
-        : null;
+        : 0;
     }
     if (body.detalleDiagnostico !== undefined) {
-      data.detalleDiagnostico = body.detalleDiagnostico?.trim() || null;
+      data.detalleDiagnostico = body.detalleDiagnostico?.trim() || "";
     }
     if (body.fechaAsistio !== undefined) {
       data.fechaAsistio = body.fechaAsistio
         ? new Date(body.fechaAsistio)
-        : null;
+        : new Date();
     }
     if (body.tiempo !== undefined) {
-      data.tiempo = body.tiempo ? parseInt(body.tiempo, 10) : null;
+      data.tiempo = body.tiempo ? parseInt(body.tiempo, 10) : 0;
     }
     if (body.estatusId !== undefined) {
       data.estatusId = parseInt(body.estatusId, 10);
@@ -158,15 +146,15 @@ export async function PUT(
     if (body.cierreTecnicoId !== undefined) {
       data.cierreTecnicoId = body.cierreTecnicoId
         ? parseInt(body.cierreTecnicoId, 10)
-        : null;
+        : 0;
     }
     if (body.cierreFecha !== undefined) {
       data.cierreFecha = body.cierreFecha
         ? new Date(body.cierreFecha)
-        : null;
+        : new Date();
     }
     if (body.cierreComentario !== undefined) {
-      data.cierreComentario = body.cierreComentario?.trim() || null;
+      data.cierreComentario = body.cierreComentario?.trim() || "";
     }
 
     // Si se esta cerrando la orden (estatusId = 3), asegurar campos de cierre
@@ -219,19 +207,7 @@ export async function PUT(
           select: { id: true, codigo: true, descripcion: true },
         },
         seguimientos: {
-          orderBy: { creadoEn: "asc" },
-        },
-        materiales: {
-          include: {
-            material: {
-              select: {
-                id: true,
-                codigo: true,
-                descripcion: true,
-                costo: true,
-              },
-            },
-          },
+          orderBy: { fecha: "asc" },
         },
       },
     });

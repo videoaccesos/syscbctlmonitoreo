@@ -39,14 +39,14 @@ export async function GET(request: NextRequest) {
 
     // Filtro de fechas: por defecto muestra los registros de hoy
     if (fechaDesde || fechaHasta) {
-      const creadoEnFilter: Record<string, Date> = {};
+      const fechaModificacionFilter: Record<string, Date> = {};
       if (fechaDesde) {
-        creadoEnFilter.gte = new Date(`${fechaDesde}T00:00:00`);
+        fechaModificacionFilter.gte = new Date(`${fechaDesde}T00:00:00`);
       }
       if (fechaHasta) {
-        creadoEnFilter.lte = new Date(`${fechaHasta}T23:59:59`);
+        fechaModificacionFilter.lte = new Date(`${fechaHasta}T23:59:59`);
       }
-      where.creadoEn = creadoEnFilter;
+      where.fechaModificacion = fechaModificacionFilter;
     } else {
       // Por defecto: registros de hoy
       const hoy = new Date();
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         59,
         59
       );
-      where.creadoEn = {
+      where.fechaModificacion = {
         gte: inicioHoy,
         lte: finHoy,
       };
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        orderBy: { creadoEn: "desc" },
+        orderBy: { fechaModificacion: "desc" },
         skip,
         take: limit,
       }),
@@ -144,11 +144,10 @@ export async function POST(request: NextRequest) {
       solicitanteId,
       estatusId,
       usuarioId,
-      solicitanteTipo,
       observaciones,
-      quejas,
       duracion,
       imagen,
+      ocr,
     } = body;
 
     if (
@@ -196,18 +195,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // duracion is DateTime @db.Time(0) - convert string like "00:01:30" to Date
+    let duracionValue = new Date("1970-01-01T00:00:00");
+    if (duracion) {
+      duracionValue = new Date(`1970-01-01T${duracion}`);
+    }
+
     const registro = await prisma.registroAcceso.create({
       data: {
         empleadoId: parseInt(empleadoId, 10),
         privadaId: parseInt(privadaId, 10),
         residenciaId: parseInt(residenciaId, 10),
         tipoGestionId: parseInt(tipoGestionId, 10),
-        solicitanteId: String(solicitanteId),
-        solicitanteTipo: solicitanteTipo || null,
-        observaciones: observaciones?.trim() || null,
-        quejas: quejas?.trim() || null,
-        duracion: duracion || null,
-        imagen: imagen || null,
+        solicitanteId: String(solicitanteId) || "",
+        observaciones: observaciones?.trim() || "",
+        ocr: ocr?.trim() || "",
+        duracion: duracionValue,
+        imagen: imagen || "",
         estatusId: parseInt(estatusId, 10),
         usuarioId: parseInt(usuarioId, 10),
       },

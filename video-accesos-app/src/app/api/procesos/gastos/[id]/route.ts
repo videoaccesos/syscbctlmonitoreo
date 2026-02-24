@@ -25,7 +25,7 @@ export async function GET(
       where: { id: gastoId },
       include: {
         tipoGasto: {
-          select: { id: true, descripcion: true },
+          select: { id: true, gasto: true },
         },
         privada: {
           select: { id: true, descripcion: true },
@@ -88,31 +88,26 @@ export async function PUT(
     if (body.privadaId !== undefined) {
       data.privadaId = parseInt(body.privadaId, 10);
     }
-    if (body.descripcion !== undefined) {
-      data.descripcion = body.descripcion.trim();
+    if (body.descripcionGasto !== undefined) {
+      data.descripcionGasto = body.descripcionGasto.trim();
     }
     if (body.fechaPago !== undefined) {
-      data.fechaPago = new Date(body.fechaPago);
+      data.fechaPago = String(body.fechaPago) || "";
     }
     if (body.comprobante !== undefined) {
-      data.comprobante = body.comprobante?.trim() || null;
+      data.comprobante = body.comprobante?.trim() || "";
     }
     if (body.total !== undefined) {
       data.total = parseFloat(body.total);
     }
-    if (body.tipoPagoId !== undefined) {
-      data.tipoPagoId = parseInt(body.tipoPagoId, 10);
+    if (body.tipoPago !== undefined) {
+      data.tipoPago = parseInt(body.tipoPago, 10);
     }
-    if (body.autorizado !== undefined) {
-      data.autorizado = Boolean(body.autorizado);
+    if (body.fecha !== undefined) {
+      data.fecha = String(body.fecha) || "";
     }
-    if (body.autorizadoPor !== undefined) {
-      data.autorizadoPor = body.autorizadoPor
-        ? parseInt(body.autorizadoPor, 10)
-        : null;
-    }
-    if (body.pagado !== undefined) {
-      data.pagado = Boolean(body.pagado);
+    if (body.estatusId !== undefined) {
+      data.estatusId = parseInt(body.estatusId, 10);
     }
 
     const gasto = await prisma.gasto.update({
@@ -120,7 +115,7 @@ export async function PUT(
       data,
       include: {
         tipoGasto: {
-          select: { id: true, descripcion: true },
+          select: { id: true, gasto: true },
         },
         privada: {
           select: { id: true, descripcion: true },

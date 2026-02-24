@@ -74,15 +74,13 @@ interface RegistroAcceso {
   residenciaId: number;
   tipoGestionId: number;
   solicitanteId: string;
-  solicitanteTipo: string | null;
   observaciones: string | null;
-  quejas: string | null;
   duracion: string | null;
+  ocr: string | null;
   imagen: string | null;
   estatusId: number;
   usuarioId: number;
-  creadoEn: string;
-  actualizadoEn: string;
+  fechaModificacion: string;
   privada: { id: number; descripcion: string };
   residencia: { id: number; nroCasa: string; calle: string; telefono1?: string; telefono2?: string; interfon?: string; telefonoInterfon?: string };
   empleado: Empleado;
@@ -93,7 +91,7 @@ interface RegistroDetalle extends RegistroAcceso {
     id: number;
     usuario: string;
     empleado: { nombre: string; apePaterno: string } | null;
-  };
+  } | null;
   supervisionLlamada: Record<string, unknown> | null;
 }
 
@@ -158,13 +156,18 @@ function getEstatusLabel(estatusId: number) {
 }
 
 function formatHora(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString("es-MX", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleTimeString("es-MX", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 function todayStr() {
@@ -213,7 +216,6 @@ export default function RegistroAccesosPage() {
     useState<Residencia | null>(null);
   const [formTipoGestionId, setFormTipoGestionId] = useState("");
   const [formSolicitanteId, setFormSolicitanteId] = useState("");
-  const [formSolicitanteTipo, setFormSolicitanteTipo] = useState("");
   const [formSolicitanteNombre, setFormSolicitanteNombre] = useState("");
   const [formEstatusId, setFormEstatusId] = useState("1");
   const [formObservaciones, setFormObservaciones] = useState("");
@@ -353,7 +355,6 @@ export default function RegistroAccesosPage() {
     setSelectedResidencia(null);
     setFormTipoGestionId("");
     setFormSolicitanteId("");
-    setFormSolicitanteTipo("");
     setFormSolicitanteNombre("");
     setFormEstatusId("1");
     setFormObservaciones("");
@@ -369,11 +370,10 @@ export default function RegistroAccesosPage() {
   };
 
   const selectSolicitante = (
-    tipo: "R" | "V",
+    _tipo: "R" | "V",
     id: number,
     nombre: string
   ) => {
-    setFormSolicitanteTipo(tipo);
     setFormSolicitanteId(String(id));
     setFormSolicitanteNombre(nombre);
   };
@@ -427,7 +427,6 @@ export default function RegistroAccesosPage() {
         residenciaId: selectedResidencia.id,
         tipoGestionId: formTipoGestionId,
         solicitanteId: formSolicitanteId,
-        solicitanteTipo: formSolicitanteTipo || null,
         estatusId: formEstatusId,
         usuarioId,
         observaciones: formObservaciones || null,
@@ -1075,7 +1074,7 @@ export default function RegistroAccesosPage() {
                     onClick={() => viewDetalle(reg.id)}
                   >
                     <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-                      {formatHora(reg.creadoEn)}
+                      {formatHora(reg.fechaModificacion)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {reg.privada?.descripcion || "-"}
@@ -1085,15 +1084,6 @@ export default function RegistroAccesosPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {reg.solicitanteId}
-                      {reg.solicitanteTipo && (
-                        <span className="ml-1 text-xs text-gray-400">
-                          ({reg.solicitanteTipo === "R"
-                            ? "Res."
-                            : reg.solicitanteTipo === "V"
-                              ? "Vis."
-                              : "Gen."})
-                        </span>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {TIPO_GESTION_LABELS[reg.tipoGestionId] ||
@@ -1218,7 +1208,7 @@ export default function RegistroAccesosPage() {
                         Fecha/Hora
                       </p>
                       <p className="text-sm text-gray-900">
-                        {new Date(detalle.creadoEn).toLocaleString("es-MX")}
+                        {new Date(detalle.fechaModificacion).toLocaleString("es-MX")}
                       </p>
                     </div>
                     <div>
@@ -1263,15 +1253,6 @@ export default function RegistroAccesosPage() {
                       </p>
                       <p className="text-sm text-gray-900">
                         {detalle.solicitanteId}
-                        {detalle.solicitanteTipo && (
-                          <span className="ml-1 text-xs text-gray-400">
-                            ({detalle.solicitanteTipo === "R"
-                              ? "Residente"
-                              : detalle.solicitanteTipo === "V"
-                                ? "Visitante"
-                                : "General"})
-                          </span>
-                        )}
                       </p>
                     </div>
                     <div>

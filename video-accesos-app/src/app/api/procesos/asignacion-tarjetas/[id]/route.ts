@@ -21,17 +21,9 @@ export async function GET(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
-    const asignacion = await prisma.asignacionTarjeta.findUnique({
+    const asignacion = await prisma.residenteTarjeta.findUnique({
       where: { id: asignacionId },
       include: {
-        tarjeta: {
-          select: {
-            id: true,
-            lectura: true,
-            tipoId: true,
-            estatusId: true,
-          },
-        },
         residente: {
           select: {
             id: true,
@@ -93,7 +85,7 @@ export async function PUT(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
-    const existente = await prisma.asignacionTarjeta.findUnique({
+    const existente = await prisma.residenteTarjeta.findUnique({
       where: { id: asignacionId },
     });
 
@@ -107,46 +99,63 @@ export async function PUT(
     const body = await request.json();
     const data: Record<string, unknown> = {};
 
-    if (body.tarjetaSecId !== undefined) {
-      data.tarjetaSecId = body.tarjetaSecId
-        ? parseInt(body.tarjetaSecId, 10)
-        : null;
+    if (body.tarjetaId !== undefined) {
+      data.tarjetaId = String(body.tarjetaId) || "";
+    }
+    if (body.tarjetaId2 !== undefined) {
+      data.tarjetaId2 = String(body.tarjetaId2) || "";
+    }
+    if (body.tarjetaId3 !== undefined) {
+      data.tarjetaId3 = String(body.tarjetaId3) || "";
+    }
+    if (body.tarjetaId4 !== undefined) {
+      data.tarjetaId4 = String(body.tarjetaId4) || "";
+    }
+    if (body.tarjetaId5 !== undefined) {
+      data.tarjetaId5 = String(body.tarjetaId5) || "";
     }
     if (body.fechaVencimiento !== undefined) {
       data.fechaVencimiento = body.fechaVencimiento
         ? new Date(body.fechaVencimiento)
-        : null;
+        : new Date();
     }
-    if (body.tipoLectura !== undefined) {
-      data.tipoLectura = body.tipoLectura
-        ? parseInt(body.tipoLectura, 10)
-        : null;
+    if (body.lecturaTipoId !== undefined) {
+      data.lecturaTipoId = body.lecturaTipoId
+        ? parseInt(body.lecturaTipoId, 10)
+        : 0;
     }
     if (body.lecturaEpc !== undefined) {
-      data.lecturaEpc = body.lecturaEpc?.trim() || null;
+      data.lecturaEpc = body.lecturaEpc?.trim() || "";
     }
     if (body.folioContrato !== undefined) {
-      data.folioContrato = body.folioContrato?.trim() || null;
+      data.folioContrato = body.folioContrato?.trim() || "";
     }
     if (body.precio !== undefined) {
-      data.precio = body.precio ? parseFloat(body.precio) : null;
+      data.precio = body.precio ? parseFloat(body.precio) : 0;
     }
     if (body.utilizoSeguro !== undefined) {
-      data.utilizoSeguro = Boolean(body.utilizoSeguro);
+      data.utilizoSeguro = body.utilizoSeguro ? 1 : 0;
+    }
+    if (body.utilizoSeguro2 !== undefined) {
+      data.utilizoSeguro2 = body.utilizoSeguro2 ? 1 : 0;
+    }
+    if (body.utilizoSeguro3 !== undefined) {
+      data.utilizoSeguro3 = body.utilizoSeguro3 ? 1 : 0;
+    }
+    if (body.utilizoSeguro4 !== undefined) {
+      data.utilizoSeguro4 = body.utilizoSeguro4 ? 1 : 0;
+    }
+    if (body.utilizoSeguro5 !== undefined) {
+      data.utilizoSeguro5 = body.utilizoSeguro5 ? 1 : 0;
+    }
+    if (body.estatusId !== undefined) {
+      data.estatusId = parseInt(body.estatusId, 10);
     }
 
-    const asignacion = await prisma.asignacionTarjeta.update({
+    const asignacion = await prisma.residenteTarjeta.update({
       where: { id: asignacionId },
       data,
       include: {
-        tarjeta: {
-          select: {
-            id: true,
-            lectura: true,
-            tipoId: true,
-            estatusId: true,
-          },
-        },
         residente: {
           select: {
             id: true,
@@ -199,7 +208,7 @@ export async function DELETE(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
-    const existente = await prisma.asignacionTarjeta.findUnique({
+    const existente = await prisma.residenteTarjeta.findUnique({
       where: { id: asignacionId },
     });
 
@@ -217,19 +226,10 @@ export async function DELETE(
       );
     }
 
-    // Cancelar asignacion y restaurar tarjeta en una transaccion
-    await prisma.$transaction(async (tx) => {
-      // Cambiar estatus de asignacion a 2 (Cancelada)
-      await tx.asignacionTarjeta.update({
-        where: { id: asignacionId },
-        data: { estatusId: 2 },
-      });
-
-      // Restaurar tarjeta a estatusId 1 (Activa)
-      await tx.tarjeta.update({
-        where: { id: existente.tarjetaId },
-        data: { estatusId: 1 },
-      });
+    // Cancelar asignacion: cambiar estatus a 2 (Cancelada)
+    await prisma.residenteTarjeta.update({
+      where: { id: asignacionId },
+      data: { estatusId: 2 },
     });
 
     return NextResponse.json({

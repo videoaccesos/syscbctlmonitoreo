@@ -132,7 +132,10 @@ export async function PUT(
       // Actualizar nombre del grupo
       await tx.grupoUsuario.update({
         where: { id: grupoId },
-        data: { nombre: nombre.trim() },
+        data: {
+          nombre: nombre.trim().substring(0, 30),
+          usuarioModId: body.usuarioModId || 0,
+        },
       });
 
       // Si se proporcionan usuarioIds, reemplazar detalles

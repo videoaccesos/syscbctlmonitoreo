@@ -40,8 +40,10 @@ interface Empleado {
   fechaIngreso: string | null;
   fechaBaja: string | null;
   motivoBaja: string | null;
-  permisoAdmin: boolean;
-  permisoSupervisor: boolean;
+  permisoAdministrador: number;
+  permisoSupervisor: number;
+  permisoEncargadoAdministracion: number;
+  googleAuthCode: string | null;
   estatusId: number;
   puesto: Puesto;
 }
@@ -61,8 +63,9 @@ interface EmpleadoForm {
   celular: string;
   email: string;
   fechaIngreso: string;
-  permisoAdmin: boolean;
-  permisoSupervisor: boolean;
+  permisoAdministrador: number;
+  permisoSupervisor: number;
+  permisoEncargadoAdministracion: number;
 }
 
 const emptyForm: EmpleadoForm = {
@@ -80,8 +83,9 @@ const emptyForm: EmpleadoForm = {
   celular: "",
   email: "",
   fechaIngreso: "",
-  permisoAdmin: false,
-  permisoSupervisor: false,
+  permisoAdministrador: 0,
+  permisoSupervisor: 0,
+  permisoEncargadoAdministracion: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -193,8 +197,9 @@ export default function EmpleadosPage() {
       fechaIngreso: emp.fechaIngreso
         ? emp.fechaIngreso.substring(0, 10)
         : "",
-      permisoAdmin: emp.permisoAdmin,
-      permisoSupervisor: emp.permisoSupervisor,
+      permisoAdministrador: emp.permisoAdministrador ?? 0,
+      permisoSupervisor: emp.permisoSupervisor ?? 0,
+      permisoEncargadoAdministracion: emp.permisoEncargadoAdministracion ?? 0,
     });
     setError("");
     setModalOpen(true);
@@ -210,7 +215,7 @@ export default function EmpleadosPage() {
   ) => {
     const target = e.target;
     if (target instanceof HTMLInputElement && target.type === "checkbox") {
-      setForm((prev) => ({ ...prev, [target.name]: target.checked }));
+      setForm((prev) => ({ ...prev, [target.name]: target.checked ? 1 : 0 }));
     } else {
       setForm((prev) => ({ ...prev, [target.name]: target.value }));
     }
@@ -249,8 +254,9 @@ export default function EmpleadosPage() {
         celular: form.celular || null,
         email: form.email || null,
         fechaIngreso: form.fechaIngreso || null,
-        permisoAdmin: form.permisoAdmin,
+        permisoAdministrador: form.permisoAdministrador,
         permisoSupervisor: form.permisoSupervisor,
+        permisoEncargadoAdministracion: form.permisoEncargadoAdministracion,
       };
 
       const url = editingId
@@ -729,12 +735,12 @@ export default function EmpleadosPage() {
               </div>
 
               {/* Permisos */}
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-6 flex-wrap">
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
                     type="checkbox"
-                    name="permisoAdmin"
-                    checked={form.permisoAdmin}
+                    name="permisoAdministrador"
+                    checked={form.permisoAdministrador === 1}
                     onChange={handleFormChange}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
@@ -744,11 +750,21 @@ export default function EmpleadosPage() {
                   <input
                     type="checkbox"
                     name="permisoSupervisor"
-                    checked={form.permisoSupervisor}
+                    checked={form.permisoSupervisor === 1}
                     onChange={handleFormChange}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   Permiso Supervisor
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="permisoEncargadoAdministracion"
+                    checked={form.permisoEncargadoAdministracion === 1}
+                    onChange={handleFormChange}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Encargado Administracion
                 </label>
               </div>
 

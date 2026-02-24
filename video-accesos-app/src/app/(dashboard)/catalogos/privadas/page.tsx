@@ -15,11 +15,23 @@ interface Privada {
   celular: string | null;
   email: string | null;
   historial: string | null;
-  precioVehicular: number | string | null;
-  precioPeatonal: number | string | null;
-  mensualidad: number | string | null;
+  precioVehicular: number | null;
+  precioPeatonal: number | null;
+  precioMensualidad: number | null;
+  pagoMensualidad: number | null;
   venceContrato: string | null;
   observaciones: string | null;
+  dns1: string | null;
+  dns2: string | null;
+  dns3: string | null;
+  video1: string | null;
+  video2: string | null;
+  video3: string | null;
+  relay1: string | null;
+  relay2: string | null;
+  relay3: string | null;
+  monitoreo: number;
+  renovacion: string | null;
   estatusId: number;
 }
 
@@ -43,9 +55,21 @@ const emptyForm = {
   historial: "",
   precioVehicular: "",
   precioPeatonal: "",
-  mensualidad: "",
+  precioMensualidad: "",
+  pagoMensualidad: "",
   venceContrato: "",
   observaciones: "",
+  dns1: "",
+  dns2: "",
+  dns3: "",
+  video1: "",
+  video2: "",
+  video3: "",
+  relay1: "",
+  relay2: "",
+  relay3: "",
+  monitoreo: "0",
+  renovacion: "",
 };
 
 type FormData = typeof emptyForm;
@@ -139,9 +163,21 @@ export default function PrivadasPage() {
       historial: p.historial || "",
       precioVehicular: p.precioVehicular != null ? String(p.precioVehicular) : "",
       precioPeatonal: p.precioPeatonal != null ? String(p.precioPeatonal) : "",
-      mensualidad: p.mensualidad != null ? String(p.mensualidad) : "",
+      precioMensualidad: p.precioMensualidad != null ? String(p.precioMensualidad) : "",
+      pagoMensualidad: p.pagoMensualidad != null ? String(p.pagoMensualidad) : "",
       venceContrato: p.venceContrato ? p.venceContrato.substring(0, 10) : "",
       observaciones: p.observaciones || "",
+      dns1: p.dns1 || "",
+      dns2: p.dns2 || "",
+      dns3: p.dns3 || "",
+      video1: p.video1 || "",
+      video2: p.video2 || "",
+      video3: p.video3 || "",
+      relay1: p.relay1 || "",
+      relay2: p.relay2 || "",
+      relay3: p.relay3 || "",
+      monitoreo: String(p.monitoreo ?? 0),
+      renovacion: p.renovacion ? p.renovacion.substring(0, 10) : "",
     });
     setError("");
     setShowModal(true);
@@ -323,7 +359,7 @@ export default function PrivadasPage() {
                     <td className="px-4 py-3 text-gray-600">{contacto(p)}</td>
                     <td className="px-4 py-3 text-gray-600">{p.telefono || p.celular || "-"}</td>
                     <td className="px-4 py-3 text-gray-600">{p.email || "-"}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right">{fmtCurrency(p.mensualidad)}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right">{fmtCurrency(p.precioMensualidad)}</td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${

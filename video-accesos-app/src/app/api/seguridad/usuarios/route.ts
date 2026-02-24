@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
 
 // GET /api/seguridad/usuarios - Listar usuarios con busqueda y paginacion
 export async function GET(request: NextRequest) {
@@ -89,6 +88,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (contrasena.length > 10) {
+      return NextResponse.json(
+        { error: "La contrasena no puede tener mas de 10 caracteres" },
+        { status: 400 }
+      );
+    }
+
     // Verificar duplicado
     const existente = await prisma.usuario.findFirst({
       where: { usuario: usuario.trim() },
@@ -101,16 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash de la contrasena
-    const hashedPassword = await bcrypt.hash(contrasena, 10);
-
+    // Almacenar contrasena en texto plano (legacy MySQL 5.7, varchar(10))
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         usuario: usuario.trim(),
-        contrasena: hashedPassword,
+        contrasena: contrasena,
         empleadoId: body.empleadoId ? parseInt(body.empleadoId, 10) : null,
         privadaId: body.privadaId ? parseInt(body.privadaId, 10) : null,
-        modificarFechas: body.modificarFechas || false,
+        modificarFechas: body.modificarFechas || "N",
+        googleAuthCode: body.googleAuthCode || "",
+        logueado: body.logueado || 0,
+        usuarioMovId: body.usuarioMovId || 0,
+        usuarioModId: body.usuarioModId || 0,
         estatusId: 1,
       },
       include: {

@@ -126,6 +126,7 @@ export async function PUT(
       where: { id: tarjetaId },
       data: {
         lectura: body.lectura.trim(),
+        numeroSerie: body.numeroSerie?.trim() || "",
         tipoId,
         ...(body.estatusId !== undefined && {
           estatusId: parseInt(body.estatusId, 10),

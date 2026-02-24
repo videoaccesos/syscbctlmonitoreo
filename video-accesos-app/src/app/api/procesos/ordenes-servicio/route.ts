@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         data: { consecutivo: nuevoConsecutivo },
       });
 
-      // Formato: OS000001
+      // Formato: OS000001 (Char(8))
       return `OS${String(nuevoConsecutivo).padStart(6, "0")}`;
     });
 
@@ -194,8 +194,9 @@ export async function POST(request: NextRequest) {
         tecnicoId: parseInt(tecnicoId, 10),
         codigoServicioId: parseInt(codigoServicioId, 10),
         detalleServicio: detalleServicio.trim(),
-        diagnosticoId: diagnosticoId ? parseInt(diagnosticoId, 10) : null,
-        detalleDiagnostico: detalleDiagnostico?.trim() || null,
+        diagnosticoId: diagnosticoId ? parseInt(diagnosticoId, 10) : 0,
+        detalleDiagnostico: detalleDiagnostico?.trim() || "",
+        cierreTecnicoId: 0,
       },
       include: {
         privada: {

@@ -1,54 +1,58 @@
-// Video Accesos v2 - Database Schema
-// Migrated from legacy CodeIgniter system (2014)
+// Video Accesos - Schema mapeado a BD producción: wwwvideo_video_accesos (MySQL 5.7)
+// NO ejecutar migrations contra producción. Usar solo: prisma generate / prisma db pull
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
 // ============================================================
-// SEGURIDAD - Autenticación y Control de Acceso (RBAC)
+// SEGURIDAD - Autenticación y Control de Acceso
 // ============================================================
 
 model Usuario {
-  id                Int       @id @default(autoincrement()) @map("usuario_id")
-  usuario           String    @unique @db.VarChar(50)
-  contrasena        String    @db.VarChar(255) // bcrypt hash
-  modificarFechas   Boolean   @default(false) @map("modificar_fechas")
-  ultimaSesion      DateTime? @map("ultima_sesion")
-  direccionIp       String    @default("") @map("direccion_ip") @db.VarChar(45) // IPv6 compatible
-  cambioContrasena  DateTime? @map("cambio_contrasena")
-  empleadoId        Int?      @map("empleado_id")
-  privadaId         Int?      @map("privada_id")
-  estatusId         Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
-  claveGoogle       String?   @map("clave_google") @db.VarChar(100) // 2FA
-  creadoEn          DateTime  @default(now()) @map("creado_en")
-  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("usuario_id")
+  usuario           String   @db.VarChar(30)
+  contrasena        String   @db.VarChar(10)
+  modificarFechas   String   @default("N") @map("modificar_fechas") @db.Char(1)
+  ultimaSesion      DateTime @default(now()) @map("ultima_sesion") @db.DateTime(0)
+  direccionIp       String   @default("") @map("direccion_ip") @db.VarChar(15)
+  cambioContrasena  DateTime @default(now()) @map("cambio_contrasena") @db.Date
+  empleadoId        Int?     @map("empleado_id")
+  privadaId         Int?     @map("privada_id")
+  logueado          Int      @default(0) @db.TinyInt
+  usuarioMovId      Int      @default(0) @map("usuario_mov_id")
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  googleAuthCode    String   @default("") @map("google_auth_code") @db.VarChar(100)
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id_2")
 
   // Relaciones
-  empleado              Empleado?              @relation(fields: [empleadoId], references: [id])
-  privada               Privada?               @relation("UsuarioPrivada", fields: [privadaId], references: [id])
-  gruposDetalles        GrupoUsuarioDetalle[]
-  bitacoraInicio        BitacoraInicio[]
-  registrosAccesos      RegistroAcceso[]       @relation("RegistroOperador")
+  empleado       Empleado?             @relation(fields: [empleadoId], references: [id])
+  privada        Privada?              @relation("UsuarioPrivada", fields: [privadaId], references: [id])
+  gruposDetalles GrupoUsuarioDetalle[]
+  bitacoraInicio BitacoraInicio[]
 
+  @@index([empleadoId])
+  @@index([privadaId])
   @@map("usuarios")
 }
 
 model GrupoUsuario {
-  id            Int       @id @default(autoincrement()) @map("grupo_usuario_id")
-  nombre        String    @unique @db.VarChar(50)
-  estatusId     Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
-  creadoEn      DateTime  @default(now()) @map("creado_en")
-  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("grupo_usuario_id")
+  nombre            String   @default("") @db.VarChar(30)
+  estatusId         Int      @default(0) @map("estatus_id")
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   // Relaciones
-  detalles  GrupoUsuarioDetalle[]
-  permisos  PermisoAcceso[]
+  detalles GrupoUsuarioDetalle[]
+  permisos PermisoAcceso[]
 
   @@map("grupos_usuarios")
 }
@@ -61,32 +65,38 @@ model GrupoUsuarioDetalle {
   usuario Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@id([grupoUsuarioId, usuarioId])
+  @@index([grupoUsuarioId])
+  @@index([usuarioId])
   @@map("grupos_usuarios_detalles")
 }
 
 model Proceso {
-  id             Int     @id @default(autoincrement()) @map("proceso_id")
-  nombre         String  @db.VarChar(50)
-  rutaAcceso     String? @map("ruta_acceso") @db.Text
-  procesoPadreId Int?    @map("proceso_padre_id")
+  id                Int      @id @default(autoincrement()) @map("proceso_id")
+  nombre            String   @default("") @db.VarChar(50)
+  rutaAcceso        String?  @map("ruta_acceso") @db.Text
+  procesoPadreId    Int?     @map("proceso_padre_id")
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   // Self-referencing para jerarquía de menú
   procesoPadre Proceso?     @relation("ProcesoHijos", fields: [procesoPadreId], references: [id])
   hijos        Proceso[]    @relation("ProcesoHijos")
   subprocesos  Subproceso[]
 
+  @@index([procesoPadreId])
   @@map("procesos")
 }
 
 model Subproceso {
   id        Int     @id @default(autoincrement()) @map("subproceso_id")
   procesoId Int     @map("proceso_id")
-  nombre    String  @db.VarChar(50)
+  nombre    String  @default("") @db.VarChar(50)
   funcion   String? @db.VarChar(50)
 
   proceso  Proceso         @relation(fields: [procesoId], references: [id], onDelete: Cascade)
   permisos PermisoAcceso[]
 
+  @@index([procesoId])
   @@map("subprocesos")
 }
 
@@ -98,32 +108,35 @@ model PermisoAcceso {
   subproceso Subproceso   @relation(fields: [subprocesoId], references: [id], onDelete: Cascade)
 
   @@id([grupoUsuarioId, subprocesoId])
+  @@index([grupoUsuarioId])
+  @@index([subprocesoId])
   @@map("permisos_acceso")
 }
 
 model BitacoraInicio {
-  id          Int       @id @default(autoincrement()) @map("bitacora_inicio_id")
-  usuarioId   Int       @map("usuario_id")
-  fechaInicio DateTime  @default(now()) @map("fecha_inicio")
-  fechaFin    DateTime? @map("fecha_fin")
-  direccionIp String    @map("direccion_ip") @db.VarChar(45)
-  hostname    String?   @db.VarChar(100)
+  usuarioId    Int       @map("usuario_id")
+  inicioSesion DateTime  @map("inicio_sesion") @db.DateTime(0)
+  cierreSesion DateTime? @map("cierre_sesion") @db.DateTime(0)
+  direccionIp  String    @default("") @map("direccion_ip") @db.VarChar(15)
+  hostName     String    @default("") @map("host_name") @db.VarChar(255)
 
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
+  @@id([usuarioId, inicioSesion])
+  @@index([usuarioId])
   @@map("bitacora_inicio")
 }
 
 // ============================================================
-// CATALOGOS - Datos maestros
+// CATALOGOS
 // ============================================================
 
 model Puesto {
-  id            Int       @id @default(autoincrement()) @map("puesto_id")
-  descripcion   String    @unique @db.VarChar(50)
-  estatusId     Int       @default(1) @map("estatus_id")
-  creadoEn      DateTime  @default(now()) @map("creado_en")
-  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("puesto_id")
+  descripcion       String   @db.VarChar(50)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
 
   empleados Empleado[]
 
@@ -131,84 +144,83 @@ model Puesto {
 }
 
 model Empleado {
-  id               Int       @id @default(autoincrement()) @map("empleado_id")
-  nombre           String    @db.VarChar(50)
-  apePaterno       String    @map("ape_paterno") @db.VarChar(50)
-  apeMaterno       String    @map("ape_materno") @db.VarChar(50)
-  nroSeguroSocial  String?   @map("nro_seguro_social") @db.VarChar(50)
-  puestoId         Int       @map("puesto_id")
-  nroOperador      String?   @map("nro_operador") @db.VarChar(4)
-  calle            String?   @db.VarChar(60)
-  nroCasa          String?   @map("nro_casa") @db.VarChar(10)
-  sexo             String?   @db.Char(1) // M/F
-  colonia          String?   @db.VarChar(30)
-  telefono         String?   @db.VarChar(14)
-  celular          String?   @db.VarChar(14)
-  email            String?   @db.VarChar(60)
-  fechaIngreso     DateTime? @map("fecha_ingreso") @db.Date
-  fechaBaja        DateTime? @map("fecha_baja") @db.Date
-  motivoBaja       String?   @map("motivo_baja") @db.Text
-  claveGoogle      String?   @map("clave_google") @db.VarChar(100)
-  permisoAdmin     Boolean   @default(false) @map("permiso_admin")
-  permisoSupervisor Boolean  @default(false) @map("permiso_supervisor")
-  estatusId        Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
-  creadoEn         DateTime  @default(now()) @map("creado_en")
-  actualizadoEn    DateTime  @updatedAt @map("actualizado_en")
+  id                            Int      @id @default(autoincrement()) @map("empleado_id")
+  nombre                        String   @db.VarChar(50)
+  apePaterno                    String   @map("ape_paterno") @db.VarChar(50)
+  apeMaterno                    String   @map("ape_materno") @db.VarChar(50)
+  nroSeguroSocial               String   @default("") @map("nro_seguro_social") @db.VarChar(50)
+  puestoId                      Int      @map("puesto_id")
+  nroOperador                   String   @default("") @map("nro_operador") @db.VarChar(4)
+  calle                         String   @default("") @db.VarChar(60)
+  nroCasa                       String   @default("") @map("nro_casa") @db.VarChar(10)
+  sexo                          String   @default("") @db.Char(1)
+  colonia                       String   @default("") @db.VarChar(30)
+  telefono                      String   @default("") @db.VarChar(14)
+  celular                       String   @default("") @db.VarChar(14)
+  email                         String   @default("") @db.VarChar(60)
+  fechaIngreso                  DateTime @default(now()) @map("fecha_ingreso") @db.Date
+  fechaBaja                     DateTime @default(now()) @map("fecha_baja") @db.Date
+  motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
+  googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(100)
+  permisoAdministrador          Int      @default(0) @map("permiso_administrador")
+  permisoEncargadoAdministracion Int     @default(0) @map("permiso_encargado_administracion")
+  permisoSupervisor             Int      @default(0) @map("permiso_supervisor")
+  estatusId                     Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion             DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId                  Int      @default(0) @map("usuario_id")
 
   // Relaciones
-  puesto              Puesto            @relation(fields: [puestoId], references: [id])
-  usuarios            Usuario[]
-  registrosAccesos    RegistroAcceso[]  @relation("AccesoEmpleado")
-  ordenesTecnico      OrdenServicio[]   @relation("OrdenTecnico")
-  ordenesCierre       OrdenServicio[]   @relation("OrdenCierreTecnico")
-  ordenesEmpleado     OrdenServicio[]   @relation("OrdenEmpleado")
+  puesto           Puesto           @relation(fields: [puestoId], references: [id])
+  usuarios         Usuario[]
+  registrosAccesos RegistroAcceso[] @relation("AccesoEmpleado")
+  ordenesTecnico   OrdenServicio[]  @relation("OrdenTecnico")
+  ordenesCierre    OrdenServicio[]  @relation("OrdenCierreTecnico")
+  ordenesEmpleado  OrdenServicio[]  @relation("OrdenEmpleado")
 
+  @@index([puestoId])
   @@map("empleados")
 }
 
 model Turno {
-  id            Int      @id @default(autoincrement()) @map("turno_id")
-  descripcion   String   @unique @db.VarChar(50)
-  puestoId      Int?     @map("puesto_id")
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("turno_id")
+  descripcion       String   @db.VarChar(50)
+  puestoId          Int      @default(0) @map("puesto_id")
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
 
   @@map("turnos")
 }
 
+model Clasificacion {
+  id                Int      @id @default(autoincrement()) @map("clasificacion_id")
+  tipoGestionId     Int      @map("tipo_gestion_id") @db.TinyInt
+  descripcion       String   @db.VarChar(80)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
+
+  @@map("clasificaciones")
+}
+
 model Falla {
-  id            Int      @id @default(autoincrement()) @map("falla_id")
-  codigo        String   @unique @db.VarChar(5)
-  descripcion   String   @db.VarChar(50)
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("falla_id")
+  codigo            String   @db.VarChar(5)
+  descripcion       String   @db.VarChar(50)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
 
   @@map("fallas")
 }
 
-model Material {
-  id            Int      @id @default(autoincrement()) @map("material_id")
-  codigo        String   @unique @db.VarChar(5)
-  descripcion   String   @db.VarChar(50)
-  costo         Decimal  @default(0) @db.Decimal(10, 2)
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
-
-  ordenesMaterial OrdenServicioMaterial[]
-
-  @@map("materiales")
-}
-
 model CodigoServicio {
-  id            Int      @id @default(autoincrement()) @map("codigo_servicio_id")
-  codigo        String   @unique @db.VarChar(5)
-  descripcion   String   @db.VarChar(50)
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("codigo_servicio_id")
+  codigo            String   @db.VarChar(5)
+  descripcion       String   @db.VarChar(50)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
 
   ordenesServicio OrdenServicio[]
 
@@ -216,28 +228,40 @@ model CodigoServicio {
 }
 
 model Diagnostico {
-  id            Int      @id @default(autoincrement()) @map("diagnostico_id")
-  codigo        String   @unique @db.VarChar(5)
-  descripcion   String   @db.VarChar(50)
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("diagnostico_id")
+  codigo            String   @db.VarChar(5)
+  descripcion       String   @db.VarChar(50)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
 
   ordenesServicio OrdenServicio[]
 
   @@map("diagnosticos")
 }
 
+// tipos_gastos: PK real es gasto_id, campos: gasto, tipo_gasto, dia_pago, estatus_id
 model TipoGasto {
-  id            Int      @id @default(autoincrement()) @map("tipo_gasto_id")
-  descripcion   String   @unique @db.VarChar(50)
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id         Int    @id @default(autoincrement()) @map("gasto_id")
+  gasto      String @default("") @db.VarChar(100)
+  tipoGasto  Int    @default(0) @map("tipo_gasto") @db.TinyInt
+  diaPago    String @default("") @map("dia_pago") @db.VarChar(10)
+  estatusId  Int    @default(1) @map("estatus_id") @db.TinyInt
 
   gastos Gasto[]
 
   @@map("tipos_gastos")
+}
+
+model Folio {
+  id                Int      @id @default(autoincrement()) @map("folio_id")
+  descripcion       String   @default("") @db.VarChar(30)
+  prefijo           String   @default("") @db.Char(2)
+  consecutivo       Int      @default(0)
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
+
+  @@map("folios")
 }
 
 // ============================================================
@@ -245,31 +269,42 @@ model TipoGasto {
 // ============================================================
 
 model Privada {
-  id              Int       @id @default(autoincrement()) @map("privada_id")
-  descripcion     String    @unique @db.VarChar(80)
-  apePaterno      String?   @map("ape_paterno") @db.VarChar(50) // Contacto
-  apeMaterno      String?   @map("ape_materno") @db.VarChar(50)
-  nombre          String?   @db.VarChar(50)
-  tipoContactoId  Int?      @map("tipo_contacto_id") // 1=Residente, 2=Externo
-  telefono        String?   @db.VarChar(14)
-  celular         String?   @db.VarChar(14)
-  email           String?   @db.VarChar(60)
-  historial       String?   @db.VarChar(60) // Email para historial
-  precioVehicular Decimal?  @map("precio_vehicular") @db.Decimal(10, 2)
-  precioPeatonal  Decimal?  @map("precio_peatonal") @db.Decimal(10, 2)
-  mensualidad     Decimal?  @db.Decimal(10, 2)
-  venceContrato   DateTime? @map("vence_contrato") @db.Date
-  observaciones   String?   @db.Text
-  estatusId       Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
-  creadoEn        DateTime  @default(now()) @map("creado_en")
-  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("privada_id")
+  descripcion       String   @db.VarChar(80)
+  apePaterno        String   @default("") @map("ape_paterno") @db.VarChar(50)
+  apeMaterno        String   @default("") @map("ape_materno") @db.VarChar(50)
+  nombre            String   @default("") @db.VarChar(50)
+  tipoContactoId    Int      @default(0) @map("tipo_contacto_id") @db.TinyInt
+  telefono          String   @default("") @db.VarChar(14)
+  celular           String   @default("") @db.VarChar(14)
+  email             String   @default("") @db.VarChar(60)
+  historial         String   @default("") @db.VarChar(60)
+  // DNS, Video y Relay inline (no tablas separadas)
+  dns1              String   @default("") @map("dns_1") @db.VarChar(100)
+  dns2              String   @default("") @map("dns_2") @db.VarChar(100)
+  dns3              String   @default("") @map("dns_3") @db.VarChar(100)
+  video1            String   @default("") @map("video_1") @db.VarChar(100)
+  video2            String   @default("") @map("video_2") @db.VarChar(100)
+  video3            String   @default("") @map("video_3") @db.VarChar(100)
+  relay1            String   @default("") @map("relay_1") @db.VarChar(100)
+  relay2            String   @default("") @map("relay_2") @db.VarChar(100)
+  relay3            String   @default("") @map("relay_3") @db.VarChar(100)
+  monitoreo         Int      @default(0) @db.TinyInt
+  precioVehicular   Int      @default(0) @map("precio_vehicular")
+  precioPeatonal    Int      @default(0) @map("precio_peatonal")
+  precioMensualidad Int      @default(0) @map("precio_mensualidad")
+  pagoMensualidad   Int      @default(0) @map("pago_mensualidad")
+  renovacion        DateTime @default(now()) @db.Date
+  venceContrato     DateTime @default(now()) @map("vence_contrato") @db.Date
+  observaciones     String   @default("") @db.Text
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   // Relaciones
   residencias      Residencia[]
-  dns              PrivadaDns[]
-  videos           PrivadaVideo[]
   relays           PrivadaRelay[]
-  usuarios         Usuario[]          @relation("UsuarioPrivada")
+  usuarios         Usuario[]         @relation("UsuarioPrivada")
   registrosAccesos RegistroAcceso[]
   ordenesServicio  OrdenServicio[]
   gastos           Gasto[]
@@ -277,123 +312,89 @@ model Privada {
   @@map("privadas")
 }
 
-model PrivadaDns {
-  id        Int     @id @default(autoincrement()) @map("dns_id")
-  privadaId Int     @map("privada_id")
-  dns       String  @db.VarChar(200)
-  puerto    String? @db.VarChar(10)
-  alias     String? @db.VarChar(50)
-  tipoTarjeta Int?  @map("tipo_tarjeta") // 1=Tarjeta1, 2=Tarjeta2
-  contrasena  String? @db.VarChar(50)
-
-  privada Privada        @relation(fields: [privadaId], references: [id], onDelete: Cascade)
-  relays  PrivadaRelay[]
-
-  @@map("privadas_dns")
-}
-
-model PrivadaVideo {
-  id        Int    @id @default(autoincrement()) @map("video_id")
-  privadaId Int    @map("privada_id")
-  url       String @db.VarChar(200)
-  alias     String? @db.VarChar(50)
+// privadas_relays: tabla separada para config detallada de relays
+model PrivadaRelay {
+  id               Int    @id @default(autoincrement()) @map("relay_id")
+  privadaId        Int    @map("privada_id")
+  renglon          Int    @default(0)
+  concepto         String @default("") @db.VarChar(80)
+  relayNumero      String @default("") @map("relay_numero") @db.VarChar(10)
+  estatusId        Int    @default(1) @map("estatus_id")
+  tiempoActivacion Int    @default(0) @map("tiempo_activacion")
 
   privada Privada @relation(fields: [privadaId], references: [id], onDelete: Cascade)
 
-  @@map("privadas_videos")
-}
-
-model PrivadaRelay {
-  id        Int    @id @default(autoincrement()) @map("relay_id")
-  privadaId Int    @map("privada_id")
-  dnsId     Int    @map("dns_id")
-  renglon   Int
-  concepto  String @db.VarChar(80)
-  relayNumero String @map("relay_numero") @db.VarChar(10)
-  estatusId Int    @default(1) @map("estatus_id") // 1=Activo, 2=Inactivo
-  tiempoActivacion Int? @map("tiempo_activacion") // segundos
-
-  privada Privada    @relation(fields: [privadaId], references: [id], onDelete: Cascade)
-  dns     PrivadaDns @relation(fields: [dnsId], references: [id], onDelete: Cascade)
-
+  @@index([privadaId])
   @@map("privadas_relays")
 }
 
 model Residencia {
-  id            Int      @id @default(autoincrement()) @map("residencia_id")
-  privadaId     Int      @map("privada_id")
-  nroCasa       String   @map("nro_casa") @db.VarChar(10)
-  calle         String   @db.VarChar(60)
-  telefono1     String?  @db.VarChar(14)
-  telefono2     String?  @db.VarChar(14)
-  interfon      String?  @db.VarChar(20)
-  telefonoInterfon String? @map("telefono_interfon") @db.VarChar(14)
-  observaciones String?  @db.Text
-  estatusId     Int      @default(1) @map("estatus_id") // 1=Activo, 2=Sin Interfon, 3=Moroso
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id                   Int      @id @default(autoincrement()) @map("residencia_id")
+  privadaId            Int      @map("privada_id")
+  nroCasa              String   @default("") @map("nro_casa") @db.VarChar(10)
+  calle                String   @default("") @db.VarChar(60)
+  telefono             String   @default("") @db.VarChar(14)
+  telefono2            String   @default("") @db.VarChar(14)
+  interfon             String   @default("") @db.VarChar(20)
+  telefonoInterfon     String   @default("") @map("telefono_interfon") @db.VarChar(14)
+  extraTelefonoInterfon String  @default("") @map("extra_telefono_interfon") @db.VarChar(14)
+  extraClaveInterfon   String   @default("") @map("extra_clave_interfon") @db.VarChar(20)
+  extraPrecioInterfon  Int      @default(0) @map("extra_precio_interfon")
+  observaciones        String   @default("") @db.Text
+  estatusId            Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion    DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId         Int      @default(0) @map("usuario_id")
 
   // Relaciones
-  privada          Privada            @relation(fields: [privadaId], references: [id])
+  privada          Privada           @relation(fields: [privadaId], references: [id])
   residentes       Residente[]
-  visitantes       Visitante[]
+  visitas          Visita[]
   registrosAccesos RegistroAcceso[]
 
+  @@index([privadaId])
   @@map("residencias")
 }
 
+// residencias_residentes: residente_id es char(8), NO auto_increment
 model Residente {
-  id              Int      @id @default(autoincrement()) @map("residente_id")
-  residenciaId    Int      @map("residencia_id")
-  apePaterno      String   @map("ape_paterno") @db.VarChar(50)
-  apeMaterno      String   @map("ape_materno") @db.VarChar(50)
-  nombre          String   @db.VarChar(50)
-  celular         String?  @db.VarChar(14)
-  email           String?  @db.VarChar(100)
-  reportarAcceso  Boolean  @default(false) @map("reportar_acceso") // Notificar accesos
-  estatusId       Int      @default(1) @map("estatus_id") // 1=Activo, 2=Baja
-  creadoEn        DateTime @default(now()) @map("creado_en")
-  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+  id                String   @id @map("residente_id") @db.Char(8)
+  residenciaId      Int      @map("residencia_id")
+  apePaterno        String   @default("") @map("ape_paterno") @db.VarChar(50)
+  apeMaterno        String   @default("") @map("ape_materno") @db.VarChar(50)
+  nombre            String   @default("") @db.VarChar(50)
+  celular           String   @default("") @db.VarChar(14)
+  email             String   @default("") @db.VarChar(100)
+  reportarAcceso    Int      @default(0) @map("reportar_acceso") @db.TinyInt
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   residencia        Residencia          @relation(fields: [residenciaId], references: [id])
-  tarjetasAsignadas AsignacionTarjeta[]
+  tarjetasAsignadas ResidenteTarjeta[]
 
+  @@index([residenciaId])
   @@map("residencias_residentes")
 }
 
-model Visitante {
-  id            Int      @id @default(autoincrement()) @map("visitante_id")
-  residenciaId  Int      @map("residencia_id")
-  apePaterno    String   @map("ape_paterno") @db.VarChar(50)
-  apeMaterno    String   @map("ape_materno") @db.VarChar(50)
-  nombre        String   @db.VarChar(50)
-  telefono      String?  @db.VarChar(14)
-  celular       String?  @db.VarChar(14)
-  email         String?  @db.VarChar(60)
-  observaciones String?  @db.Text
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+// visitas: visita_id es char(8), NO auto_increment
+model Visita {
+  id                String   @id @map("visita_id") @db.Char(8)
+  residenciaId      Int      @map("residencia_id")
+  apePaterno        String   @default("") @map("ape_paterno") @db.VarChar(50)
+  apeMaterno        String   @default("") @map("ape_materno") @db.VarChar(50)
+  nombre            String   @default("") @db.VarChar(50)
+  telefono          String   @default("") @db.VarChar(14)
+  celular           String   @default("") @db.VarChar(14)
+  email             String   @default("") @db.VarChar(60)
+  observaciones     String   @default("") @db.Text
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   residencia Residencia @relation(fields: [residenciaId], references: [id])
 
-  @@map("residencias_visitantes")
-}
-
-model RegistroGeneral {
-  id            String   @id @map("registro_general_id") @db.VarChar(10) // ID personalizado
-  apePaterno    String   @map("ape_paterno") @db.VarChar(50)
-  apeMaterno    String   @map("ape_materno") @db.VarChar(50)
-  nombre        String   @db.VarChar(50)
-  telefono      String?  @db.VarChar(14)
-  celular       String?  @db.VarChar(14)
-  email         String?  @db.VarChar(60)
-  observaciones String?  @db.Text
-  estatusId     Int      @default(1) @map("estatus_id")
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
-
-  @@map("registros_generales")
+  @@index([residenciaId])
+  @@map("visitas")
 }
 
 // ============================================================
@@ -401,94 +402,114 @@ model RegistroGeneral {
 // ============================================================
 
 model Tarjeta {
-  id        Int      @id @default(autoincrement()) @map("tarjeta_id")
-  lectura   String   @db.VarChar(20) // Número de lectura RFID
-  tipoId    Int      @map("tipo_id") // 1=Peatonal, 2=Vehicular
-  estatusId Int      @default(1) @map("estatus_id") // 1=Activa, 2=Asignada, 3=Dañada, 4=Consignacion, 5=Baja
-  fecha     DateTime @default(now())
-  creadoEn  DateTime @default(now()) @map("creado_en")
-
-  asignaciones AsignacionTarjeta[]
+  id                Int      @id @default(autoincrement()) @map("tarjeta_id")
+  fecha             DateTime @default(now()) @db.DateTime(0)
+  lectura           String   @default("") @db.VarChar(20)
+  numeroSerie       String   @default("") @map("numero_serie") @db.VarChar(20)
+  tipoId            Int      @default(0) @map("tipo_id") @db.SmallInt
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("tarjetas")
 }
 
-model AsignacionTarjeta {
-  id              Int       @id @default(autoincrement()) @map("asignacion_id")
-  tarjetaId       Int       @map("tarjeta_id")
-  residenteId     Int       @map("residente_id")
-  tarjetaSecId    Int?      @map("tarjeta_sec_id") // Tarjeta secundaria
-  fecha           DateTime  @default(now())
-  fechaVencimiento DateTime? @map("fecha_vencimiento") @db.Date
-  tipoLectura     Int?      @map("tipo_lectura") // 1=TID, 2=EPC
-  lecturaEpc      String?   @map("lectura_epc") @db.VarChar(50)
-  folioContrato   String?   @map("folio_contrato") @db.VarChar(10)
-  precio          Decimal?  @db.Decimal(10, 2)
-  utilizoSeguro   Boolean   @default(false) @map("utilizo_seguro")
-  estatusId       Int       @default(1) @map("estatus_id") // 1=Activa, 2=Cancelada
-  creadoEn        DateTime  @default(now()) @map("creado_en")
-  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+// residencias_residentes_tarjetas: estructura denormalizada con 5 slots de tarjeta
+model ResidenteTarjeta {
+  id                      Int      @id @default(autoincrement()) @map("asignacion_id")
+  privada                 Int      @default(0)
+  tarjetaId               String   @default("") @map("tarjeta_id") @db.VarChar(11)
+  tarjetaId2              String   @default("") @map("tarjeta_id2") @db.VarChar(11)
+  tarjetaId3              String   @default("") @map("tarjeta_id3") @db.VarChar(11)
+  tarjetaId4              String   @default("") @map("tarjeta_id4") @db.VarChar(11)
+  tarjetaId5              String   @default("") @map("tarjeta_id5") @db.VarChar(11)
+  numeroSerie             String   @default("") @map("numero_serie") @db.VarChar(6)
+  numeroSerie2            String   @default("") @map("numero_serie2") @db.VarChar(6)
+  numeroSerie3            String   @default("") @map("numero_serie3") @db.VarChar(6)
+  numeroSerie4            String   @default("") @map("numero_serie4") @db.VarChar(6)
+  numeroSerie5            String   @default("") @map("numero_serie5") @db.VarChar(6)
+  residenteId             String   @map("residente_id") @db.VarChar(100)
+  compradorId             String   @default("") @map("comprador_id") @db.VarChar(100)
+  mostrarNombreComprador  Int      @default(0) @map("mostrar_nombre_comprador") @db.TinyInt
+  fecha                   DateTime @default(now()) @db.Date
+  fechaVencimiento        DateTime @default(now()) @map("fecha_vencimiento") @db.Date
+  lecturaTipoId           Int      @default(0) @map("lectura_tipo_id") @db.SmallInt
+  lecturaEpc              String   @default("") @map("lectura_epc") @db.VarChar(20)
+  folioContrato           String   @default("") @map("folio_contrato") @db.VarChar(10)
+  precio                  Float    @default(0)
+  descuento               Float    @default(0)
+  IVA                     Float    @default(0)
+  utilizoSeguro           Int      @default(0) @map("utilizo_seguro") @db.TinyInt
+  utilizoSeguro2          Int      @default(0) @map("utilizo_seguro2") @db.TinyInt
+  utilizoSeguro3          Int      @default(0) @map("utilizo_seguro3") @db.TinyInt
+  utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
+  utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
+  concepto                String   @default("") @db.VarChar(100)
+  interfonExtra           Int      @default(0) @map("interfon_extra")
+  estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion       DateTime @default(now()) @map("fecha_modificacion") @db.Date
+  tipoPago                Int      @default(0) @map("tipo_pago")
+  usuarioModId            Int      @default(0) @map("usuario_id")
+  observaciones           String   @default("") @db.VarChar(100)
 
-  tarjeta   Tarjeta   @relation(fields: [tarjetaId], references: [id])
   residente Residente @relation(fields: [residenteId], references: [id])
 
-  @@map("asignacion_tarjetas")
+  @@index([residenteId])
+  @@map("residencias_residentes_tarjetas")
 }
 
 // ============================================================
-// REGISTRO DE ACCESOS (Módulo principal del negocio)
+// REGISTRO DE ACCESOS (Módulo principal)
 // ============================================================
 
 model RegistroAcceso {
-  id              Int       @id @default(autoincrement()) @map("registro_acceso_id")
-  empleadoId      Int       @map("empleado_id") // Operador que atiende
-  privadaId       Int       @map("privada_id")
-  residenciaId    Int       @map("residencia_id")
-  tipoGestionId   Int       @map("tipo_gestion_id") // 1-9 tipos
-  solicitanteId   String    @map("solicitante_id") @db.VarChar(10) // ID del residente/visitante/general
-  solicitanteTipo String?   @map("solicitante_tipo") @db.VarChar(1) // R=Residente, V=Visitante, G=General
-  observaciones   String?   @db.Text
-  quejas          String?   @db.Text // Quejas o sugerencias
-  duracion        String?   @db.VarChar(8) // Duración de llamada HH:MM:SS
-  imagen          String?   @db.VarChar(100) // Ruta de captura de pantalla
-  estatusId       Int       @default(1) @map("estatus_id") // 1=Acceso, 2=Rechazado, 3=Informado
-  usuarioId       Int       @map("usuario_id")
-  creadoEn        DateTime  @default(now()) @map("creado_en")
-  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+  id                Int      @id @default(autoincrement()) @map("registro_acceso_id")
+  empleadoId        Int      @map("empleado_id")
+  privadaId         Int      @map("privada_id")
+  residenciaId      Int      @map("residencia_id")
+  tipoGestionId     Int      @map("tipo_gestion_id") @db.TinyInt
+  solicitanteId     String   @default("") @map("solicitante_id") @db.VarChar(8)
+  observaciones     String   @default("") @db.Text
+  ocr               String   @default("") @map("OCR") @db.Text
+  duracion          DateTime @default(now()) @map("duracion") @db.Time(0)
+  imagen            String   @default("") @db.VarChar(30)
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioId         Int      @map("usuario_id")
 
   // Relaciones
   empleado           Empleado           @relation("AccesoEmpleado", fields: [empleadoId], references: [id])
   privada            Privada            @relation(fields: [privadaId], references: [id])
   residencia         Residencia         @relation(fields: [residenciaId], references: [id])
-  usuario            Usuario            @relation("RegistroOperador", fields: [usuarioId], references: [id])
   supervisionLlamada SupervisionLlamada?
 
-  @@index([creadoEn])
+  @@index([fechaModificacion])
   @@index([privadaId])
   @@index([empleadoId])
+  @@index([residenciaId])
   @@map("registros_accesos")
 }
 
+// supervicion_llamadas (typo preservado de BD real): PK es registro_acceso_id (no autoincrement)
 model SupervisionLlamada {
-  id                 Int      @id @default(autoincrement()) @map("supervision_id")
-  registroAccesoId   Int      @unique @map("registro_acceso_id")
+  registroAccesoId   Int      @id @map("registro_acceso_id")
   supervisorId       Int      @map("supervisor_id")
-  fecha              DateTime @default(now())
-  saludo             Boolean  @default(false)
-  identificoEmpresa  Boolean  @default(false) @map("identifico_empresa")
-  identificoOperador Boolean  @default(false) @map("identifico_operador")
-  amable             Boolean  @default(false)
-  gracias            Boolean  @default(false)
-  demanda            Boolean  @default(false)
-  asunto             Boolean  @default(false)
-  tiempoGestion      String?  @map("tiempo_gestion") @db.VarChar(8)
-  observaciones      String?  @db.Text
-  creadoEn           DateTime @default(now()) @map("creado_en")
-  actualizadoEn      DateTime @updatedAt @map("actualizado_en")
+  fecha              DateTime @default(now()) @db.DateTime(0)
+  saludo             Int      @default(0) @db.TinyInt
+  identificoEmpresa  Int      @default(0) @map("identifico_empresa") @db.TinyInt
+  identificoOperador Int      @default(0) @map("identifico_operador") @db.TinyInt
+  amable             Int      @default(0) @db.TinyInt
+  gracias            Int      @default(0) @db.TinyInt
+  demanda            Int      @default(0) @db.TinyInt
+  asunto             Int      @default(0) @db.TinyInt
+  tiempoGestion      DateTime @default(now()) @map("tiempo_gestion") @db.Time(0)
+  observaciones      String   @default("") @db.Text
+  fechaModificacion  DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId       Int      @default(0) @map("usuario_id") @db.TinyInt
 
   registroAcceso RegistroAcceso @relation(fields: [registroAccesoId], references: [id])
 
-  @@map("supervision_llamadas")
+  @@map("supervicion_llamadas")
 }
 
 // ============================================================
@@ -497,23 +518,23 @@ model SupervisionLlamada {
 
 model OrdenServicio {
   id                  Int       @id @default(autoincrement()) @map("orden_servicio_id")
-  folio               String    @unique @db.VarChar(10)
-  fecha               DateTime  @default(now())
-  empleadoId          Int       @map("empleado_id") // Quien registra
+  folio               String    @default("") @db.Char(8)
+  fecha               DateTime  @default(now()) @db.Date
+  empleadoId          Int       @map("empleado_id")
   privadaId           Int       @map("privada_id")
   tecnicoId           Int       @map("tecnico_id")
-  cierreTecnicoId     Int?      @map("cierre_tecnico_id")
-  cierreFecha         DateTime? @map("cierre_fecha")
-  cierreComentario    String?   @map("cierre_comentario") @db.Text
-  fechaAsistio        DateTime? @map("fecha_asistio")
-  tiempo              Int?      // Horas
+  cierreTecnicoId     Int       @default(0) @map("cierre_tecnico_id")
+  cierreFecha         DateTime  @default(now()) @map("cierre_fecha") @db.DateTime(0)
+  cierreComentario    String    @default("") @map("cierre_comentario") @db.Text
+  fechaAsistio        DateTime  @default(now()) @map("fecha_asistio") @db.DateTime(0)
+  tiempo              Int       @default(0) @db.SmallInt
   codigoServicioId    Int       @map("codigo_servicio_id")
-  detalleServicio     String    @map("detalle_servicio") @db.Text
-  diagnosticoId       Int?      @map("diagnostico_id")
-  detalleDiagnostico  String?   @map("detalle_diagnostico") @db.Text
-  estatusId           Int       @default(1) @map("estatus_id") // 1=Abierta, 2=Solucionada, 3=Cerrada
-  creadoEn            DateTime  @default(now()) @map("creado_en")
-  actualizadoEn       DateTime  @updatedAt @map("actualizado_en")
+  detalleServicio     String    @default("") @map("detalle_servicio") @db.Text
+  diagnosticoId       Int       @default(0) @map("diagnostico_id")
+  detalleDiagnostico  String    @default("") @map("detalle_diagnostico") @db.Text
+  estatusId           Int       @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion   DateTime  @updatedAt @map("fecha_modificacion")
+  usuarioModId        Int       @default(0) @map("usuario_id") @db.SmallInt
 
   empleado       Empleado       @relation("OrdenEmpleado", fields: [empleadoId], references: [id])
   privada        Privada        @relation(fields: [privadaId], references: [id])
@@ -522,37 +543,30 @@ model OrdenServicio {
   codigoServicio CodigoServicio @relation(fields: [codigoServicioId], references: [id])
   diagnostico    Diagnostico?   @relation(fields: [diagnosticoId], references: [id])
   seguimientos   OrdenServicioSeguimiento[]
-  materiales     OrdenServicioMaterial[]
 
   @@index([folio])
   @@index([fecha])
+  @@index([empleadoId])
+  @@index([privadaId])
+  @@index([tecnicoId])
+  @@index([codigoServicioId])
+  @@index([diagnosticoId])
+  @@index([cierreTecnicoId])
   @@map("ordenes_servicio")
 }
 
 model OrdenServicioSeguimiento {
   ordenServicioId Int      @map("orden_servicio_id")
   seguimientoId   Int      @map("seguimiento_id")
-  comentario      String   @db.Text
-  creadoEn        DateTime @default(now()) @map("creado_en")
-  usuarioId       Int      @map("usuario_id")
+  comentario      String   @default("") @db.Text
+  fecha           DateTime @default(now()) @db.DateTime(0)
+  usuarioModId    Int      @default(0) @map("usuario_id")
 
   ordenServicio OrdenServicio @relation(fields: [ordenServicioId], references: [id], onDelete: Cascade)
 
   @@id([ordenServicioId, seguimientoId])
+  @@index([ordenServicioId])
   @@map("ordenes_servicio_seguimiento")
-}
-
-model OrdenServicioMaterial {
-  ordenServicioId Int     @map("orden_servicio_id")
-  materialId      Int     @map("material_id")
-  cantidad        Decimal @db.Decimal(10, 2)
-  creadoEn        DateTime @default(now()) @map("creado_en")
-
-  ordenServicio OrdenServicio @relation(fields: [ordenServicioId], references: [id], onDelete: Cascade)
-  material      Material      @relation(fields: [materialId], references: [id])
-
-  @@id([ordenServicioId, materialId])
-  @@map("ordenes_servicio_material")
 }
 
 // ============================================================
@@ -560,24 +574,23 @@ model OrdenServicioMaterial {
 // ============================================================
 
 model Gasto {
-  id           Int      @id @default(autoincrement()) @map("gasto_id")
-  tipoGastoId  Int      @map("tipo_gasto_id")
-  privadaId    Int      @map("privada_id")
-  descripcion  String   @db.VarChar(100)
-  fechaPago    DateTime @map("fecha_pago") @db.Date
-  comprobante  String?  @db.VarChar(50)
-  total        Decimal  @db.Decimal(12, 2)
-  tipoPagoId   Int      @map("tipo_pago_id") // 1=Efectivo, 2=Bancos, 3=Caja
-  autorizado   Boolean  @default(false)
-  autorizadoPor Int?    @map("autorizado_por")
-  pagado       Boolean  @default(false)
-  estatusId    Int      @default(1) @map("estatus_id")
-  creadoEn     DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id               Int    @id @default(autoincrement()) @map("gasto_id")
+  tipoGastoId      Int    @map("tipo_gasto") @db.TinyInt
+  privadaId        Int    @map("privada_id")
+  descripcionGasto String @default("") @map("descripcion_gasto") @db.VarChar(100)
+  fechaPago        String @default("") @map("fecha_pago") @db.VarChar(100)
+  comprobante      String @default("") @db.VarChar(50)
+  total            Float  @default(0)
+  tipoPago         Int    @default(0) @map("tipo_pago")
+  fecha            String @default("") @db.VarChar(100)
+  usuarioModId     Int    @default(0) @map("usuario_id")
+  estatusId        Int    @default(1) @map("estatus_id")
 
   tipoGasto TipoGasto @relation(fields: [tipoGastoId], references: [id])
   privada   Privada   @relation(fields: [privadaId], references: [id])
 
+  @@index([tipoGastoId])
+  @@index([privadaId])
   @@map("gastos")
 }
 
@@ -587,33 +600,33 @@ model Gasto {
 
 model RecuperacionPatrimonial {
   id                     Int       @id @default(autoincrement()) @map("recuperacion_patrimonial_id")
-  folio                  String    @unique @db.VarChar(10)
-  fecha                  DateTime  @default(now())
-  empleadoId             Int       @map("empleado_id")
-  privadaId              Int       @map("privada_id")
-  ordenServicioId        Int?      @map("orden_servicio_id")
-  relatoHechos           String?   @map("relato_hechos") @db.Text
-  responsableNombre      String?   @map("responsable_nombre") @db.VarChar(80)
-  responsableDomicilio   String?   @map("responsable_domicilio") @db.Text
-  responsableTelefono    String?   @map("responsable_telefono") @db.VarChar(14)
-  responsableCelular     String?   @map("responsable_celular") @db.VarChar(14)
-  responsableRelacion    String?   @map("responsable_relacion") @db.VarChar(40)
-  vehiculoPlacas         String?   @map("vehiculo_placas") @db.VarChar(20)
-  vehiculoModelo         String?   @map("vehiculo_modelo") @db.VarChar(20)
-  vehiculoColor          String?   @map("vehiculo_color") @db.VarChar(20)
-  vehiculoMarca          String?   @map("vehiculo_marca") @db.VarChar(20)
-  seguro                 Boolean   @default(false)
-  seguroNombres          String?   @map("seguro_nombres") @db.Text
-  testigos               Boolean   @default(false)
-  testigosNombres        String?   @map("testigos_nombres") @db.Text
-  videos                 Boolean   @default(false)
-  videosDireccion        String?   @map("videos_direccion") @db.Text
-  avisoAdministrador     Boolean   @default(false) @map("aviso_administrador")
-  avisoAdministradorFecha DateTime? @map("aviso_administrador_fecha")
-  observaciones          String?   @db.Text
-  estatusId              Int       @default(1) @map("estatus_id") // 1=Pendiente, 2=Recuperado
-  creadoEn               DateTime  @default(now()) @map("creado_en")
-  actualizadoEn          DateTime  @updatedAt @map("actualizado_en")
+  folio                  String    @default("") @db.VarChar(10)
+  fecha                  DateTime  @default(now()) @db.DateTime(0)
+  empleadoId             Int       @default(0) @map("empleado_id")
+  privadaId              Int       @default(0) @map("privada_id")
+  ordenServicioId        Int       @default(0) @map("orden_servicio_id")
+  relatoHechos           String    @default("") @map("relato_hechos") @db.Text
+  responsableNombre      String    @default("") @map("responsable_nombre") @db.VarChar(80)
+  responsableDomicilio   String    @default("") @map("responsable_domicilio") @db.Text
+  responsableTelefono    String    @default("") @map("responsable_telefono") @db.VarChar(14)
+  responsableCelular     String    @default("") @map("responsable_celular") @db.VarChar(14)
+  responsableRelacion    String    @default("") @map("responsable_relacion") @db.VarChar(40)
+  vehiculoPlacas         String    @default("") @map("vehiculo_placas") @db.VarChar(20)
+  vehiculoModelo         String    @default("") @map("vehiculo_modelo") @db.VarChar(20)
+  vehiculoColor          String    @default("") @map("vehiculo_color") @db.VarChar(20)
+  vehiculoMarca          String    @default("") @map("vehiculo_marca") @db.VarChar(20)
+  seguro                 Int       @default(0) @db.TinyInt
+  seguroNombres          String    @default("") @map("seguro_nombres") @db.Text
+  testigos               Int       @default(0) @db.TinyInt
+  testigosNombres        String    @default("") @map("testigos_nombres") @db.Text
+  videos                 Int       @default(0) @db.TinyInt
+  videosDireccion        String    @default("") @map("videos_direccion") @db.Text
+  avisoAdministrador     Int       @default(0) @map("aviso_administrador") @db.TinyInt
+  avisoAdministradorFecha DateTime @default(now()) @map("aviso_administrador_fecha") @db.DateTime(0)
+  observaciones          String    @default("") @db.Text
+  estatusId              Int       @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion      DateTime  @updatedAt @map("fecha_modificacion")
+  usuarioModId           Int       @default(0) @map("usuario_id")
 
   seguimientos RecuperacionPatrimonialSeguimiento[]
 
@@ -623,46 +636,13 @@ model RecuperacionPatrimonial {
 model RecuperacionPatrimonialSeguimiento {
   recuperacionId Int      @map("recuperacion_patrimonial_id")
   seguimientoId  Int      @map("seguimiento_id")
-  comentario     String   @db.Text
-  creadoEn       DateTime @default(now()) @map("creado_en")
-  usuarioId      Int      @map("usuario_id")
+  comentario     String   @default("") @db.Text
+  fecha          DateTime @default(now()) @db.DateTime(0)
+  usuarioModId   Int      @default(0) @map("usuario_id")
 
   recuperacion RecuperacionPatrimonial @relation(fields: [recuperacionId], references: [id], onDelete: Cascade)
 
   @@id([recuperacionId, seguimientoId])
+  @@index([recuperacionId])
   @@map("recuperacion_patrimonial_seguimiento")
-}
-
-// ============================================================
-// CONSECUTIVOS / FOLIOS
-// ============================================================
-
-model Folio {
-  id          Int    @id @default(autoincrement()) @map("folio_id")
-  descripcion String @db.VarChar(30)
-  prefijo     String @db.Char(2)
-  consecutivo Int    @default(0)
-
-  @@map("folios")
-}
-
-// ============================================================
-// ACCESOS BOT (Sistema externo de lectura de placas)
-// ============================================================
-
-model AccesoBot {
-  id        Int      @id @default(autoincrement()) @map("acceso_id")
-  placa     String?  @db.VarChar(20)
-  color     String?  @db.VarChar(30)
-  marca     String?  @db.VarChar(30)
-  nombre    String?  @db.VarChar(100)
-  imgPlaca  String?  @map("img_placa") @db.VarChar(200)
-  imgId     String?  @map("img_id") @db.VarChar(200)
-  imgRostro String?  @map("img_rostro") @db.VarChar(200)
-  calle     String?  @db.VarChar(60)
-  nroCasa   String?  @map("nro_casa") @db.VarChar(10)
-  fecha     DateTime @default(now())
-
-  @@index([fecha])
-  @@map("accesos_bot")
 }

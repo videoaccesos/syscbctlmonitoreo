@@ -1,6 +1,5 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 
 export const authOptions: NextAuthOptions = {
@@ -30,18 +29,16 @@ export const authOptions: NextAuthOptions = {
 
         if (!usuario) return null;
 
-        const passwordMatch = await bcrypt.compare(
-          credentials.contrasena,
-          usuario.contrasena
-        );
-
-        if (!passwordMatch) return null;
+        // BD legacy usa contraseñas en texto plano (varchar 10)
+        if (credentials.contrasena !== usuario.contrasena) return null;
 
         // Registrar inicio de sesión en bitácora
         await prisma.bitacoraInicio.create({
           data: {
             usuarioId: usuario.id,
+            inicioSesion: new Date(),
             direccionIp: "",
+            hostName: "",
           },
         });
 
@@ -75,8 +72,8 @@ export const authOptions: NextAuthOptions = {
         token.usuarioId = u.usuarioId as number;
         token.empleadoId = u.empleadoId as number | null;
         token.puestoId = u.puestoId as number | undefined;
-        token.nroOperador = u.nroOperador as string | null | undefined;
-        token.modificarFechas = u.modificarFechas as boolean;
+        token.nroOperador = u.nroOperador as string | undefined;
+        token.modificarFechas = u.modificarFechas as string;
         token.privadaId = u.privadaId as number | null;
       }
       return token;
@@ -86,8 +83,8 @@ export const authOptions: NextAuthOptions = {
         session.user.usuarioId = token.usuarioId as number;
         session.user.empleadoId = token.empleadoId as number | null;
         session.user.puestoId = token.puestoId as number | undefined;
-        session.user.nroOperador = token.nroOperador as string | null | undefined;
-        session.user.modificarFechas = token.modificarFechas as boolean;
+        session.user.nroOperador = token.nroOperador as string | undefined;
+        session.user.modificarFechas = token.modificarFechas as string;
         session.user.privadaId = token.privadaId as number | null;
       }
       return session;
@@ -98,7 +95,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 2 * 60 * 60, // 2 horas (igual que el sistema legacy)
+    maxAge: 2 * 60 * 60, // 2 horas
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

@@ -142,19 +142,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // tiempoGestion is DateTime @db.Time(0) - convert string like "00:01:30" to Date
+    let tiempoGestionValue = new Date("1970-01-01T00:00:00");
+    if (tiempoGestion) {
+      tiempoGestionValue = new Date(`1970-01-01T${tiempoGestion}`);
+    }
+
     const supervision = await prisma.supervisionLlamada.create({
       data: {
         registroAccesoId: parseInt(registroAccesoId, 10),
         supervisorId: parseInt(supervisorId, 10),
-        saludo: Boolean(saludo),
-        identificoEmpresa: Boolean(identificoEmpresa),
-        identificoOperador: Boolean(identificoOperador),
-        amable: Boolean(amable),
-        gracias: Boolean(gracias),
-        demanda: Boolean(demanda),
-        asunto: Boolean(asunto),
-        tiempoGestion: tiempoGestion?.trim() || null,
-        observaciones: observaciones?.trim() || null,
+        saludo: saludo ? 1 : 0,
+        identificoEmpresa: identificoEmpresa ? 1 : 0,
+        identificoOperador: identificoOperador ? 1 : 0,
+        amable: amable ? 1 : 0,
+        gracias: gracias ? 1 : 0,
+        demanda: demanda ? 1 : 0,
+        asunto: asunto ? 1 : 0,
+        tiempoGestion: tiempoGestionValue,
+        observaciones: observaciones?.trim() || "",
       },
       include: {
         registroAcceso: {

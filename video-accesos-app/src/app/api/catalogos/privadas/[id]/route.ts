@@ -102,27 +102,37 @@ export async function PUT(
       where: { id: privadaId },
       data: {
         descripcion: body.descripcion.trim(),
-        apePaterno: body.apePaterno?.trim() || null,
-        apeMaterno: body.apeMaterno?.trim() || null,
-        nombre: body.nombre?.trim() || null,
+        apePaterno: body.apePaterno?.trim() || "",
+        apeMaterno: body.apeMaterno?.trim() || "",
+        nombre: body.nombre?.trim() || "",
         tipoContactoId: body.tipoContactoId
           ? parseInt(body.tipoContactoId, 10)
-          : null,
-        telefono: body.telefono?.trim() || null,
-        celular: body.celular?.trim() || null,
-        email: body.email?.trim() || null,
-        historial: body.historial?.trim() || null,
-        precioVehicular: body.precioVehicular
-          ? parseFloat(body.precioVehicular)
-          : null,
-        precioPeatonal: body.precioPeatonal
-          ? parseFloat(body.precioPeatonal)
-          : null,
-        mensualidad: body.mensualidad ? parseFloat(body.mensualidad) : null,
+          : 0,
+        telefono: body.telefono?.trim() || "",
+        celular: body.celular?.trim() || "",
+        email: body.email?.trim() || "",
+        historial: body.historial?.trim() || "",
+        dns1: body.dns1?.trim() || "",
+        dns2: body.dns2?.trim() || "",
+        dns3: body.dns3?.trim() || "",
+        video1: body.video1?.trim() || "",
+        video2: body.video2?.trim() || "",
+        video3: body.video3?.trim() || "",
+        relay1: body.relay1?.trim() || "",
+        relay2: body.relay2?.trim() || "",
+        relay3: body.relay3?.trim() || "",
+        monitoreo: parseInt(body.monitoreo, 10) || 0,
+        precioVehicular: parseInt(body.precioVehicular, 10) || 0,
+        precioPeatonal: parseInt(body.precioPeatonal, 10) || 0,
+        precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
+        pagoMensualidad: parseInt(body.pagoMensualidad, 10) || 0,
+        renovacion: body.renovacion
+          ? new Date(body.renovacion)
+          : new Date(),
         venceContrato: body.venceContrato
           ? new Date(body.venceContrato)
-          : null,
-        observaciones: body.observaciones?.trim() || null,
+          : new Date(),
+        observaciones: body.observaciones?.trim() || "",
       },
     });
 

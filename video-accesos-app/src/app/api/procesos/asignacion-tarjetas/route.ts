@@ -50,17 +50,9 @@ export async function GET(request: NextRequest) {
     }
 
     const [asignaciones, total] = await Promise.all([
-      prisma.asignacionTarjeta.findMany({
+      prisma.residenteTarjeta.findMany({
         where,
         include: {
-          tarjeta: {
-            select: {
-              id: true,
-              lectura: true,
-              tipoId: true,
-              estatusId: true,
-            },
-          },
           residente: {
             select: {
               id: true,
@@ -83,11 +75,11 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        orderBy: { creadoEn: "desc" },
+        orderBy: { fechaModificacion: "desc" },
         skip,
         take: limit,
       }),
-      prisma.asignacionTarjeta.count({ where }),
+      prisma.residenteTarjeta.count({ where }),
     ]);
 
     return NextResponse.json({
@@ -121,12 +113,16 @@ export async function POST(request: NextRequest) {
     const {
       tarjetaId,
       residenteId,
-      tarjetaSecId,
+      tarjetaId2,
+      tarjetaId3,
+      tarjetaId4,
+      tarjetaId5,
       fechaVencimiento,
-      tipoLectura,
+      lecturaTipoId,
       lecturaEpc,
       folioContrato,
       precio,
+      privada,
     } = body;
 
     // Validacion de campos requeridos
@@ -137,28 +133,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar que la tarjeta existe y esta disponible (estatusId = 1 Activa)
-    const tarjeta = await prisma.tarjeta.findUnique({
-      where: { id: parseInt(tarjetaId, 10) },
-    });
-
-    if (!tarjeta) {
-      return NextResponse.json(
-        { error: "Tarjeta no encontrada" },
-        { status: 404 }
-      );
-    }
-
-    if (tarjeta.estatusId !== 1) {
-      return NextResponse.json(
-        { error: "La tarjeta no esta disponible para asignacion (debe estar Activa)" },
-        { status: 400 }
-      );
-    }
-
-    // Validar que el residente existe y esta activo
+    // Validar que el residente existe y esta activo (residenteId is String char(8))
     const residente = await prisma.residente.findFirst({
-      where: { id: parseInt(residenteId, 10), estatusId: 1 },
+      where: { id: String(residenteId), estatusId: 1 },
     });
 
     if (!residente) {
@@ -168,62 +145,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear asignacion y actualizar estatus de tarjeta en una transaccion
-    const asignacion = await prisma.$transaction(async (tx) => {
-      // Crear la asignacion
-      const nueva = await tx.asignacionTarjeta.create({
-        data: {
-          tarjetaId: parseInt(tarjetaId, 10),
-          residenteId: parseInt(residenteId, 10),
-          tarjetaSecId: tarjetaSecId ? parseInt(tarjetaSecId, 10) : null,
-          fechaVencimiento: fechaVencimiento
-            ? new Date(fechaVencimiento)
-            : null,
-          tipoLectura: tipoLectura ? parseInt(tipoLectura, 10) : null,
-          lecturaEpc: lecturaEpc?.trim() || null,
-          folioContrato: folioContrato?.trim() || null,
-          precio: precio ? parseFloat(precio) : null,
-        },
-        include: {
-          tarjeta: {
-            select: {
-              id: true,
-              lectura: true,
-              tipoId: true,
-              estatusId: true,
-            },
-          },
-          residente: {
-            select: {
-              id: true,
-              nombre: true,
-              apePaterno: true,
-              apeMaterno: true,
-              residencia: {
-                select: {
-                  id: true,
-                  nroCasa: true,
-                  calle: true,
-                  privada: {
-                    select: {
-                      id: true,
-                      descripcion: true,
-                    },
+    // Crear asignacion
+    const asignacion = await prisma.residenteTarjeta.create({
+      data: {
+        tarjetaId: String(tarjetaId) || "",
+        tarjetaId2: tarjetaId2 ? String(tarjetaId2) : "",
+        tarjetaId3: tarjetaId3 ? String(tarjetaId3) : "",
+        tarjetaId4: tarjetaId4 ? String(tarjetaId4) : "",
+        tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
+        residenteId: String(residenteId),
+        privada: privada ? parseInt(privada, 10) : 0,
+        fechaVencimiento: fechaVencimiento
+          ? new Date(fechaVencimiento)
+          : new Date(),
+        lecturaTipoId: lecturaTipoId ? parseInt(lecturaTipoId, 10) : 0,
+        lecturaEpc: lecturaEpc?.trim() || "",
+        folioContrato: folioContrato?.trim() || "",
+        precio: precio ? parseFloat(precio) : 0,
+      },
+      include: {
+        residente: {
+          select: {
+            id: true,
+            nombre: true,
+            apePaterno: true,
+            apeMaterno: true,
+            residencia: {
+              select: {
+                id: true,
+                nroCasa: true,
+                calle: true,
+                privada: {
+                  select: {
+                    id: true,
+                    descripcion: true,
                   },
                 },
               },
             },
           },
         },
-      });
-
-      // Actualizar tarjeta a estatusId 2 (Asignada)
-      await tx.tarjeta.update({
-        where: { id: parseInt(tarjetaId, 10) },
-        data: { estatusId: 2 },
-      });
-
-      return nueva;
+      },
     });
 
     return NextResponse.json(asignacion, { status: 201 });

@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     const tarjeta = await prisma.tarjeta.create({
       data: {
         lectura: body.lectura.trim(),
+        numeroSerie: body.numeroSerie?.trim() || "",
         tipoId,
         estatusId: body.estatusId ? parseInt(body.estatusId, 10) : 1,
         fecha: body.fecha ? new Date(body.fecha) : new Date(),

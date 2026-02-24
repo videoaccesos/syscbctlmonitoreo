@@ -43,20 +43,20 @@ export async function GET(request: NextRequest) {
     }
 
     if (fechaDesde || fechaHasta) {
-      const creadoEnFilter: Record<string, Date> = {};
+      const fechaModificacionFilter: Record<string, Date> = {};
       if (fechaDesde) {
-        creadoEnFilter.gte = new Date(`${fechaDesde}T00:00:00`);
+        fechaModificacionFilter.gte = new Date(`${fechaDesde}T00:00:00`);
       }
       if (fechaHasta) {
-        creadoEnFilter.lte = new Date(`${fechaHasta}T23:59:59`);
+        fechaModificacionFilter.lte = new Date(`${fechaHasta}T23:59:59`);
       }
-      where.creadoEn = creadoEnFilter;
+      where.fechaModificacion = fechaModificacionFilter;
     } else {
       // Por defecto: mes actual
       const hoy = new Date();
       const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1, 0, 0, 0);
       const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
-      where.creadoEn = {
+      where.fechaModificacion = {
         gte: inicioMes,
         lte: finMes,
       };
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
       prisma.registroAcceso.count({ where }),
       prisma.registroAcceso.findMany({
         where,
-        select: { creadoEn: true },
+        select: { fechaModificacion: true },
       }),
     ]);
 
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const reg of registrosParaFechas) {
-      const d = new Date(reg.creadoEn);
+      const d = new Date(reg.fechaModificacion);
       const fechaStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       conteosDia[fechaStr] = (conteosDia[fechaStr] || 0) + 1;
       conteosHora[d.getHours()] = (conteosHora[d.getHours()] || 0) + 1;

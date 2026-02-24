@@ -6,8 +6,8 @@ declare module "next-auth" {
       usuarioId: number;
       empleadoId: number | null;
       puestoId: number | undefined;
-      nroOperador: string | null | undefined;
-      modificarFechas: boolean;
+      nroOperador: string | undefined;
+      modificarFechas: string; // "S" o "N" (char 1 en BD)
       privadaId: number | null;
     };
   }
@@ -16,8 +16,8 @@ declare module "next-auth" {
     usuarioId: number;
     empleadoId: number | null;
     puestoId: number | undefined;
-    nroOperador: string | null | undefined;
-    modificarFechas: boolean;
+    nroOperador: string | undefined;
+    modificarFechas: string;
     privadaId: number | null;
   }
 }
@@ -27,8 +27,8 @@ declare module "next-auth/jwt" {
     usuarioId: number;
     empleadoId: number | null;
     puestoId: number | undefined;
-    nroOperador: string | null | undefined;
-    modificarFechas: boolean;
+    nroOperador: string | undefined;
+    modificarFechas: string;
     privadaId: number | null;
   }
 }

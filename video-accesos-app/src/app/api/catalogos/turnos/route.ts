@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     const turno = await prisma.turno.create({
       data: {
         descripcion: body.descripcion.trim(),
-        puestoId: body.puestoId ? parseInt(body.puestoId, 10) : null,
+        puestoId: body.puestoId ? parseInt(body.puestoId, 10) : 0,
         estatusId: 1,
       },
     });

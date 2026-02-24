@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
 
 // GET /api/seguridad/usuarios/[id] - Obtener un usuario por ID
 export async function GET(
@@ -113,10 +112,14 @@ export async function PUT(
       usuario: usuario.trim(),
       empleadoId: body.empleadoId ? parseInt(body.empleadoId, 10) : null,
       privadaId: body.privadaId ? parseInt(body.privadaId, 10) : null,
-      modificarFechas: body.modificarFechas || false,
+      modificarFechas: body.modificarFechas || "N",
+      googleAuthCode: body.googleAuthCode || "",
+      logueado: body.logueado || 0,
+      usuarioMovId: body.usuarioMovId || 0,
+      usuarioModId: body.usuarioModId || 0,
     };
 
-    // Si se proporciona contrasena, hashearla
+    // Si se proporciona contrasena, almacenar en texto plano (legacy MySQL 5.7, varchar(10))
     if (contrasena && contrasena.length > 0) {
       if (contrasena.length < 6) {
         return NextResponse.json(
@@ -124,7 +127,13 @@ export async function PUT(
           { status: 400 }
         );
       }
-      updateData.contrasena = await bcrypt.hash(contrasena, 10);
+      if (contrasena.length > 10) {
+        return NextResponse.json(
+          { error: "La contrasena no puede tener mas de 10 caracteres" },
+          { status: 400 }
+        );
+      }
+      updateData.contrasena = contrasena;
       updateData.cambioContrasena = new Date();
     }
 

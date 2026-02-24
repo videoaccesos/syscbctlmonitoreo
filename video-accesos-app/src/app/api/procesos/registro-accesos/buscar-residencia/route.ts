@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         id: true,
         nroCasa: true,
         calle: true,
-        telefono1: true,
+        telefono: true,
         telefono2: true,
         interfon: true,
         telefonoInterfon: true,
@@ -65,19 +65,6 @@ export async function GET(request: NextRequest) {
             celular: true,
             email: true,
             reportarAcceso: true,
-          },
-          orderBy: { apePaterno: "asc" },
-        },
-        visitantes: {
-          where: { estatusId: 1 }, // Solo visitantes activos
-          select: {
-            id: true,
-            nombre: true,
-            apePaterno: true,
-            apeMaterno: true,
-            telefono: true,
-            celular: true,
-            observaciones: true,
           },
           orderBy: { apePaterno: "asc" },
         },

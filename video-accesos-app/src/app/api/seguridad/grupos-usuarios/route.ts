@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
 
     const grupo = await prisma.grupoUsuario.create({
       data: {
-        nombre: nombre.trim(),
+        nombre: nombre.trim().substring(0, 30),
         estatusId: 1,
+        usuarioModId: body.usuarioModId || 0,
       },
       include: {
         _count: {
