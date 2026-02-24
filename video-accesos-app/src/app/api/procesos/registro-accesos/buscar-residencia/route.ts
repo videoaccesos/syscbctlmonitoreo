@@ -68,6 +68,19 @@ export async function GET(request: NextRequest) {
           },
           orderBy: { apePaterno: "asc" },
         },
+        visitas: {
+          where: { estatusId: 1 },
+          select: {
+            id: true,
+            nombre: true,
+            apePaterno: true,
+            apeMaterno: true,
+            telefono: true,
+            celular: true,
+            observaciones: true,
+          },
+          orderBy: { apePaterno: "asc" },
+        },
       },
       orderBy: { nroCasa: "asc" },
       take: 50, // Limitar resultados para rendimiento

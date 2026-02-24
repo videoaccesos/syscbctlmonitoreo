@@ -37,7 +37,7 @@ interface GrupoDetalle {
 interface Usuario {
   id: number;
   usuario: string;
-  modificarFechas: boolean;
+  modificarFechas: string;
   ultimaSesion: string | null;
   empleadoId: number | null;
   privadaId: number | null;
@@ -52,7 +52,7 @@ interface UsuarioForm {
   confirmarContrasena: string;
   empleadoId: string;
   privadaId: string;
-  modificarFechas: boolean;
+  modificarFechas: string;
 }
 
 const emptyForm: UsuarioForm = {
@@ -61,7 +61,7 @@ const emptyForm: UsuarioForm = {
   confirmarContrasena: "",
   empleadoId: "",
   privadaId: "",
-  modificarFechas: false,
+  modificarFechas: "N",
 };
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ export default function UsuariosPage() {
       confirmarContrasena: "",
       empleadoId: usr.empleadoId ? String(usr.empleadoId) : "",
       privadaId: usr.privadaId ? String(usr.privadaId) : "",
-      modificarFechas: usr.modificarFechas,
+      modificarFechas: usr.modificarFechas === "S" ? "S" : "N",
     });
     setError("");
     setModalOpen(true);
@@ -191,7 +191,11 @@ export default function UsuariosPage() {
   ) => {
     const target = e.target;
     if (target instanceof HTMLInputElement && target.type === "checkbox") {
-      setForm((prev) => ({ ...prev, [target.name]: target.checked }));
+      if (target.name === "modificarFechas") {
+        setForm((prev) => ({ ...prev, [target.name]: target.checked ? "S" : "N" }));
+      } else {
+        setForm((prev) => ({ ...prev, [target.name]: target.checked ? "S" : "N" }));
+      }
     } else {
       setForm((prev) => ({ ...prev, [target.name]: target.value }));
     }
@@ -237,7 +241,7 @@ export default function UsuariosPage() {
         usuario: form.usuario,
         empleadoId: form.empleadoId || null,
         privadaId: form.privadaId || null,
-        modificarFechas: form.modificarFechas,
+        modificarFechas: form.modificarFechas === "S" ? "S" : "N",
       };
 
       if (form.contrasena) {
@@ -606,7 +610,7 @@ export default function UsuariosPage() {
                   <input
                     type="checkbox"
                     name="modificarFechas"
-                    checked={form.modificarFechas}
+                    checked={form.modificarFechas === "S"}
                     onChange={handleFormChange}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />

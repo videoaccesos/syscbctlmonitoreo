@@ -29,14 +29,14 @@ interface Residencia {
   id: number;
   nroCasa: string;
   calle: string;
-  telefono1: string | null;
+  telefono: string | null;
   telefono2: string | null;
   interfon: string | null;
   telefonoInterfon: string | null;
   observaciones: string | null;
   estatusId: number;
   residentes: Residente[];
-  visitantes: Visitante[];
+  visitas: Visita[];
 }
 
 interface Residente {
@@ -46,11 +46,11 @@ interface Residente {
   apeMaterno: string;
   celular: string | null;
   email: string | null;
-  reportarAcceso: boolean;
+  reportarAcceso: number;
 }
 
-interface Visitante {
-  id: number;
+interface Visita {
+  id: string;
   nombre: string;
   apePaterno: string;
   apeMaterno: string;
@@ -82,7 +82,7 @@ interface RegistroAcceso {
   usuarioId: number;
   fechaModificacion: string;
   privada: { id: number; descripcion: string };
-  residencia: { id: number; nroCasa: string; calle: string; telefono1?: string; telefono2?: string; interfon?: string; telefonoInterfon?: string };
+  residencia: { id: number; nroCasa: string; calle: string; telefono?: string; telefono2?: string; interfon?: string; telefonoInterfon?: string };
   empleado: Empleado;
 }
 
@@ -649,9 +649,9 @@ export default function RegistroAccesosPage() {
                           | Interfon: {selectedResidencia.interfon}
                         </span>
                       )}
-                      {selectedResidencia.telefono1 && (
+                      {selectedResidencia.telefono && (
                         <span className="text-blue-500 ml-2">
-                          | Tel: {selectedResidencia.telefono1}
+                          | Tel: {selectedResidencia.telefono}
                         </span>
                       )}
                     </div>
@@ -723,7 +723,7 @@ export default function RegistroAccesosPage() {
                               {r.interfon || "-"}
                             </td>
                             <td className="px-3 py-2 text-gray-600">
-                              {r.telefono1 || "-"}
+                              {r.telefono || "-"}
                             </td>
                             <td className="px-3 py-2">
                               {r.estatusId === 3 ? (
@@ -839,13 +839,13 @@ export default function RegistroAccesosPage() {
                 )}
 
                 {/* Visitantes de la casa */}
-                {selectedResidencia.visitantes.length > 0 && (
+                {selectedResidencia.visitas.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-gray-500 mb-1">
                       Visitantes:
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {selectedResidencia.visitantes.map((v) => {
+                      {selectedResidencia.visitas.map((v) => {
                         const nombreCompleto = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`;
                         const isSelected =
                           formSolicitanteId === String(v.id);
@@ -871,7 +871,7 @@ export default function RegistroAccesosPage() {
                 )}
 
                 {selectedResidencia.residentes.length === 0 &&
-                  selectedResidencia.visitantes.length === 0 && (
+                  selectedResidencia.visitas.length === 0 && (
                     <p className="text-xs text-gray-400 italic">
                       No hay residentes ni visitantes registrados para esta
                       casa.
@@ -1325,11 +1325,11 @@ export default function RegistroAccesosPage() {
                         Datos de la Residencia
                       </p>
                       <div className="grid grid-cols-2 gap-3 text-sm bg-gray-50 rounded-lg p-3">
-                        {detalle.residencia.telefono1 && (
+                        {detalle.residencia.telefono && (
                           <div>
                             <span className="text-gray-500">Tel 1: </span>
                             <span className="text-gray-900">
-                              {detalle.residencia.telefono1}
+                              {detalle.residencia.telefono}
                             </span>
                           </div>
                         )}

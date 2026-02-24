@@ -14,10 +14,9 @@ interface RegistroAcceso {
   tipoGestionId: number;
   estatusId: number;
   solicitanteId: string;
-  solicitanteTipo: string | null;
   observaciones: string | null;
   duracion: string | null;
-  creadoEn: string;
+  fechaModificacion: string;
   privada: { id: number; descripcion: string };
   residencia: { id: number; nroCasa: string; calle: string };
   empleado: {
@@ -31,7 +30,7 @@ interface RegistroAcceso {
     id: number;
     usuario: string;
     empleado: { nombre: string; apePaterno: string } | null;
-  };
+  } | null;
 }
 
 interface ApiResponse {
@@ -94,7 +93,7 @@ function registroToCsvRow(r: RegistroAcceso): string {
     ? `${r.usuario.empleado.nombre} ${r.usuario.empleado.apePaterno}`
     : r.usuario?.usuario || "";
   const cols = [
-    formatFecha(r.creadoEn),
+    formatFecha(r.fechaModificacion),
     r.privada.descripcion,
     r.residencia.nroCasa,
     r.residencia.calle,
@@ -361,7 +360,7 @@ export default function AccesosConsultasPage() {
                 registros.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {formatFecha(r.creadoEn)}
+                      {formatFecha(r.fechaModificacion)}
                     </td>
                     <td className="px-4 py-3 text-gray-900 font-medium">
                       {r.privada.descripcion}

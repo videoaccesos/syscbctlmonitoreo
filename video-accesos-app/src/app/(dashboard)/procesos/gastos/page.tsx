@@ -297,7 +297,7 @@ export default function GastosPage() {
                     minimumFractionDigits: 2,
                   })}
                 </td>
-                <td colSpan={4}></td>
+                <td colSpan={2}></td>
               </tr>
             </tfoot>
           )}
@@ -369,13 +369,13 @@ export default function GastosPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción *
+                  Descripcion *
                 </label>
                 <input
                   type="text"
-                  value={form.descripcion}
+                  value={form.descripcionGasto}
                   onChange={(e) =>
-                    setForm({ ...form, descripcion: e.target.value })
+                    setForm({ ...form, descripcionGasto: e.target.value })
                   }
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   maxLength={100}
@@ -401,12 +401,14 @@ export default function GastosPage() {
                     Fecha de Pago
                   </label>
                   <input
-                    type="date"
+                    type="text"
                     value={form.fechaPago}
                     onChange={(e) =>
                       setForm({ ...form, fechaPago: e.target.value })
                     }
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
                   />
                 </div>
               </div>
@@ -416,9 +418,9 @@ export default function GastosPage() {
                     Tipo de Pago
                   </label>
                   <select
-                    value={form.tipoPagoId}
+                    value={form.tipoPago}
                     onChange={(e) =>
-                      setForm({ ...form, tipoPagoId: e.target.value })
+                      setForm({ ...form, tipoPago: e.target.value })
                     }
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   >

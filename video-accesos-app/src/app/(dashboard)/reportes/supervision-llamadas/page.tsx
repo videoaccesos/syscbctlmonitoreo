@@ -17,13 +17,13 @@ interface SupervisionLlamada {
   supervisorId: number;
   supervisorNombre: string;
   fecha: string;
-  saludo: boolean;
-  identificoEmpresa: boolean;
-  identificoOperador: boolean;
-  amable: boolean;
-  gracias: boolean;
-  demanda: boolean;
-  asunto: boolean;
+  saludo: number;
+  identificoEmpresa: number;
+  identificoOperador: number;
+  amable: number;
+  gracias: number;
+  demanda: number;
+  asunto: number;
   tiempoGestion: string | null;
   observaciones: string | null;
   registroAcceso: {
@@ -161,7 +161,7 @@ export default function SupervisionLlamadasPage() {
 
     for (const criterio of CRITERIOS_BOOL) {
       const count = supervisiones.filter(
-        (s) => s[criterio.key] === true
+        (s) => s[criterio.key] === 1
       ).length;
       resumen[criterio.key] = Math.round((count / totalReg) * 100);
     }
@@ -378,8 +378,9 @@ export default function SupervisionLlamadasPage() {
 }
 
 /* ---------- Componente indicador booleano ---------- */
-function BoolIndicator({ value }: { value: boolean }) {
-  return value ? (
+function BoolIndicator({ value }: { value: number | boolean }) {
+  const isTrue = value === 1 || value === true;
+  return isTrue ? (
     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold">
       &#10003;
     </span>
