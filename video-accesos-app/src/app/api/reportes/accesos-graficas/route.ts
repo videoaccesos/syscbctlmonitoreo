@@ -89,14 +89,14 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Transformar porTipoGestion
-    const porTipoGestion = porTipoGestionRaw.map((item) => ({
+    const porTipoGestion = porTipoGestionRaw.map((item: { tipoGestionId: number; _count: { id: number } }) => ({
       tipoGestionId: item.tipoGestionId,
       label: TIPOS_GESTION_LABELS[item.tipoGestionId] || `Tipo ${item.tipoGestionId}`,
       count: item._count.id,
     }));
 
     // Transformar porEstatus
-    const porEstatus = porEstatusRaw.map((item) => ({
+    const porEstatus = porEstatusRaw.map((item: { estatusId: number; _count: { id: number } }) => ({
       estatusId: item.estatusId,
       label: ESTATUS_LABELS[item.estatusId] || `Estatus ${item.estatusId}`,
       count: item._count.id,
