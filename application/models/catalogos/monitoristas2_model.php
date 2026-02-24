@@ -1,0 +1,30 @@
+<?php
+class Monitoristas2_Model extends CI_model
+{
+	public function filtro($strBusqueda, $strFechaHoraInicio, $strFechaHoraFin, $intNumRows, $intPos){
+		$this->db->select("u.usuario, u.usuario_id, u.ultima_sesion, e.puesto_id,(SELECT fecha_modificacion FROM registros_accesos WHERE fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND usuario_id = u.usuario_id  order by fecha_modificacion desc limit 1) AS ultima_llamada, (SELECT COUNT( * ) FROM ordenes_servicio WHERE usuario_id = u.usuario_id AND tecnico_id = 140 AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."') AS total_reportes, (SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') AS total_llamadas, (SELECT COUNT( * ) FROM registros_accesos WHERE usuario_id = u.usuario_id AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND imagen LIKE '%jpg%') AS total_fotos, (SELECT duracion FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id order by RA.fecha_modificacion desc limit 1) as duracion_llamada, (SELECT ROUND( SUM( duracion ) /60 ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') as total_minutos, (SELECT MOD((SUM(duracion)),60) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') as total_segundos, ROUND(((SELECT ROUND(SUM(duracion)) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."')/(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."'))) as promedio,ROUND(((SELECT COUNT( * ) FROM registros_accesos WHERE usuario_id = u.usuario_id AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND imagen LIKE '%jpg%')/(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."'))*100,2) as promedio_fotos", FALSE);
+		$this->db->from('usuarios as u INNER JOIN empleados as e on u.empleado_id = e.empleado_id');
+		$this->db->where('e.puesto_id', 1);
+		$this->db->where('(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= "'.$strFechaHoraInicio.'" AND RA.fecha_modificacion <= "'.$strFechaHoraFin.'")');
+		$this->db->order_by('u.usuario','desc');
+		$res["total_rows"] = $this->db->count_all_results();
+
+		$this->db->select("u.usuario, u.usuario_id, u.ultima_sesion, e.puesto_id,(SELECT fecha_modificacion FROM registros_accesos WHERE fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND usuario_id = u.usuario_id order by fecha_modificacion desc limit 1) AS ultima_llamada, (SELECT COUNT( * ) FROM ordenes_servicio WHERE usuario_id = u.usuario_id AND tecnico_id = 140 AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."') AS total_reportes, (SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') AS total_llamadas, (SELECT COUNT( * ) FROM registros_accesos WHERE usuario_id = u.usuario_id AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND imagen LIKE '%jpg%') AS total_fotos, (SELECT duracion FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id order by RA.fecha_modificacion desc limit 1) as duracion_llamada, (SELECT ROUND( SUM( duracion ) /60 ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') as total_minutos, (SELECT MOD((SUM(duracion)),60) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."') as total_segundos, ROUND(((SELECT ROUND(SUM(duracion)) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."')/(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."'))) as promedio,ROUND(((SELECT COUNT( * ) FROM registros_accesos WHERE usuario_id = u.usuario_id AND fecha_modificacion >= '".$strFechaHoraInicio."' AND fecha_modificacion <= '".$strFechaHoraFin."' AND imagen LIKE '%jpg%')/(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= '".$strFechaHoraInicio."' AND RA.fecha_modificacion <= '".$strFechaHoraFin."'))*100,2) as promedio_fotos", FALSE);
+		$this->db->from('usuarios as u INNER JOIN empleados as e on u.empleado_id = e.empleado_id');
+		$this->db->where('e.puesto_id', 1);
+		$this->db->where('(SELECT COUNT( * ) FROM registros_accesos as RA WHERE RA.usuario_id = u.usuario_id AND RA.fecha_modificacion >= "'.$strFechaHoraInicio.'" AND RA.fecha_modificacion <= "'.$strFechaHoraFin.'")');
+		$this->db->order_by('u.usuario','desc');
+		$this->db->limit($intNumRows,$intPos);
+		$res["monitoristas"] =$this->db->get()->result();
+		return $res;
+	}
+
+	public function monitoristas_cmb(){
+		$this->db->select('usuario_id AS value,usuario');
+		$this->db->from('usuarios');
+		$this->db->where('estatus_id',1);
+		$this->db->order_by('usuario_id','asc');
+		return $this->db->get()->result();
+	}
+}	
+?>

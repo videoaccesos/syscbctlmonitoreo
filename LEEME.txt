@@ -1,0 +1,8 @@
+Este proyecto inicio en 18 Enero del 2013, se desarollara con las nuevas tendencias Web, usuando tecnologias como:
+
+PHP
+CodeIgniter
+Ajax 
+Responsive CCS
+
+este sera nuestro proyecto piloto para mudar para cambiar a una plataforma nueva!!

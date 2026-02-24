@@ -1,0 +1,19 @@
+# Logs
+error_log
+application/logs/*
+system/logs/*
+
+# Cache
+application/cache/*
+
+# Uploads
+uploads/
+
+# Backups
+*.zip
+_index.php
+
+# OS
+.DS_Store
+Thumbs.db
+application/config/database.php
