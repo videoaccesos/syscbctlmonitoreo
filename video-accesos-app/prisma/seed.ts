@@ -8,25 +8,25 @@ async function main() {
   console.log("Verificando conexión a BD producción wwwvideo_video_accesos...\n");
 
   const counts = await Promise.all([
-    prisma.usuario.count().then((c) => ({ tabla: "usuarios", total: c })),
-    prisma.empleado.count().then((c) => ({ tabla: "empleados", total: c })),
-    prisma.privada.count().then((c) => ({ tabla: "privadas", total: c })),
-    prisma.residencia.count().then((c) => ({ tabla: "residencias", total: c })),
-    prisma.residente.count().then((c) => ({
+    prisma.usuario.count().then((c: number) => ({ tabla: "usuarios", total: c })),
+    prisma.empleado.count().then((c: number) => ({ tabla: "empleados", total: c })),
+    prisma.privada.count().then((c: number) => ({ tabla: "privadas", total: c })),
+    prisma.residencia.count().then((c: number) => ({ tabla: "residencias", total: c })),
+    prisma.residente.count().then((c: number) => ({
       tabla: "residencias_residentes",
       total: c,
     })),
-    prisma.registroAcceso.count().then((c) => ({
+    prisma.registroAcceso.count().then((c: number) => ({
       tabla: "registros_accesos",
       total: c,
     })),
-    prisma.turno.count().then((c) => ({ tabla: "turnos", total: c })),
-    prisma.tarjeta.count().then((c) => ({ tabla: "tarjetas", total: c })),
-    prisma.ordenServicio.count().then((c) => ({
+    prisma.turno.count().then((c: number) => ({ tabla: "turnos", total: c })),
+    prisma.tarjeta.count().then((c: number) => ({ tabla: "tarjetas", total: c })),
+    prisma.ordenServicio.count().then((c: number) => ({
       tabla: "ordenes_servicio",
       total: c,
     })),
-    prisma.grupoUsuario.count().then((c) => ({
+    prisma.grupoUsuario.count().then((c: number) => ({
       tabla: "grupos_usuarios",
       total: c,
     })),
