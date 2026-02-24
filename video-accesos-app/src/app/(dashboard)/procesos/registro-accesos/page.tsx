@@ -819,7 +819,7 @@ export default function RegistroAccesosPage() {
                             key={`r-${r.id}`}
                             type="button"
                             onClick={() =>
-                              selectSolicitante("R", r.id, nombreCompleto)
+                              selectSolicitante("R", Number(r.id), nombreCompleto)
                             }
                             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
                               isSelected
@@ -854,7 +854,7 @@ export default function RegistroAccesosPage() {
                             key={`v-${v.id}`}
                             type="button"
                             onClick={() =>
-                              selectSolicitante("V", v.id, nombreCompleto)
+                              selectSolicitante("V", Number(v.id), nombreCompleto)
                             }
                             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
                               isSelected
