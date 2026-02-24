@@ -7,13 +7,11 @@ interface Gasto {
   id: number;
   tipoGastoId: number;
   privadaId: number;
-  descripcion: string;
+  descripcionGasto: string;
   fechaPago: string;
   comprobante: string | null;
   total: number;
-  tipoPagoId: number;
-  autorizado: boolean;
-  pagado: boolean;
+  tipoPago: number;
   estatusId: number;
   tipoGasto?: { descripcion: string };
   privada?: { descripcion: string };
@@ -49,11 +47,11 @@ export default function GastosPage() {
   const [form, setForm] = useState({
     tipoGastoId: "",
     privadaId: "",
-    descripcion: "",
+    descripcionGasto: "",
     fechaPago: new Date().toISOString().split("T")[0],
     comprobante: "",
     total: "",
-    tipoPagoId: "1",
+    tipoPago: "1",
   });
   const limit = 20;
 
@@ -98,11 +96,11 @@ export default function GastosPage() {
     setForm({
       tipoGastoId: "",
       privadaId: "",
-      descripcion: "",
+      descripcionGasto: "",
       fechaPago: new Date().toISOString().split("T")[0],
       comprobante: "",
       total: "",
-      tipoPagoId: "1",
+      tipoPago: "1",
     });
     setError("");
     setShowModal(true);
@@ -113,18 +111,18 @@ export default function GastosPage() {
     setForm({
       tipoGastoId: String(gasto.tipoGastoId),
       privadaId: String(gasto.privadaId),
-      descripcion: gasto.descripcion,
-      fechaPago: gasto.fechaPago?.split("T")[0] || "",
+      descripcionGasto: gasto.descripcionGasto,
+      fechaPago: gasto.fechaPago || "",
       comprobante: gasto.comprobante || "",
       total: String(gasto.total),
-      tipoPagoId: String(gasto.tipoPagoId),
+      tipoPago: String(gasto.tipoPago),
     });
     setError("");
     setShowModal(true);
   };
 
   const handleSubmit = async () => {
-    if (!form.tipoGastoId || !form.privadaId || !form.descripcion || !form.total) {
+    if (!form.tipoGastoId || !form.privadaId || !form.descripcionGasto || !form.total) {
       setError("Todos los campos requeridos deben llenarse");
       return;
     }
@@ -140,7 +138,7 @@ export default function GastosPage() {
           tipoGastoId: parseInt(form.tipoGastoId),
           privadaId: parseInt(form.privadaId),
           total: parseFloat(form.total),
-          tipoPagoId: parseInt(form.tipoPagoId),
+          tipoPago: parseInt(form.tipoPago),
         }),
       });
       if (!res.ok) {
