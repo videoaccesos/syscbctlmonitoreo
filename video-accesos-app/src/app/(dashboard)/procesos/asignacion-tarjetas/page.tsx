@@ -42,17 +42,21 @@ interface Tarjeta {
 
 interface Asignacion {
   id: number;
-  tarjetaId: number;
-  residenteId: number;
-  tarjetaSecId: number | null;
+  tarjetaId: string | null;
+  tarjetaId2: string | null;
+  tarjetaId3: string | null;
+  tarjetaId4: string | null;
+  tarjetaId5: string | null;
+  residenteId: string;
   fecha: string;
   fechaVencimiento: string | null;
   tipoLectura: number | null;
   lecturaEpc: string | null;
   folioContrato: string | null;
   precio: number | null;
+  utilizoSeguro: number;
   estatusId: number;
-  tarjeta: Tarjeta;
+  tarjeta: Tarjeta | null;
   residente: Residente;
 }
 
@@ -74,7 +78,6 @@ interface ResidenteSearch {
 interface AsignacionForm {
   tarjetaId: string;
   residenteId: string;
-  tarjetaSecId: string;
   fechaVencimiento: string;
   tipoLectura: string;
   lecturaEpc: string;
@@ -85,7 +88,6 @@ interface AsignacionForm {
 const emptyForm: AsignacionForm = {
   tarjetaId: "",
   residenteId: "",
-  tarjetaSecId: "",
   fechaVencimiento: "",
   tipoLectura: "",
   lecturaEpc: "",
@@ -501,10 +503,10 @@ export default function AsignacionTarjetasPage() {
                   <tr key={item.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3">
                       <div className="font-mono font-medium text-gray-900">
-                        {item.tarjeta.lectura}
+                        {item.tarjeta?.lectura || item.tarjetaId || "-"}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {TIPO_TARJETA[item.tarjeta.tipoId] || ""}
+                        {item.tarjeta ? (TIPO_TARJETA[item.tarjeta.tipoId] || "") : ""}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">
@@ -794,7 +796,7 @@ export default function AsignacionTarjetasPage() {
             <p className="text-sm text-gray-600 mb-6">
               Se cancelara la asignacion de la tarjeta{" "}
               <span className="font-semibold">
-                &quot;{cancelTarget.tarjeta.lectura}&quot;
+                &quot;{cancelTarget.tarjeta?.lectura || cancelTarget.tarjetaId || "-"}&quot;
               </span>{" "}
               al residente{" "}
               <span className="font-semibold">

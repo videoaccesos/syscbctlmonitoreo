@@ -171,6 +171,7 @@ export default function TarjetasPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           lectura: form.lectura.trim(),
+          numeroSerie: form.numeroSerie.trim() || null,
           tipoId: parseInt(form.tipoId, 10),
         }),
       });
@@ -326,6 +327,7 @@ export default function TarjetasPage() {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Lectura</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Nro. Serie</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Tipo</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Estado</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Fecha</th>
@@ -335,13 +337,13 @@ export default function TarjetasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-400">
                     Cargando...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-400">
                     No se encontraron tarjetas
                   </td>
                 </tr>
@@ -353,6 +355,9 @@ export default function TarjetasPage() {
                     </td>
                     <td className="px-4 py-3 font-mono font-medium text-gray-900">
                       {item.lectura}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {item.numeroSerie || "-"}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">
                       {TIPOS[item.tipoId] || `Tipo ${item.tipoId}`}
@@ -458,6 +463,20 @@ export default function TarjetasPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Numero de lectura de la tarjeta"
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Numero de Serie
+                </label>
+                <input
+                  type="text"
+                  maxLength={50}
+                  value={form.numeroSerie}
+                  onChange={(e) => setField("numeroSerie", e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Numero de serie de la tarjeta"
                 />
               </div>
 
