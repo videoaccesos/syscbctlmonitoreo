@@ -216,19 +216,13 @@ export default function GastosPage() {
                 Tipo
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">
-                Descripción
+                Descripcion
               </th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">
                 Total
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">
                 Pago
-              </th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600">
-                Aut.
-              </th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600">
-                Pagado
               </th>
               <th className="text-center px-4 py-3 font-medium text-gray-600">
                 Acciones
@@ -238,13 +232,13 @@ export default function GastosPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400">
+                <td colSpan={7} className="text-center py-8 text-gray-400">
                   Cargando...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400">
+                <td colSpan={7} className="text-center py-8 text-gray-400">
                   No se encontraron gastos
                 </td>
               </tr>
@@ -255,7 +249,7 @@ export default function GastosPage() {
                   className="border-b hover:bg-gray-50 transition"
                 >
                   <td className="px-4 py-3">
-                    {new Date(gasto.fechaPago).toLocaleDateString("es-MX")}
+                    {gasto.fechaPago || "-"}
                   </td>
                   <td className="px-4 py-3">
                     {gasto.privada?.descripcion || "--"}
@@ -263,36 +257,14 @@ export default function GastosPage() {
                   <td className="px-4 py-3">
                     {gasto.tipoGasto?.descripcion || "--"}
                   </td>
-                  <td className="px-4 py-3">{gasto.descripcion}</td>
+                  <td className="px-4 py-3">{gasto.descripcionGasto}</td>
                   <td className="px-4 py-3 text-right font-medium">
                     ${Number(gasto.total).toLocaleString("es-MX", {
                       minimumFractionDigits: 2,
                     })}
                   </td>
                   <td className="px-4 py-3">
-                    {TIPO_PAGO[gasto.tipoPagoId] || "--"}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={
-                        gasto.autorizado
-                          ? "text-green-600 font-bold"
-                          : "text-gray-400"
-                      }
-                    >
-                      {gasto.autorizado ? "✓" : "✗"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={
-                        gasto.pagado
-                          ? "text-green-600 font-bold"
-                          : "text-gray-400"
-                      }
-                    >
-                      {gasto.pagado ? "✓" : "✗"}
-                    </span>
+                    {TIPO_PAGO[gasto.tipoPago] || "--"}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex justify-center gap-1">
