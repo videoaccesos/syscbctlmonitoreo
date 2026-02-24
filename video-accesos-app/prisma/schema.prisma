@@ -1,0 +1,668 @@
+// Video Accesos v2 - Database Schema
+// Migrated from legacy CodeIgniter system (2014)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// SEGURIDAD - Autenticación y Control de Acceso (RBAC)
+// ============================================================
+
+model Usuario {
+  id                Int       @id @default(autoincrement()) @map("usuario_id")
+  usuario           String    @unique @db.VarChar(50)
+  contrasena        String    @db.VarChar(255) // bcrypt hash
+  modificarFechas   Boolean   @default(false) @map("modificar_fechas")
+  ultimaSesion      DateTime? @map("ultima_sesion")
+  direccionIp       String    @default("") @map("direccion_ip") @db.VarChar(45) // IPv6 compatible
+  cambioContrasena  DateTime? @map("cambio_contrasena")
+  empleadoId        Int?      @map("empleado_id")
+  privadaId         Int?      @map("privada_id")
+  estatusId         Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
+  claveGoogle       String?   @map("clave_google") @db.VarChar(100) // 2FA
+  creadoEn          DateTime  @default(now()) @map("creado_en")
+  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  empleado              Empleado?              @relation(fields: [empleadoId], references: [id])
+  privada               Privada?               @relation("UsuarioPrivada", fields: [privadaId], references: [id])
+  gruposDetalles        GrupoUsuarioDetalle[]
+  bitacoraInicio        BitacoraInicio[]
+  registrosAccesos      RegistroAcceso[]       @relation("RegistroOperador")
+
+  @@map("usuarios")
+}
+
+model GrupoUsuario {
+  id            Int       @id @default(autoincrement()) @map("grupo_usuario_id")
+  nombre        String    @unique @db.VarChar(50)
+  estatusId     Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  detalles  GrupoUsuarioDetalle[]
+  permisos  PermisoAcceso[]
+
+  @@map("grupos_usuarios")
+}
+
+model GrupoUsuarioDetalle {
+  grupoUsuarioId Int @map("grupo_usuario_id")
+  usuarioId      Int @map("usuario_id")
+
+  grupo   GrupoUsuario @relation(fields: [grupoUsuarioId], references: [id], onDelete: Cascade)
+  usuario Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@id([grupoUsuarioId, usuarioId])
+  @@map("grupos_usuarios_detalles")
+}
+
+model Proceso {
+  id             Int     @id @default(autoincrement()) @map("proceso_id")
+  nombre         String  @db.VarChar(50)
+  rutaAcceso     String? @map("ruta_acceso") @db.Text
+  procesoPadreId Int?    @map("proceso_padre_id")
+
+  // Self-referencing para jerarquía de menú
+  procesoPadre Proceso?     @relation("ProcesoHijos", fields: [procesoPadreId], references: [id])
+  hijos        Proceso[]    @relation("ProcesoHijos")
+  subprocesos  Subproceso[]
+
+  @@map("procesos")
+}
+
+model Subproceso {
+  id        Int     @id @default(autoincrement()) @map("subproceso_id")
+  procesoId Int     @map("proceso_id")
+  nombre    String  @db.VarChar(50)
+  funcion   String? @db.VarChar(50)
+
+  proceso  Proceso         @relation(fields: [procesoId], references: [id], onDelete: Cascade)
+  permisos PermisoAcceso[]
+
+  @@map("subprocesos")
+}
+
+model PermisoAcceso {
+  grupoUsuarioId Int @map("grupo_usuario_id")
+  subprocesoId   Int @map("subproceso_id")
+
+  grupo      GrupoUsuario @relation(fields: [grupoUsuarioId], references: [id], onDelete: Cascade)
+  subproceso Subproceso   @relation(fields: [subprocesoId], references: [id], onDelete: Cascade)
+
+  @@id([grupoUsuarioId, subprocesoId])
+  @@map("permisos_acceso")
+}
+
+model BitacoraInicio {
+  id          Int       @id @default(autoincrement()) @map("bitacora_inicio_id")
+  usuarioId   Int       @map("usuario_id")
+  fechaInicio DateTime  @default(now()) @map("fecha_inicio")
+  fechaFin    DateTime? @map("fecha_fin")
+  direccionIp String    @map("direccion_ip") @db.VarChar(45)
+  hostname    String?   @db.VarChar(100)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("bitacora_inicio")
+}
+
+// ============================================================
+// CATALOGOS - Datos maestros
+// ============================================================
+
+model Puesto {
+  id            Int       @id @default(autoincrement()) @map("puesto_id")
+  descripcion   String    @unique @db.VarChar(50)
+  estatusId     Int       @default(1) @map("estatus_id")
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  empleados Empleado[]
+
+  @@map("puestos")
+}
+
+model Empleado {
+  id               Int       @id @default(autoincrement()) @map("empleado_id")
+  nombre           String    @db.VarChar(50)
+  apePaterno       String    @map("ape_paterno") @db.VarChar(50)
+  apeMaterno       String    @map("ape_materno") @db.VarChar(50)
+  nroSeguroSocial  String?   @map("nro_seguro_social") @db.VarChar(50)
+  puestoId         Int       @map("puesto_id")
+  nroOperador      String?   @map("nro_operador") @db.VarChar(4)
+  calle            String?   @db.VarChar(60)
+  nroCasa          String?   @map("nro_casa") @db.VarChar(10)
+  sexo             String?   @db.Char(1) // M/F
+  colonia          String?   @db.VarChar(30)
+  telefono         String?   @db.VarChar(14)
+  celular          String?   @db.VarChar(14)
+  email            String?   @db.VarChar(60)
+  fechaIngreso     DateTime? @map("fecha_ingreso") @db.Date
+  fechaBaja        DateTime? @map("fecha_baja") @db.Date
+  motivoBaja       String?   @map("motivo_baja") @db.Text
+  claveGoogle      String?   @map("clave_google") @db.VarChar(100)
+  permisoAdmin     Boolean   @default(false) @map("permiso_admin")
+  permisoSupervisor Boolean  @default(false) @map("permiso_supervisor")
+  estatusId        Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
+  creadoEn         DateTime  @default(now()) @map("creado_en")
+  actualizadoEn    DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  puesto              Puesto            @relation(fields: [puestoId], references: [id])
+  usuarios            Usuario[]
+  registrosAccesos    RegistroAcceso[]  @relation("AccesoEmpleado")
+  ordenesTecnico      OrdenServicio[]   @relation("OrdenTecnico")
+  ordenesCierre       OrdenServicio[]   @relation("OrdenCierreTecnico")
+  ordenesEmpleado     OrdenServicio[]   @relation("OrdenEmpleado")
+
+  @@map("empleados")
+}
+
+model Turno {
+  id            Int      @id @default(autoincrement()) @map("turno_id")
+  descripcion   String   @unique @db.VarChar(50)
+  puestoId      Int?     @map("puesto_id")
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  @@map("turnos")
+}
+
+model Falla {
+  id            Int      @id @default(autoincrement()) @map("falla_id")
+  codigo        String   @unique @db.VarChar(5)
+  descripcion   String   @db.VarChar(50)
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  @@map("fallas")
+}
+
+model Material {
+  id            Int      @id @default(autoincrement()) @map("material_id")
+  codigo        String   @unique @db.VarChar(5)
+  descripcion   String   @db.VarChar(50)
+  costo         Decimal  @default(0) @db.Decimal(10, 2)
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  ordenesMaterial OrdenServicioMaterial[]
+
+  @@map("materiales")
+}
+
+model CodigoServicio {
+  id            Int      @id @default(autoincrement()) @map("codigo_servicio_id")
+  codigo        String   @unique @db.VarChar(5)
+  descripcion   String   @db.VarChar(50)
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  ordenesServicio OrdenServicio[]
+
+  @@map("codigos_servicio")
+}
+
+model Diagnostico {
+  id            Int      @id @default(autoincrement()) @map("diagnostico_id")
+  codigo        String   @unique @db.VarChar(5)
+  descripcion   String   @db.VarChar(50)
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  ordenesServicio OrdenServicio[]
+
+  @@map("diagnosticos")
+}
+
+model TipoGasto {
+  id            Int      @id @default(autoincrement()) @map("tipo_gasto_id")
+  descripcion   String   @unique @db.VarChar(50)
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  gastos Gasto[]
+
+  @@map("tipos_gastos")
+}
+
+// ============================================================
+// GESTION DE COMUNIDADES
+// ============================================================
+
+model Privada {
+  id              Int       @id @default(autoincrement()) @map("privada_id")
+  descripcion     String    @unique @db.VarChar(80)
+  apePaterno      String?   @map("ape_paterno") @db.VarChar(50) // Contacto
+  apeMaterno      String?   @map("ape_materno") @db.VarChar(50)
+  nombre          String?   @db.VarChar(50)
+  tipoContactoId  Int?      @map("tipo_contacto_id") // 1=Residente, 2=Externo
+  telefono        String?   @db.VarChar(14)
+  celular         String?   @db.VarChar(14)
+  email           String?   @db.VarChar(60)
+  historial       String?   @db.VarChar(60) // Email para historial
+  precioVehicular Decimal?  @map("precio_vehicular") @db.Decimal(10, 2)
+  precioPeatonal  Decimal?  @map("precio_peatonal") @db.Decimal(10, 2)
+  mensualidad     Decimal?  @db.Decimal(10, 2)
+  venceContrato   DateTime? @map("vence_contrato") @db.Date
+  observaciones   String?   @db.Text
+  estatusId       Int       @default(1) @map("estatus_id") // 1=Activo, 2=Baja
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  residencias      Residencia[]
+  dns              PrivadaDns[]
+  videos           PrivadaVideo[]
+  relays           PrivadaRelay[]
+  usuarios         Usuario[]          @relation("UsuarioPrivada")
+  registrosAccesos RegistroAcceso[]
+  ordenesServicio  OrdenServicio[]
+  gastos           Gasto[]
+
+  @@map("privadas")
+}
+
+model PrivadaDns {
+  id        Int     @id @default(autoincrement()) @map("dns_id")
+  privadaId Int     @map("privada_id")
+  dns       String  @db.VarChar(200)
+  puerto    String? @db.VarChar(10)
+  alias     String? @db.VarChar(50)
+  tipoTarjeta Int?  @map("tipo_tarjeta") // 1=Tarjeta1, 2=Tarjeta2
+  contrasena  String? @db.VarChar(50)
+
+  privada Privada        @relation(fields: [privadaId], references: [id], onDelete: Cascade)
+  relays  PrivadaRelay[]
+
+  @@map("privadas_dns")
+}
+
+model PrivadaVideo {
+  id        Int    @id @default(autoincrement()) @map("video_id")
+  privadaId Int    @map("privada_id")
+  url       String @db.VarChar(200)
+  alias     String? @db.VarChar(50)
+
+  privada Privada @relation(fields: [privadaId], references: [id], onDelete: Cascade)
+
+  @@map("privadas_videos")
+}
+
+model PrivadaRelay {
+  id        Int    @id @default(autoincrement()) @map("relay_id")
+  privadaId Int    @map("privada_id")
+  dnsId     Int    @map("dns_id")
+  renglon   Int
+  concepto  String @db.VarChar(80)
+  relayNumero String @map("relay_numero") @db.VarChar(10)
+  estatusId Int    @default(1) @map("estatus_id") // 1=Activo, 2=Inactivo
+  tiempoActivacion Int? @map("tiempo_activacion") // segundos
+
+  privada Privada    @relation(fields: [privadaId], references: [id], onDelete: Cascade)
+  dns     PrivadaDns @relation(fields: [dnsId], references: [id], onDelete: Cascade)
+
+  @@map("privadas_relays")
+}
+
+model Residencia {
+  id            Int      @id @default(autoincrement()) @map("residencia_id")
+  privadaId     Int      @map("privada_id")
+  nroCasa       String   @map("nro_casa") @db.VarChar(10)
+  calle         String   @db.VarChar(60)
+  telefono1     String?  @db.VarChar(14)
+  telefono2     String?  @db.VarChar(14)
+  interfon      String?  @db.VarChar(20)
+  telefonoInterfon String? @map("telefono_interfon") @db.VarChar(14)
+  observaciones String?  @db.Text
+  estatusId     Int      @default(1) @map("estatus_id") // 1=Activo, 2=Sin Interfon, 3=Moroso
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  privada          Privada            @relation(fields: [privadaId], references: [id])
+  residentes       Residente[]
+  visitantes       Visitante[]
+  registrosAccesos RegistroAcceso[]
+
+  @@map("residencias")
+}
+
+model Residente {
+  id              Int      @id @default(autoincrement()) @map("residente_id")
+  residenciaId    Int      @map("residencia_id")
+  apePaterno      String   @map("ape_paterno") @db.VarChar(50)
+  apeMaterno      String   @map("ape_materno") @db.VarChar(50)
+  nombre          String   @db.VarChar(50)
+  celular         String?  @db.VarChar(14)
+  email           String?  @db.VarChar(100)
+  reportarAcceso  Boolean  @default(false) @map("reportar_acceso") // Notificar accesos
+  estatusId       Int      @default(1) @map("estatus_id") // 1=Activo, 2=Baja
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+
+  residencia        Residencia          @relation(fields: [residenciaId], references: [id])
+  tarjetasAsignadas AsignacionTarjeta[]
+
+  @@map("residencias_residentes")
+}
+
+model Visitante {
+  id            Int      @id @default(autoincrement()) @map("visitante_id")
+  residenciaId  Int      @map("residencia_id")
+  apePaterno    String   @map("ape_paterno") @db.VarChar(50)
+  apeMaterno    String   @map("ape_materno") @db.VarChar(50)
+  nombre        String   @db.VarChar(50)
+  telefono      String?  @db.VarChar(14)
+  celular       String?  @db.VarChar(14)
+  email         String?  @db.VarChar(60)
+  observaciones String?  @db.Text
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  residencia Residencia @relation(fields: [residenciaId], references: [id])
+
+  @@map("residencias_visitantes")
+}
+
+model RegistroGeneral {
+  id            String   @id @map("registro_general_id") @db.VarChar(10) // ID personalizado
+  apePaterno    String   @map("ape_paterno") @db.VarChar(50)
+  apeMaterno    String   @map("ape_materno") @db.VarChar(50)
+  nombre        String   @db.VarChar(50)
+  telefono      String?  @db.VarChar(14)
+  celular       String?  @db.VarChar(14)
+  email         String?  @db.VarChar(60)
+  observaciones String?  @db.Text
+  estatusId     Int      @default(1) @map("estatus_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  @@map("registros_generales")
+}
+
+// ============================================================
+// TARJETAS RFID
+// ============================================================
+
+model Tarjeta {
+  id        Int      @id @default(autoincrement()) @map("tarjeta_id")
+  lectura   String   @db.VarChar(20) // Número de lectura RFID
+  tipoId    Int      @map("tipo_id") // 1=Peatonal, 2=Vehicular
+  estatusId Int      @default(1) @map("estatus_id") // 1=Activa, 2=Asignada, 3=Dañada, 4=Consignacion, 5=Baja
+  fecha     DateTime @default(now())
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  asignaciones AsignacionTarjeta[]
+
+  @@map("tarjetas")
+}
+
+model AsignacionTarjeta {
+  id              Int       @id @default(autoincrement()) @map("asignacion_id")
+  tarjetaId       Int       @map("tarjeta_id")
+  residenteId     Int       @map("residente_id")
+  tarjetaSecId    Int?      @map("tarjeta_sec_id") // Tarjeta secundaria
+  fecha           DateTime  @default(now())
+  fechaVencimiento DateTime? @map("fecha_vencimiento") @db.Date
+  tipoLectura     Int?      @map("tipo_lectura") // 1=TID, 2=EPC
+  lecturaEpc      String?   @map("lectura_epc") @db.VarChar(50)
+  folioContrato   String?   @map("folio_contrato") @db.VarChar(10)
+  precio          Decimal?  @db.Decimal(10, 2)
+  utilizoSeguro   Boolean   @default(false) @map("utilizo_seguro")
+  estatusId       Int       @default(1) @map("estatus_id") // 1=Activa, 2=Cancelada
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+
+  tarjeta   Tarjeta   @relation(fields: [tarjetaId], references: [id])
+  residente Residente @relation(fields: [residenteId], references: [id])
+
+  @@map("asignacion_tarjetas")
+}
+
+// ============================================================
+// REGISTRO DE ACCESOS (Módulo principal del negocio)
+// ============================================================
+
+model RegistroAcceso {
+  id              Int       @id @default(autoincrement()) @map("registro_acceso_id")
+  empleadoId      Int       @map("empleado_id") // Operador que atiende
+  privadaId       Int       @map("privada_id")
+  residenciaId    Int       @map("residencia_id")
+  tipoGestionId   Int       @map("tipo_gestion_id") // 1-9 tipos
+  solicitanteId   String    @map("solicitante_id") @db.VarChar(10) // ID del residente/visitante/general
+  solicitanteTipo String?   @map("solicitante_tipo") @db.VarChar(1) // R=Residente, V=Visitante, G=General
+  observaciones   String?   @db.Text
+  quejas          String?   @db.Text // Quejas o sugerencias
+  duracion        String?   @db.VarChar(8) // Duración de llamada HH:MM:SS
+  imagen          String?   @db.VarChar(100) // Ruta de captura de pantalla
+  estatusId       Int       @default(1) @map("estatus_id") // 1=Acceso, 2=Rechazado, 3=Informado
+  usuarioId       Int       @map("usuario_id")
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  empleado           Empleado           @relation("AccesoEmpleado", fields: [empleadoId], references: [id])
+  privada            Privada            @relation(fields: [privadaId], references: [id])
+  residencia         Residencia         @relation(fields: [residenciaId], references: [id])
+  usuario            Usuario            @relation("RegistroOperador", fields: [usuarioId], references: [id])
+  supervisionLlamada SupervisionLlamada?
+
+  @@index([creadoEn])
+  @@index([privadaId])
+  @@index([empleadoId])
+  @@map("registros_accesos")
+}
+
+model SupervisionLlamada {
+  id                 Int      @id @default(autoincrement()) @map("supervision_id")
+  registroAccesoId   Int      @unique @map("registro_acceso_id")
+  supervisorId       Int      @map("supervisor_id")
+  fecha              DateTime @default(now())
+  saludo             Boolean  @default(false)
+  identificoEmpresa  Boolean  @default(false) @map("identifico_empresa")
+  identificoOperador Boolean  @default(false) @map("identifico_operador")
+  amable             Boolean  @default(false)
+  gracias            Boolean  @default(false)
+  demanda            Boolean  @default(false)
+  asunto             Boolean  @default(false)
+  tiempoGestion      String?  @map("tiempo_gestion") @db.VarChar(8)
+  observaciones      String?  @db.Text
+  creadoEn           DateTime @default(now()) @map("creado_en")
+  actualizadoEn      DateTime @updatedAt @map("actualizado_en")
+
+  registroAcceso RegistroAcceso @relation(fields: [registroAccesoId], references: [id])
+
+  @@map("supervision_llamadas")
+}
+
+// ============================================================
+// ORDENES DE SERVICIO
+// ============================================================
+
+model OrdenServicio {
+  id                  Int       @id @default(autoincrement()) @map("orden_servicio_id")
+  folio               String    @unique @db.VarChar(10)
+  fecha               DateTime  @default(now())
+  empleadoId          Int       @map("empleado_id") // Quien registra
+  privadaId           Int       @map("privada_id")
+  tecnicoId           Int       @map("tecnico_id")
+  cierreTecnicoId     Int?      @map("cierre_tecnico_id")
+  cierreFecha         DateTime? @map("cierre_fecha")
+  cierreComentario    String?   @map("cierre_comentario") @db.Text
+  fechaAsistio        DateTime? @map("fecha_asistio")
+  tiempo              Int?      // Horas
+  codigoServicioId    Int       @map("codigo_servicio_id")
+  detalleServicio     String    @map("detalle_servicio") @db.Text
+  diagnosticoId       Int?      @map("diagnostico_id")
+  detalleDiagnostico  String?   @map("detalle_diagnostico") @db.Text
+  estatusId           Int       @default(1) @map("estatus_id") // 1=Abierta, 2=Solucionada, 3=Cerrada
+  creadoEn            DateTime  @default(now()) @map("creado_en")
+  actualizadoEn       DateTime  @updatedAt @map("actualizado_en")
+
+  empleado       Empleado       @relation("OrdenEmpleado", fields: [empleadoId], references: [id])
+  privada        Privada        @relation(fields: [privadaId], references: [id])
+  tecnico        Empleado       @relation("OrdenTecnico", fields: [tecnicoId], references: [id])
+  cierreTecnico  Empleado?      @relation("OrdenCierreTecnico", fields: [cierreTecnicoId], references: [id])
+  codigoServicio CodigoServicio @relation(fields: [codigoServicioId], references: [id])
+  diagnostico    Diagnostico?   @relation(fields: [diagnosticoId], references: [id])
+  seguimientos   OrdenServicioSeguimiento[]
+  materiales     OrdenServicioMaterial[]
+
+  @@index([folio])
+  @@index([fecha])
+  @@map("ordenes_servicio")
+}
+
+model OrdenServicioSeguimiento {
+  ordenServicioId Int      @map("orden_servicio_id")
+  seguimientoId   Int      @map("seguimiento_id")
+  comentario      String   @db.Text
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  usuarioId       Int      @map("usuario_id")
+
+  ordenServicio OrdenServicio @relation(fields: [ordenServicioId], references: [id], onDelete: Cascade)
+
+  @@id([ordenServicioId, seguimientoId])
+  @@map("ordenes_servicio_seguimiento")
+}
+
+model OrdenServicioMaterial {
+  ordenServicioId Int     @map("orden_servicio_id")
+  materialId      Int     @map("material_id")
+  cantidad        Decimal @db.Decimal(10, 2)
+  creadoEn        DateTime @default(now()) @map("creado_en")
+
+  ordenServicio OrdenServicio @relation(fields: [ordenServicioId], references: [id], onDelete: Cascade)
+  material      Material      @relation(fields: [materialId], references: [id])
+
+  @@id([ordenServicioId, materialId])
+  @@map("ordenes_servicio_material")
+}
+
+// ============================================================
+// GASTOS
+// ============================================================
+
+model Gasto {
+  id           Int      @id @default(autoincrement()) @map("gasto_id")
+  tipoGastoId  Int      @map("tipo_gasto_id")
+  privadaId    Int      @map("privada_id")
+  descripcion  String   @db.VarChar(100)
+  fechaPago    DateTime @map("fecha_pago") @db.Date
+  comprobante  String?  @db.VarChar(50)
+  total        Decimal  @db.Decimal(12, 2)
+  tipoPagoId   Int      @map("tipo_pago_id") // 1=Efectivo, 2=Bancos, 3=Caja
+  autorizado   Boolean  @default(false)
+  autorizadoPor Int?    @map("autorizado_por")
+  pagado       Boolean  @default(false)
+  estatusId    Int      @default(1) @map("estatus_id")
+  creadoEn     DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  tipoGasto TipoGasto @relation(fields: [tipoGastoId], references: [id])
+  privada   Privada   @relation(fields: [privadaId], references: [id])
+
+  @@map("gastos")
+}
+
+// ============================================================
+// RECUPERACION PATRIMONIAL
+// ============================================================
+
+model RecuperacionPatrimonial {
+  id                     Int       @id @default(autoincrement()) @map("recuperacion_patrimonial_id")
+  folio                  String    @unique @db.VarChar(10)
+  fecha                  DateTime  @default(now())
+  empleadoId             Int       @map("empleado_id")
+  privadaId              Int       @map("privada_id")
+  ordenServicioId        Int?      @map("orden_servicio_id")
+  relatoHechos           String?   @map("relato_hechos") @db.Text
+  responsableNombre      String?   @map("responsable_nombre") @db.VarChar(80)
+  responsableDomicilio   String?   @map("responsable_domicilio") @db.Text
+  responsableTelefono    String?   @map("responsable_telefono") @db.VarChar(14)
+  responsableCelular     String?   @map("responsable_celular") @db.VarChar(14)
+  responsableRelacion    String?   @map("responsable_relacion") @db.VarChar(40)
+  vehiculoPlacas         String?   @map("vehiculo_placas") @db.VarChar(20)
+  vehiculoModelo         String?   @map("vehiculo_modelo") @db.VarChar(20)
+  vehiculoColor          String?   @map("vehiculo_color") @db.VarChar(20)
+  vehiculoMarca          String?   @map("vehiculo_marca") @db.VarChar(20)
+  seguro                 Boolean   @default(false)
+  seguroNombres          String?   @map("seguro_nombres") @db.Text
+  testigos               Boolean   @default(false)
+  testigosNombres        String?   @map("testigos_nombres") @db.Text
+  videos                 Boolean   @default(false)
+  videosDireccion        String?   @map("videos_direccion") @db.Text
+  avisoAdministrador     Boolean   @default(false) @map("aviso_administrador")
+  avisoAdministradorFecha DateTime? @map("aviso_administrador_fecha")
+  observaciones          String?   @db.Text
+  estatusId              Int       @default(1) @map("estatus_id") // 1=Pendiente, 2=Recuperado
+  creadoEn               DateTime  @default(now()) @map("creado_en")
+  actualizadoEn          DateTime  @updatedAt @map("actualizado_en")
+
+  seguimientos RecuperacionPatrimonialSeguimiento[]
+
+  @@map("recuperacion_patrimonial")
+}
+
+model RecuperacionPatrimonialSeguimiento {
+  recuperacionId Int      @map("recuperacion_patrimonial_id")
+  seguimientoId  Int      @map("seguimiento_id")
+  comentario     String   @db.Text
+  creadoEn       DateTime @default(now()) @map("creado_en")
+  usuarioId      Int      @map("usuario_id")
+
+  recuperacion RecuperacionPatrimonial @relation(fields: [recuperacionId], references: [id], onDelete: Cascade)
+
+  @@id([recuperacionId, seguimientoId])
+  @@map("recuperacion_patrimonial_seguimiento")
+}
+
+// ============================================================
+// CONSECUTIVOS / FOLIOS
+// ============================================================
+
+model Folio {
+  id          Int    @id @default(autoincrement()) @map("folio_id")
+  descripcion String @db.VarChar(30)
+  prefijo     String @db.Char(2)
+  consecutivo Int    @default(0)
+
+  @@map("folios")
+}
+
+// ============================================================
+// ACCESOS BOT (Sistema externo de lectura de placas)
+// ============================================================
+
+model AccesoBot {
+  id        Int      @id @default(autoincrement()) @map("acceso_id")
+  placa     String?  @db.VarChar(20)
+  color     String?  @db.VarChar(30)
+  marca     String?  @db.VarChar(30)
+  nombre    String?  @db.VarChar(100)
+  imgPlaca  String?  @map("img_placa") @db.VarChar(200)
+  imgId     String?  @map("img_id") @db.VarChar(200)
+  imgRostro String?  @map("img_rostro") @db.VarChar(200)
+  calle     String?  @db.VarChar(60)
+  nroCasa   String?  @map("nro_casa") @db.VarChar(10)
+  fecha     DateTime @default(now())
+
+  @@index([fecha])
+  @@map("accesos_bot")
+}
