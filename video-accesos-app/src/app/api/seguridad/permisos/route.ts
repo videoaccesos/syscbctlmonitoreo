@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       where: { grupoUsuarioId: grupoId },
     });
 
-    const subprocesoIdsConPermiso = permisos.map((p) => p.subprocesoId);
+    const subprocesoIdsConPermiso = permisos.map((p: { subprocesoId: number }) => p.subprocesoId);
 
     return NextResponse.json({
       procesos,
