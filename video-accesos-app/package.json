@@ -6,7 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:migrate:dev": "npx prisma migrate dev",
+    "db:seed": "npx prisma db seed",
+    "db:reset": "npx prisma migrate reset",
+    "db:studio": "npx prisma studio",
+    "db:generate": "npx prisma generate",
+    "db:setup": "npx prisma migrate deploy && npx prisma db seed"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -36,6 +46,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
