@@ -74,21 +74,25 @@ export const authOptions: NextAuthOptions = {
         // BD legacy usa DES crypt de PHP: substr(crypt($pass, 0), 0, 10)
         if (!verificarContrasena(credentials.contrasena, usuario.contrasena)) return null;
 
-        // Registrar inicio de sesión en bitácora
-        await prisma.bitacoraInicio.create({
-          data: {
-            usuarioId: usuario.id,
-            inicioSesion: new Date(),
-            direccionIp: "",
-            hostName: "",
-          },
-        });
-
-        // Actualizar última sesión
-        await prisma.usuario.update({
-          where: { id: usuario.id },
-          data: { ultimaSesion: new Date() },
-        });
+        // Registrar inicio de sesión en bitácora y actualizar última sesión
+        // Wrapped en try/catch para que errores de auditoría no bloqueen el login
+        try {
+          await prisma.bitacoraInicio.create({
+            data: {
+              usuarioId: usuario.id,
+              inicioSesion: new Date(),
+              direccionIp: "",
+              hostName: "",
+            },
+          });
+          await prisma.usuario.update({
+            where: { id: usuario.id },
+            data: { ultimaSesion: new Date() },
+            select: { id: true },
+          });
+        } catch (err) {
+          console.error("[AUTH] Error en bitácora/update (login continúa):", err);
+        }
 
         return {
           id: String(usuario.id),
