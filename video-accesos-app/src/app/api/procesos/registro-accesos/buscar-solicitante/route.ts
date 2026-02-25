@@ -105,37 +105,41 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Buscar en registros generales
-    const generales = await prisma.registroGeneral.findMany({
-      where: {
-        estatusId: 1,
-        OR: [
-          { nombre: { contains: q } },
-          { apePaterno: { contains: q } },
-          { apeMaterno: { contains: q } },
-        ],
-      },
-      select: {
-        id: true,
-        nombre: true,
-        apePaterno: true,
-        apeMaterno: true,
-        celular: true,
-        observaciones: true,
-      },
-      take: limit,
-      orderBy: { apePaterno: "asc" },
-    });
-
-    for (const g of generales) {
-      results.push({
-        id: g.id,
-        nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
-        tipo: "G",
-        tipoLabel: "General",
-        celular: g.celular || "",
-        observaciones: g.observaciones || "",
+    // 3. Buscar en registros generales (tabla puede no existir aun)
+    try {
+      const generales = await prisma.registroGeneral.findMany({
+        where: {
+          estatusId: 1,
+          OR: [
+            { nombre: { contains: q } },
+            { apePaterno: { contains: q } },
+            { apeMaterno: { contains: q } },
+          ],
+        },
+        select: {
+          id: true,
+          nombre: true,
+          apePaterno: true,
+          apeMaterno: true,
+          celular: true,
+          observaciones: true,
+        },
+        take: limit,
+        orderBy: { apePaterno: "asc" },
       });
+
+      for (const g of generales) {
+        results.push({
+          id: g.id,
+          nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
+          tipo: "G",
+          tipoLabel: "General",
+          celular: g.celular || "",
+          observaciones: g.observaciones || "",
+        });
+      }
+    } catch {
+      // La tabla registros_generales puede no existir; continuar sin error
     }
 
     return NextResponse.json({ data: results });

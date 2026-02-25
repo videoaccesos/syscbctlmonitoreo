@@ -53,18 +53,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // IDs restantes
+    // IDs restantes - buscar en registros generales (tabla puede no existir aun)
     const remaining2 = ids.filter((id) => !nombres[id]);
     if (remaining2.length > 0) {
-      const generales = await prisma.registroGeneral.findMany({
-        where: { id: { in: remaining2 } },
-        select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
-      });
-      for (const g of generales) {
-        nombres[g.id] = {
-          nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
-          tipo: "G",
-        };
+      try {
+        const generales = await prisma.registroGeneral.findMany({
+          where: { id: { in: remaining2 } },
+          select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
+        });
+        for (const g of generales) {
+          nombres[g.id] = {
+            nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
+            tipo: "G",
+          };
+        }
+      } catch {
+        // La tabla registros_generales puede no existir; continuar sin error
       }
     }
 
