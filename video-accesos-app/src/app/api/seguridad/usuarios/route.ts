@@ -115,7 +115,6 @@ export async function POST(request: NextRequest) {
         empleadoId: body.empleadoId ? parseInt(body.empleadoId, 10) : null,
         privadaId: body.privadaId ? parseInt(body.privadaId, 10) : null,
         modificarFechas: body.modificarFechas || "N",
-        googleAuthCode: body.googleAuthCode || "",
         logueado: body.logueado || 0,
         usuarioMovId: body.usuarioMovId || 0,
         usuarioModId: body.usuarioModId || 0,

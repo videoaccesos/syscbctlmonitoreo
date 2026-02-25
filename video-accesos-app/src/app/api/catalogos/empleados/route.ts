@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
         permisoSupervisor: body.permisoSupervisor || 0,
         fechaBaja: new Date(),
         motivoBaja: "",
-        googleAuthCode: "",
         usuarioModId: (session.user as Record<string, unknown>)?.usuarioId as number ?? 0,
         estatusId: 1,
       },

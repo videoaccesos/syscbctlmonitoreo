@@ -28,7 +28,6 @@ model Usuario {
   logueado          Int      @default(0) @db.TinyInt
   usuarioMovId      Int      @default(0) @map("usuario_mov_id")
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
-  googleAuthCode    String   @default("") @map("google_auth_code") @db.VarChar(100)
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
   usuarioModId      Int      @default(0) @map("usuario_id_2")
 
@@ -161,7 +160,6 @@ model Empleado {
   fechaIngreso                  DateTime @default(now()) @map("fecha_ingreso") @db.Date
   fechaBaja                     DateTime @default(now()) @map("fecha_baja") @db.Date
   motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
-  googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(100)
   permisoAdministrador          Int      @default(0) @map("permiso_administrador")
   permisoEncargadoAdministracion Int     @default(0) @map("permiso_encargado_administracion")
   permisoSupervisor             Int      @default(0) @map("permiso_supervisor")

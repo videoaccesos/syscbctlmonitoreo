@@ -43,7 +43,6 @@ interface Empleado {
   permisoAdministrador: number;
   permisoSupervisor: number;
   permisoEncargadoAdministracion: number;
-  googleAuthCode: string | null;
   estatusId: number;
   puesto: Puesto;
 }
