@@ -646,3 +646,17 @@ model RecuperacionPatrimonialSeguimiento {
   @@index([recuperacionId])
   @@map("recuperacion_patrimonial_seguimiento")
 }
+
+// ============================================================
+// CATALOGOS ADICIONALES
+// ============================================================
+
+model Material {
+  id          Int     @id @default(autoincrement()) @map("material_id")
+  codigo      String  @default("") @db.VarChar(50)
+  descripcion String  @default("") @db.VarChar(200)
+  costo       Decimal @default(0) @db.Decimal(10, 2)
+  estatusId   Int     @default(1) @map("estatus_id") @db.TinyInt
+
+  @@map("materiales")
+}
