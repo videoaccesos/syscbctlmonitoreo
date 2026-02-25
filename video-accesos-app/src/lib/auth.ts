@@ -1,6 +1,25 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { spawnSync } from "child_process";
 import { prisma } from "./prisma";
+
+/**
+ * Verifica una contraseña contra el hash DES crypt almacenado por el sistema legacy PHP.
+ * El sistema legacy usa: substr(crypt($cadena, 0), 0, 10)
+ * Los hashes almacenados usan salt DES de 2 caracteres (primeros 2 chars del hash).
+ */
+function verificarContrasena(input: string, hashAlmacenado: string): boolean {
+  const salt = hashAlmacenado.substring(0, 2);
+  const result = spawnSync("php", [
+    "-r",
+    "echo substr(crypt($argv[1], $argv[2]), 0, 10);",
+    "--",
+    input,
+    salt,
+  ]);
+  const hashCalculado = result.stdout.toString().trim();
+  return hashCalculado === hashAlmacenado;
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -29,8 +48,8 @@ export const authOptions: NextAuthOptions = {
 
         if (!usuario) return null;
 
-        // BD legacy usa contraseñas en texto plano (varchar 10)
-        if (credentials.contrasena !== usuario.contrasena) return null;
+        // BD legacy usa DES crypt de PHP: substr(crypt($pass, 0), 0, 10)
+        if (!verificarContrasena(credentials.contrasena, usuario.contrasena)) return null;
 
         // Registrar inicio de sesión en bitácora
         await prisma.bitacoraInicio.create({
