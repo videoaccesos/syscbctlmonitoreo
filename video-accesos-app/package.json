@@ -31,6 +31,7 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.2",
     "recharts": "^3.7.0",
+    "unix-crypt-td-js": "^1.1.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { spawnSync } from "child_process";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const crypt = require("unix-crypt-td-js");
 import { prisma } from "./prisma";
 
 /**
@@ -10,14 +11,7 @@ import { prisma } from "./prisma";
  */
 function verificarContrasena(input: string, hashAlmacenado: string): boolean {
   const salt = hashAlmacenado.substring(0, 2);
-  const result = spawnSync("php", [
-    "-r",
-    "echo substr(crypt($argv[1], $argv[2]), 0, 10);",
-    "--",
-    input,
-    salt,
-  ]);
-  const hashCalculado = result.stdout.toString().trim();
+  const hashCalculado = crypt(input, salt).substring(0, 10);
   return hashCalculado === hashAlmacenado;
 }
 
