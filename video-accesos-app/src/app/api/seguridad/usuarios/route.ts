@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Excluir contrasena de la respuesta
-    const usuariosSinContrasena = usuarios.map(({ contrasena, ...rest }) => rest);
+    const usuariosSinContrasena = usuarios.map(({ contrasena, ...rest }: { contrasena: unknown; [key: string]: unknown }) => rest);
 
     return NextResponse.json({
       data: usuariosSinContrasena,
