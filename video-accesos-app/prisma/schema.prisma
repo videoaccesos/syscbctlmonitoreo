@@ -79,7 +79,7 @@ model Proceso {
   usuarioModId      Int      @default(0) @map("usuario_id")
 
   // Self-referencing para jerarquía de menú
-  procesoPadre Proceso?     @relation("ProcesoHijos", fields: [procesoPadreId], references: [id])
+  procesoPadre Proceso?     @relation("ProcesoHijos", fields: [procesoPadreId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   hijos        Proceso[]    @relation("ProcesoHijos")
   subprocesos  Subproceso[]
 
@@ -93,7 +93,7 @@ model Subproceso {
   nombre    String  @default("") @db.VarChar(50)
   funcion   String? @db.VarChar(50)
 
-  proceso  Proceso         @relation(fields: [procesoId], references: [id], onDelete: Cascade)
+  proceso  Proceso         @relation(fields: [procesoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   permisos PermisoAcceso[]
 
   @@index([procesoId])
@@ -105,7 +105,7 @@ model PermisoAcceso {
   subprocesoId   Int @map("subproceso_id")
 
   grupo      GrupoUsuario @relation(fields: [grupoUsuarioId], references: [id], onDelete: Cascade)
-  subproceso Subproceso   @relation(fields: [subprocesoId], references: [id], onDelete: Cascade)
+  subproceso Subproceso   @relation(fields: [subprocesoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([grupoUsuarioId, subprocesoId])
   @@index([grupoUsuarioId])
