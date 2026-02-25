@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         tipoId,
         estatusId: body.estatusId ? parseInt(body.estatusId, 10) : 1,
         fecha: body.fecha ? new Date(body.fecha) : new Date(),
+        usuarioModId: 0,
       },
     });
 

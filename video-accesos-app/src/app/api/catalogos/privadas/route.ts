@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
           : new Date(),
         observaciones: body.observaciones?.trim() || "",
         estatusId: 1,
+        usuarioModId: 0,
       },
     });
 

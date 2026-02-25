@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     const puesto = await prisma.puesto.create({
-      data: { descripcion: descripcion.trim() },
+      data: { descripcion: descripcion.trim(), usuarioModId: 0 },
     });
 
     return NextResponse.json(puesto, { status: 201 });

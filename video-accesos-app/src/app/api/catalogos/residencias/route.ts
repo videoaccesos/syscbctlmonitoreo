@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
         extraPrecioInterfon: parseInt(extraPrecioInterfon, 10) || 0,
         observaciones: observaciones || "",
         estatusId: estatusId ? parseInt(estatusId) : 1,
+        usuarioModId: 0,
       },
       include: {
         privada: {

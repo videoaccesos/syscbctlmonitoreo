@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
         descripcion: body.descripcion.trim(),
         puestoId: body.puestoId ? parseInt(body.puestoId, 10) : 0,
         estatusId: 1,
+        usuarioModId: 0,
       },
     });
 

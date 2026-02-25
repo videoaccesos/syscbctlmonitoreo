@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
         codigo: body.codigo.trim(),
         descripcion: body.descripcion.trim(),
         estatusId: 1,
+        usuarioModId: 0,
       },
     });
 
