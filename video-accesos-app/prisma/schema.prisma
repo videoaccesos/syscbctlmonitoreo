@@ -29,7 +29,6 @@ model Usuario {
   usuarioMovId      Int      @default(0) @map("usuario_mov_id")
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id_2")
 
   // Relaciones
   empleado       Empleado?             @relation(fields: [empleadoId], references: [id])
