@@ -374,9 +374,9 @@ model Residente {
   @@map("residencias_residentes")
 }
 
-// visitas: visita_id es char(8), NO auto_increment
+// residencias_visitantes: visitante_id es char(8), NO auto_increment
 model Visita {
-  id                String   @id @map("visita_id") @db.Char(8)
+  id                String   @id @map("visitante_id") @db.Char(8)
   residenciaId      Int      @map("residencia_id")
   apePaterno        String   @default("") @map("ape_paterno") @db.VarChar(50)
   apeMaterno        String   @default("") @map("ape_materno") @db.VarChar(50)
@@ -392,7 +392,27 @@ model Visita {
   residencia Residencia @relation(fields: [residenciaId], references: [id])
 
   @@index([residenciaId])
-  @@map("visitas")
+  @@map("residencias_visitantes")
+}
+
+// ============================================================
+// REGISTRO GENERAL (Solicitantes que no son residentes ni visitantes)
+// ============================================================
+
+model RegistroGeneral {
+  id                String   @id @map("registro_general_id") @db.Char(8)
+  apePaterno        String   @default("") @map("ape_paterno") @db.VarChar(50)
+  apeMaterno        String   @default("") @map("ape_materno") @db.VarChar(50)
+  nombre            String   @default("") @db.VarChar(50)
+  telefono          String   @default("") @db.VarChar(14)
+  celular           String   @default("") @db.VarChar(14)
+  email             String   @default("") @db.VarChar(100)
+  observaciones     String   @default("") @db.Text
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_id")
+
+  @@map("registros_generales")
 }
 
 // ============================================================
