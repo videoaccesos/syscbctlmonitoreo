@@ -38,9 +38,22 @@ export const authOptions: NextAuthOptions = {
               usuario: credentials.usuario,
               estatusId: 1,
             },
-            include: {
+            select: {
+              id: true,
+              usuario: true,
+              contrasena: true,
+              modificarFechas: true,
+              empleadoId: true,
+              privadaId: true,
+              estatusId: true,
               empleado: {
-                include: { puesto: true },
+                select: {
+                  nombre: true,
+                  apePaterno: true,
+                  email: true,
+                  puestoId: true,
+                  nroOperador: true,
+                },
               },
             },
           });

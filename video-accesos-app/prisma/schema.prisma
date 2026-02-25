@@ -22,7 +22,7 @@ model Usuario {
   modificarFechas   String   @default("N") @map("modificar_fechas") @db.Char(1)
   ultimaSesion      DateTime @default(now()) @map("ultima_sesion") @db.DateTime(0)
   direccionIp       String   @default("") @map("direccion_ip") @db.VarChar(15)
-  cambioContrasena  DateTime @default(now()) @map("cambio_contrasena") @db.Date
+  cambioContrasena  DateTime? @map("cambio_contrasena") @db.Date
   empleadoId        Int?     @map("empleado_id")
   privadaId         Int?     @map("privada_id")
   logueado          Int      @default(0) @db.TinyInt
@@ -156,8 +156,8 @@ model Empleado {
   telefono                      String   @default("") @db.VarChar(14)
   celular                       String   @default("") @db.VarChar(14)
   email                         String   @default("") @db.VarChar(60)
-  fechaIngreso                  DateTime @default(now()) @map("fecha_ingreso") @db.Date
-  fechaBaja                     DateTime @default(now()) @map("fecha_baja") @db.Date
+  fechaIngreso                  DateTime? @map("fecha_ingreso") @db.Date
+  fechaBaja                     DateTime? @map("fecha_baja") @db.Date
   motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
   googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(16)
   permisoAdministrador          Int      @default(0) @map("permiso_administrador")
@@ -292,8 +292,8 @@ model Privada {
   precioPeatonal    Int      @default(0) @map("precio_peatonal")
   precioMensualidad Int      @default(0) @map("precio_mensualidad")
   pagoMensualidad   Int      @default(0) @map("pago_mensualidad")
-  renovacion        DateTime @default(now()) @db.Date
-  venceContrato     DateTime @default(now()) @map("vence_contrato") @db.Date
+  renovacion        DateTime? @db.Date
+  venceContrato     DateTime? @map("vence_contrato") @db.Date
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
@@ -429,8 +429,8 @@ model ResidenteTarjeta {
   residenteId             String   @map("residente_id") @db.VarChar(100)
   compradorId             String   @default("") @map("comprador_id") @db.VarChar(100)
   mostrarNombreComprador  Int      @default(0) @map("mostrar_nombre_comprador") @db.TinyInt
-  fecha                   DateTime @default(now()) @db.Date
-  fechaVencimiento        DateTime @default(now()) @map("fecha_vencimiento") @db.Date
+  fecha                   DateTime? @db.Date
+  fechaVencimiento        DateTime? @map("fecha_vencimiento") @db.Date
   lecturaTipoId           Int      @default(0) @map("lectura_tipo_id") @db.SmallInt
   lecturaEpc              String   @default("") @map("lectura_epc") @db.VarChar(20)
   folioContrato           String   @default("") @map("folio_contrato") @db.VarChar(10)
@@ -445,7 +445,7 @@ model ResidenteTarjeta {
   concepto                String   @default("") @db.VarChar(100)
   interfonExtra           Int      @default(0) @map("interfon_extra")
   estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
-  fechaModificacion       DateTime @default(now()) @map("fecha_modificacion") @db.Date
+  fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
   tipoPago                Int      @default(0) @map("tipo_pago")
   usuarioModId            Int      @default(0) @map("usuario_id")
   observaciones           String   @default("") @db.VarChar(100)
@@ -517,7 +517,7 @@ model SupervisionLlamada {
 model OrdenServicio {
   id                  Int       @id @default(autoincrement()) @map("orden_servicio_id")
   folio               String    @default("") @db.Char(8)
-  fecha               DateTime  @default(now()) @db.Date
+  fecha               DateTime? @db.Date
   empleadoId          Int       @map("empleado_id")
   privadaId           Int       @map("privada_id")
   tecnicoId           Int       @map("tecnico_id")
