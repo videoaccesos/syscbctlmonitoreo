@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
         descripcion: body.descripcion.trim(),
         costo,
         estatusId: 1,
+        usuarioId: (session.user as Record<string, unknown>)?.usuarioId as number ?? 0,
       },
     });
 

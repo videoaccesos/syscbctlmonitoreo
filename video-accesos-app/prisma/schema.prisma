@@ -657,6 +657,7 @@ model Material {
   descripcion String  @default("") @db.VarChar(200)
   costo       Decimal @default(0) @db.Decimal(10, 2)
   estatusId   Int     @default(1) @map("estatus_id") @db.TinyInt
+  usuarioId   Int     @default(0) @map("usuario_id")
 
   @@map("materiales")
 }
