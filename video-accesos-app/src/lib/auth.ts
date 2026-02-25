@@ -24,23 +24,39 @@ export const authOptions: NextAuthOptions = {
         contrasena: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
+        console.log("[AUTH] authorize() llamado con usuario:", credentials?.usuario);
+
         if (!credentials?.usuario || !credentials?.contrasena) {
+          console.log("[AUTH] Credenciales vacías");
           return null;
         }
 
-        const usuario = await prisma.usuario.findFirst({
-          where: {
-            usuario: credentials.usuario,
-            estatusId: 1,
-          },
-          include: {
-            empleado: {
-              include: { puesto: true },
+        let usuario;
+        try {
+          usuario = await prisma.usuario.findFirst({
+            where: {
+              usuario: credentials.usuario,
+              estatusId: 1,
             },
-          },
-        });
+            include: {
+              empleado: {
+                include: { puesto: true },
+              },
+            },
+          });
+        } catch (err) {
+          console.error("[AUTH] Error en consulta Prisma:", err);
+          return null;
+        }
+
+        console.log("[AUTH] Usuario encontrado:", usuario ? `ID=${usuario.id}, estatus=${usuario.estatusId}` : "NO");
 
         if (!usuario) return null;
+
+        console.log("[AUTH] Hash almacenado:", usuario.contrasena, "longitud:", usuario.contrasena.length);
+        const salt = usuario.contrasena.substring(0, 2);
+        const hashCalculado = crypt(credentials.contrasena, salt).substring(0, 10);
+        console.log("[AUTH] Salt:", salt, "Hash calculado:", hashCalculado, "Coincide:", hashCalculado === usuario.contrasena);
 
         // BD legacy usa DES crypt de PHP: substr(crypt($pass, 0), 0, 10)
         if (!verificarContrasena(credentials.contrasena, usuario.contrasena)) return null;
