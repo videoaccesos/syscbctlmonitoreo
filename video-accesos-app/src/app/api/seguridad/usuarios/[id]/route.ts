@@ -115,7 +115,6 @@ export async function PUT(
       modificarFechas: body.modificarFechas || "N",
       logueado: body.logueado || 0,
       usuarioMovId: body.usuarioMovId || 0,
-      usuarioModId: body.usuarioModId || 0,
     };
 
     // Si se proporciona contrasena, almacenar en texto plano (legacy MySQL 5.7, varchar(10))

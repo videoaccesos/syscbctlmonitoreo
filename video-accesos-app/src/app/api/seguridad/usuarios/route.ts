@@ -117,7 +117,6 @@ export async function POST(request: NextRequest) {
         modificarFechas: body.modificarFechas || "N",
         logueado: body.logueado || 0,
         usuarioMovId: body.usuarioMovId || 0,
-        usuarioModId: body.usuarioModId || 0,
         estatusId: 1,
       },
       include: {
