@@ -160,6 +160,7 @@ model Empleado {
   fechaIngreso                  DateTime @default(now()) @map("fecha_ingreso") @db.Date
   fechaBaja                     DateTime @default(now()) @map("fecha_baja") @db.Date
   motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
+  googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(16)
   permisoAdministrador          Int      @default(0) @map("permiso_administrador")
   permisoEncargadoAdministracion Int     @default(0) @map("permiso_encargado_administracion")
   permisoSupervisor             Int      @default(0) @map("permiso_supervisor")
