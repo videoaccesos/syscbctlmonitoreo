@@ -77,10 +77,14 @@ export const authOptions: NextAuthOptions = {
         // Registrar inicio de sesión en bitácora y actualizar última sesión
         // Wrapped en try/catch para que errores de auditoría no bloqueen el login
         try {
+          // Truncar a segundos para coincidir con DateTime(0) de MySQL,
+          // evitando el error "found no record(s)" de Prisma al hacer SELECT post-INSERT.
+          const ahora = new Date();
+          ahora.setMilliseconds(0);
           await prisma.bitacoraInicio.create({
             data: {
               usuarioId: usuario.id,
-              inicioSesion: new Date(),
+              inicioSesion: ahora,
               direccionIp: "",
               hostName: "",
             },
