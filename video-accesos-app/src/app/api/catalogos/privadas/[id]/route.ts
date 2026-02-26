@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, sanitizeLegacyDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas/[id] - Obtener una privada por ID
 export async function GET(
@@ -13,6 +13,9 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    // Fix legacy zero-dates ('0000-00-00') that Prisma cannot parse (runs once)
+    await sanitizeLegacyDates();
 
     const { id } = await params;
     const privadaId = parseInt(id, 10);

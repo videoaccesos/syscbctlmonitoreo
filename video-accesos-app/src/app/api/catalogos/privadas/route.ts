@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, sanitizeLegacyDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas - Listar privadas con busqueda y paginacion
 export async function GET(request: NextRequest) {
@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    // Fix legacy zero-dates ('0000-00-00') that Prisma cannot parse (runs once)
+    await sanitizeLegacyDates();
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
