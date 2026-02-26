@@ -110,7 +110,7 @@ export default function ResidenciasPage() {
 
   const fetchPrivadas = useCallback(async () => {
     try {
-      const res = await fetch("/api/catalogos/privadas?pageSize=200");
+      const res = await fetch("/api/catalogos/privadas?pageSize=200&estatusId=1");
       if (!res.ok) throw new Error();
       const json = await res.json();
       setPrivadas(json.data || []);

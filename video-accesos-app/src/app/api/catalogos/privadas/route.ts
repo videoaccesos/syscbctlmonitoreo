@@ -14,11 +14,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
+    // Aceptar tanto "pageSize" como "limit" para compatibilidad
+    const pageSize = parseInt(
+      searchParams.get("pageSize") || searchParams.get("limit") || "10",
+      10
+    );
     const skip = (page - 1) * pageSize;
 
+    // estatusId: si se pasa, filtrar por ese estatus exacto (dropdowns: estatusId=1).
+    // Si no se pasa, mostrar todos excepto eliminados (4),
+    // replicando el comportamiento del sistema legacy (estatus_id <> 4).
+    const estatusParam = searchParams.get("estatusId");
+    const estatusFilter = estatusParam
+      ? { estatusId: parseInt(estatusParam, 10) }
+      : { estatusId: { not: 4 } };
+
     const where = {
-      estatusId: 1,
+      ...estatusFilter,
       ...(search
         ? {
             descripcion: {

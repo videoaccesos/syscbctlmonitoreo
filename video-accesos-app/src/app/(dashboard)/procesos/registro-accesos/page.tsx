@@ -301,7 +301,7 @@ export default function RegistroAccesosPage() {
   // -----------------------------------------------------------
   const fetchPrivadas = useCallback(async () => {
     try {
-      const res = await fetch("/api/catalogos/privadas?limit=200");
+      const res = await fetch("/api/catalogos/privadas?pageSize=200&estatusId=1");
       if (!res.ok) return;
       const json = await res.json();
       setPrivadas(json.data || json);

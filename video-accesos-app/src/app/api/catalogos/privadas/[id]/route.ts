@@ -22,7 +22,7 @@ export async function GET(
     }
 
     const privada = await prisma.privada.findFirst({
-      where: { id: privadaId, estatusId: 1 },
+      where: { id: privadaId, estatusId: { not: 4 } },
     });
 
     if (!privada) {
@@ -72,7 +72,7 @@ export async function PUT(
 
     // Verificar que existe
     const existente = await prisma.privada.findFirst({
-      where: { id: privadaId, estatusId: 1 },
+      where: { id: privadaId, estatusId: { not: 4 } },
     });
 
     if (!existente) {
@@ -166,7 +166,7 @@ export async function DELETE(
 
     // Verificar que existe y esta activa
     const existente = await prisma.privada.findFirst({
-      where: { id: privadaId, estatusId: 1 },
+      where: { id: privadaId, estatusId: { not: 4 } },
     });
 
     if (!existente) {

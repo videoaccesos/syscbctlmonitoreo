@@ -183,7 +183,7 @@ export default function OrdenesServicioPage() {
   const fetchCatalogos = useCallback(async () => {
     try {
       const [privRes, empRes, codRes, diagRes] = await Promise.all([
-        fetch("/api/catalogos/privadas?limit=200"),
+        fetch("/api/catalogos/privadas?pageSize=200&estatusId=1"),
         fetch("/api/catalogos/empleados?pageSize=200"),
         fetch("/api/catalogos/tarjetas?limit=1"), // placeholder - we use a dedicated endpoint below
         fetch("/api/catalogos/tarjetas?limit=1"), // placeholder
@@ -213,7 +213,7 @@ export default function OrdenesServicioPage() {
   const fetchDropdowns = useCallback(async () => {
     try {
       const [privRes, empRes] = await Promise.all([
-        fetch("/api/catalogos/privadas?limit=200"),
+        fetch("/api/catalogos/privadas?pageSize=200&estatusId=1"),
         fetch("/api/catalogos/empleados?pageSize=200"),
       ]);
 

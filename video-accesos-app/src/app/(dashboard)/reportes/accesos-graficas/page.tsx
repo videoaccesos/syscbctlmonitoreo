@@ -105,7 +105,7 @@ export default function AccesosGraficasPage() {
   useEffect(() => {
     async function loadPrivadas() {
       try {
-        const res = await fetch("/api/catalogos/privadas?pageSize=500");
+        const res = await fetch("/api/catalogos/privadas?pageSize=500&estatusId=1");
         if (!res.ok) return;
         const json = await res.json();
         setPrivadas(json.data || []);

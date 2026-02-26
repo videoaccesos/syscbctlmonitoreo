@@ -133,7 +133,7 @@ export default function UsuariosPage() {
   // -----------------------------------------------------------
   const fetchPrivadas = useCallback(async () => {
     try {
-      const res = await fetch("/api/catalogos/privadas?pageSize=1000");
+      const res = await fetch("/api/catalogos/privadas?pageSize=1000&estatusId=1");
       if (!res.ok) return;
       const json = await res.json();
       setPrivadas(json.data || []);

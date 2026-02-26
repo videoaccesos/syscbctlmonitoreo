@@ -75,7 +75,7 @@ export default function GastosPage() {
   }, [page, filtroPrivada]);
 
   useEffect(() => {
-    fetch("/api/catalogos/privadas?pageSize=999")
+    fetch("/api/catalogos/privadas?pageSize=999&estatusId=1")
       .then((r) => r.json())
       .then((j) => setPrivadas(j.data || []));
   }, []);
