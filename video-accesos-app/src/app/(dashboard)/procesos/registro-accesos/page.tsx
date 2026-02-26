@@ -33,7 +33,7 @@ interface Residencia {
   id: number;
   nroCasa: string;
   calle: string;
-  telefono: string | null;
+  telefono1: string | null;
   telefono2: string | null;
   interfon: string | null;
   telefonoInterfon: string | null;
@@ -960,9 +960,9 @@ export default function RegistroAccesosPage() {
               {/* Info de la residencia */}
               {selectedResidencia && (
                 <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                  {selectedResidencia.telefono && (
+                  {selectedResidencia.telefono1 && (
                     <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" /> {selectedResidencia.telefono}
+                      <Phone className="h-3 w-3" /> {selectedResidencia.telefono1}
                     </span>
                   )}
                   {selectedResidencia.telefono2 && (

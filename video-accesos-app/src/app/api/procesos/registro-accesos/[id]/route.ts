@@ -32,7 +32,7 @@ export async function GET(
             id: true,
             nroCasa: true,
             calle: true,
-            telefono: true,
+            telefono1: true,
             telefono2: true,
             interfon: true,
             telefonoInterfon: true,

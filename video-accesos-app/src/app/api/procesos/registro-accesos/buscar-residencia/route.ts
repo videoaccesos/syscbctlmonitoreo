@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         id: true,
         nroCasa: true,
         calle: true,
-        telefono: true,
+        telefono1: true,
         telefono2: true,
         interfon: true,
         telefonoInterfon: true,

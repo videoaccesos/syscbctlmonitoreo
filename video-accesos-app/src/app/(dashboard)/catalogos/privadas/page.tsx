@@ -15,23 +15,32 @@ interface Privada {
   celular: string | null;
   email: string | null;
   historial: string | null;
+  dns1: string | null;
+  puerto1: string | null;
+  alias1: string | null;
+  tipoTarjeta1: string | null;
+  contrasena1: string | null;
+  dns2: string | null;
+  puerto2: string | null;
+  alias2: string | null;
+  tipoTarjeta2: string | null;
+  contrasena2: string | null;
+  dns3: string | null;
+  puerto3: string | null;
+  alias3: string | null;
+  tipoTarjeta3: string | null;
+  contrasena3: string | null;
+  video1: string | null;
+  aliasVideo1: string | null;
+  video2: string | null;
+  aliasVideo2: string | null;
+  video3: string | null;
+  aliasVideo3: string | null;
   precioVehicular: number | null;
   precioPeatonal: number | null;
   precioMensualidad: number | null;
-  pagoMensualidad: number | null;
   venceContrato: string | null;
   observaciones: string | null;
-  dns1: string | null;
-  dns2: string | null;
-  dns3: string | null;
-  video1: string | null;
-  video2: string | null;
-  video3: string | null;
-  relay1: string | null;
-  relay2: string | null;
-  relay3: string | null;
-  monitoreo: number;
-  renovacion: string | null;
   estatusId: number;
 }
 
@@ -53,23 +62,32 @@ const emptyForm = {
   celular: "",
   email: "",
   historial: "",
+  dns1: "",
+  puerto1: "",
+  alias1: "",
+  tipoTarjeta1: "",
+  contrasena1: "",
+  dns2: "",
+  puerto2: "",
+  alias2: "",
+  tipoTarjeta2: "",
+  contrasena2: "",
+  dns3: "",
+  puerto3: "",
+  alias3: "",
+  tipoTarjeta3: "",
+  contrasena3: "",
+  video1: "",
+  aliasVideo1: "",
+  video2: "",
+  aliasVideo2: "",
+  video3: "",
+  aliasVideo3: "",
   precioVehicular: "",
   precioPeatonal: "",
   precioMensualidad: "",
-  pagoMensualidad: "",
   venceContrato: "",
   observaciones: "",
-  dns1: "",
-  dns2: "",
-  dns3: "",
-  video1: "",
-  video2: "",
-  video3: "",
-  relay1: "",
-  relay2: "",
-  relay3: "",
-  monitoreo: "0",
-  renovacion: "",
 };
 
 type FormData = typeof emptyForm;
@@ -161,23 +179,32 @@ export default function PrivadasPage() {
       celular: p.celular || "",
       email: p.email || "",
       historial: p.historial || "",
+      dns1: p.dns1 || "",
+      puerto1: p.puerto1 || "",
+      alias1: p.alias1 || "",
+      tipoTarjeta1: p.tipoTarjeta1 || "",
+      contrasena1: p.contrasena1 || "",
+      dns2: p.dns2 || "",
+      puerto2: p.puerto2 || "",
+      alias2: p.alias2 || "",
+      tipoTarjeta2: p.tipoTarjeta2 || "",
+      contrasena2: p.contrasena2 || "",
+      dns3: p.dns3 || "",
+      puerto3: p.puerto3 || "",
+      alias3: p.alias3 || "",
+      tipoTarjeta3: p.tipoTarjeta3 || "",
+      contrasena3: p.contrasena3 || "",
+      video1: p.video1 || "",
+      aliasVideo1: p.aliasVideo1 || "",
+      video2: p.video2 || "",
+      aliasVideo2: p.aliasVideo2 || "",
+      video3: p.video3 || "",
+      aliasVideo3: p.aliasVideo3 || "",
       precioVehicular: p.precioVehicular != null ? String(p.precioVehicular) : "",
       precioPeatonal: p.precioPeatonal != null ? String(p.precioPeatonal) : "",
       precioMensualidad: p.precioMensualidad != null ? String(p.precioMensualidad) : "",
-      pagoMensualidad: p.pagoMensualidad != null ? String(p.pagoMensualidad) : "",
       venceContrato: p.venceContrato ? p.venceContrato.substring(0, 10) : "",
       observaciones: p.observaciones || "",
-      dns1: p.dns1 || "",
-      dns2: p.dns2 || "",
-      dns3: p.dns3 || "",
-      video1: p.video1 || "",
-      video2: p.video2 || "",
-      video3: p.video3 || "",
-      relay1: p.relay1 || "",
-      relay2: p.relay2 || "",
-      relay3: p.relay3 || "",
-      monitoreo: String(p.monitoreo ?? 0),
-      renovacion: p.renovacion ? p.renovacion.substring(0, 10) : "",
     });
     setError("");
     setShowModal(true);
@@ -583,7 +610,7 @@ export default function PrivadasPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensualidad</label>
                   <input
@@ -596,134 +623,6 @@ export default function PrivadasPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pago Mensualidad</label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={form.pagoMensualidad}
-                    onChange={(e) => setField("pagoMensualidad", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {/* DNS */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 1</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.dns1}
-                    onChange={(e) => setField("dns1", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 2</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.dns2}
-                    onChange={(e) => setField("dns2", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">DNS 3</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.dns3}
-                    onChange={(e) => setField("dns3", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Video */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 1</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.video1}
-                    onChange={(e) => setField("video1", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 2</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.video2}
-                    onChange={(e) => setField("video2", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Video 3</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.video3}
-                    onChange={(e) => setField("video3", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Relay */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 1</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.relay1}
-                    onChange={(e) => setField("relay1", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 2</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.relay2}
-                    onChange={(e) => setField("relay2", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relay 3</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={form.relay3}
-                    onChange={(e) => setField("relay3", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Monitoreo, Vence Contrato, Renovacion */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Monitoreo</label>
-                  <select
-                    value={form.monitoreo}
-                    onChange={(e) => setField("monitoreo", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="0">No</option>
-                    <option value="1">Si</option>
-                  </select>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vence Contrato</label>
                   <input
                     type="date"
@@ -732,15 +631,116 @@ export default function PrivadasPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Renovacion</label>
-                  <input
-                    type="date"
-                    value={form.renovacion}
-                    onChange={(e) => setField("renovacion", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+              </div>
+
+              {/* DNS 1 */}
+              <fieldset className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <legend className="text-sm font-semibold text-gray-700 px-2">DNS 1</legend>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <input type="text" maxLength={100} value={form.dns1} onChange={(e) => setField("dns1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <input type="text" maxLength={5} value={form.puerto1} onChange={(e) => setField("puerto1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <input type="text" maxLength={100} value={form.alias1} onChange={(e) => setField("alias1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <select value={form.tipoTarjeta1} onChange={(e) => setField("tipoTarjeta1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">--</option>
+                      <option value="Tarjeta 1">Tarjeta 1</option>
+                      <option value="Tarjeta 2">Tarjeta 2</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <input type="password" maxLength={100} value={form.contrasena1} onChange={(e) => setField("contrasena1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* DNS 2 */}
+              <fieldset className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <legend className="text-sm font-semibold text-gray-700 px-2">DNS 2</legend>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <input type="text" maxLength={100} value={form.dns2} onChange={(e) => setField("dns2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <input type="text" maxLength={5} value={form.puerto2} onChange={(e) => setField("puerto2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <input type="text" maxLength={100} value={form.alias2} onChange={(e) => setField("alias2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <select value={form.tipoTarjeta2} onChange={(e) => setField("tipoTarjeta2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">--</option>
+                      <option value="Tarjeta 1">Tarjeta 1</option>
+                      <option value="Tarjeta 2">Tarjeta 2</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <input type="password" maxLength={100} value={form.contrasena2} onChange={(e) => setField("contrasena2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* DNS 3 */}
+              <fieldset className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <legend className="text-sm font-semibold text-gray-700 px-2">DNS 3</legend>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <input type="text" maxLength={100} value={form.dns3} onChange={(e) => setField("dns3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <input type="text" maxLength={5} value={form.puerto3} onChange={(e) => setField("puerto3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <input type="text" maxLength={100} value={form.alias3} onChange={(e) => setField("alias3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <select value={form.tipoTarjeta3} onChange={(e) => setField("tipoTarjeta3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">--</option>
+                      <option value="Tarjeta 1">Tarjeta 1</option>
+                      <option value="Tarjeta 2">Tarjeta 2</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <input type="password" maxLength={100} value={form.contrasena3} onChange={(e) => setField("contrasena3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Video */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {([["video1", "aliasVideo1", "Video 1"], ["video2", "aliasVideo2", "Video 2"], ["video3", "aliasVideo3", "Video 3"]] as const).map(([vField, aField, label]) => (
+                  <fieldset key={vField} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <legend className="text-xs font-semibold text-gray-700 px-1">{label}</legend>
+                    <input type="text" maxLength={100} placeholder="URL" value={form[vField]} onChange={(e) => setField(vField, e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <input type="text" maxLength={100} placeholder="Alias" value={form[aField]} onChange={(e) => setField(aField, e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                  </fieldset>
+                ))}
               </div>
 
               {/* Observaciones */}

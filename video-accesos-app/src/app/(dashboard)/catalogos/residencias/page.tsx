@@ -25,12 +25,10 @@ interface Residencia {
   privadaId: number;
   nroCasa: string;
   calle: string;
-  telefono: string | null;
+  telefono1: string | null;
+  telefono2: string | null;
   interfon: string | null;
   telefonoInterfon: string | null;
-  extraTelefonoInterfon: string | null;
-  extraClaveInterfon: string | null;
-  extraPrecioInterfon: number | null;
   observaciones: string | null;
   estatusId: number;
   privada: { id: number; descripcion: string };
@@ -47,12 +45,10 @@ interface FormData {
   privadaId: string;
   nroCasa: string;
   calle: string;
-  telefono: string;
+  telefono1: string;
+  telefono2: string;
   interfon: string;
   telefonoInterfon: string;
-  extraTelefonoInterfon: string;
-  extraClaveInterfon: string;
-  extraPrecioInterfon: string;
   observaciones: string;
   estatusId: string;
 }
@@ -61,12 +57,10 @@ const emptyForm: FormData = {
   privadaId: "",
   nroCasa: "",
   calle: "",
-  telefono: "",
+  telefono1: "",
+  telefono2: "",
   interfon: "",
   telefonoInterfon: "",
-  extraTelefonoInterfon: "",
-  extraClaveInterfon: "",
-  extraPrecioInterfon: "",
   observaciones: "",
   estatusId: "1",
 };
@@ -181,12 +175,10 @@ export default function ResidenciasPage() {
       privadaId: String(r.privadaId),
       nroCasa: r.nroCasa,
       calle: r.calle,
-      telefono: r.telefono || "",
+      telefono1: r.telefono1 || "",
+      telefono2: r.telefono2 || "",
       interfon: r.interfon || "",
       telefonoInterfon: r.telefonoInterfon || "",
-      extraTelefonoInterfon: r.extraTelefonoInterfon || "",
-      extraClaveInterfon: r.extraClaveInterfon || "",
-      extraPrecioInterfon: r.extraPrecioInterfon != null ? String(r.extraPrecioInterfon) : "",
       observaciones: r.observaciones || "",
       estatusId: String(r.estatusId),
     });
@@ -386,7 +378,7 @@ export default function ResidenciasPage() {
                         {r.interfon || "—"}
                       </td>
                       <td className="px-4 py-3 text-gray-700">
-                        {r.telefono || "—"}
+                        {r.telefono1 || "—"}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -565,20 +557,36 @@ export default function ResidenciasPage() {
                 </div>
               </div>
 
-              {/* Teléfono */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Teléfono
-                </label>
-                <input
-                  type="text"
-                  name="telefono"
-                  value={form.telefono}
-                  onChange={handleChange}
-                  maxLength={14}
-                  placeholder="(000) 000-0000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
+              {/* Teléfonos */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Teléfono 1
+                  </label>
+                  <input
+                    type="text"
+                    name="telefono1"
+                    value={form.telefono1}
+                    onChange={handleChange}
+                    maxLength={14}
+                    placeholder="(000) 000-0000"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Teléfono 2
+                  </label>
+                  <input
+                    type="text"
+                    name="telefono2"
+                    value={form.telefono2}
+                    onChange={handleChange}
+                    maxLength={14}
+                    placeholder="(000) 000-0000"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                </div>
               </div>
 
               {/* Interfon */}
@@ -608,52 +616,6 @@ export default function ResidenciasPage() {
                     onChange={handleChange}
                     maxLength={14}
                     placeholder="(000) 000-0000"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Extra Interfon */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Extra Tel. Interfon
-                  </label>
-                  <input
-                    type="text"
-                    name="extraTelefonoInterfon"
-                    value={form.extraTelefonoInterfon}
-                    onChange={handleChange}
-                    maxLength={14}
-                    placeholder="(000) 000-0000"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Extra Clave Interfon
-                  </label>
-                  <input
-                    type="text"
-                    name="extraClaveInterfon"
-                    value={form.extraClaveInterfon}
-                    onChange={handleChange}
-                    maxLength={20}
-                    placeholder="Clave"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Extra Precio Interfon
-                  </label>
-                  <input
-                    type="number"
-                    name="extraPrecioInterfon"
-                    value={form.extraPrecioInterfon}
-                    onChange={handleChange}
-                    step="1"
-                    placeholder="0"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
                 </div>
