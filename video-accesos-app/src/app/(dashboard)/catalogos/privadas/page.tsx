@@ -103,6 +103,7 @@ export default function PrivadasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("");
   const [loading, setLoading] = useState(false);
 
   // modal
@@ -125,6 +126,7 @@ export default function PrivadasPage() {
         pageSize: String(pageSize),
       });
       if (search) params.set("search", search);
+      if (filterEstatus) params.set("estatusId", filterEstatus);
 
       const res = await fetch(`/api/catalogos/privadas?${params}`);
       if (!res.ok) throw new Error("Error al obtener privadas");
@@ -137,7 +139,7 @@ export default function PrivadasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, filterEstatus]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -156,6 +158,7 @@ export default function PrivadasPage() {
   const clearSearch = () => {
     setSearchInput("");
     setSearch("");
+    setFilterEstatus("");
     setPage(1);
   };
 
@@ -320,7 +323,7 @@ export default function PrivadasPage() {
         </button>
       </div>
 
-      {/* Barra de busqueda */}
+      {/* Barra de busqueda y filtros */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -334,13 +337,25 @@ export default function PrivadasPage() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+          <select
+            value={filterEstatus}
+            onChange={(e) => {
+              setFilterEstatus(e.target.value);
+              setPage(1);
+            }}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todos los estados</option>
+            <option value="1">Activo</option>
+            <option value="2">Baja</option>
+          </select>
           <button
             onClick={handleSearch}
             className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition"
           >
             Buscar
           </button>
-          {search && (
+          {(search || filterEstatus) && (
             <button
               onClick={clearSearch}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition"
