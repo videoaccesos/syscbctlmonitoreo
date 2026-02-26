@@ -852,41 +852,48 @@ export default function RegistroAccesosPage() {
                 Residencia
               </label>
               {selectedResidencia ? (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between">
-                  <div className="text-sm">
-                    <span className="font-semibold text-blue-800">
-                      #{selectedResidencia.nroCasa}
-                    </span>
-                    <span className="text-blue-700 ml-1">
-                      {selectedResidencia.calle}
-                    </span>
-                    {selectedResidencia.interfon && (
-                      <span className="text-blue-500 ml-2 text-xs">
-                        Interfon: {selectedResidencia.interfon}
+                <div>
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 flex items-center justify-between">
+                    <div className="text-sm">
+                      <span className="font-semibold text-blue-800">
+                        #{selectedResidencia.nroCasa}
                       </span>
-                    )}
-                    {selectedResidencia.estatusId !== 1 && (
-                      <span
-                        className={`ml-2 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${getResidenciaEstatusLabel(selectedResidencia.estatusId).color}`}
-                      >
-                        {
-                          getResidenciaEstatusLabel(
-                            selectedResidencia.estatusId
-                          ).label
-                        }
+                      <span className="text-blue-700 ml-1">
+                        {selectedResidencia.calle}
                       </span>
-                    )}
+                      {selectedResidencia.interfon && (
+                        <span className="text-blue-500 ml-2 text-xs">
+                          Interfon: {selectedResidencia.interfon}
+                        </span>
+                      )}
+                      {selectedResidencia.estatusId !== 1 && (
+                        <span
+                          className={`ml-2 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${getResidenciaEstatusLabel(selectedResidencia.estatusId).color}`}
+                        >
+                          {
+                            getResidenciaEstatusLabel(
+                              selectedResidencia.estatusId
+                            ).label
+                          }
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedResidencia(null);
+                        setFormSolicitanteId("");
+                        setFormSolicitanteNombre("");
+                      }}
+                      className="text-blue-400 hover:text-blue-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      setSelectedResidencia(null);
-                      setFormSolicitanteId("");
-                      setFormSolicitanteNombre("");
-                    }}
-                    className="text-blue-400 hover:text-blue-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {selectedResidencia.observaciones && (
+                    <div className="mt-1 rounded-lg bg-red-50 border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700">
+                      NOTA: {selectedResidencia.observaciones}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="relative">
@@ -956,16 +963,6 @@ export default function RegistroAccesosPage() {
                 </div>
               )}
 
-              {/* Info de la residencia - solo interfon, sin telefonos por seguridad */}
-              {selectedResidencia && (
-                <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                  {selectedResidencia.observaciones && (
-                    <span className="text-amber-600 font-medium">
-                      Nota: {selectedResidencia.observaciones}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Solicitante con autocomplete */}
