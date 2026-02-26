@@ -16,12 +16,21 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
     const privadaId = searchParams.get("privadaId");
+    const residenciaId = searchParams.get("residenciaId");
     const skip = (page - 1) * limit;
 
     // Excluir eliminados (estatus 5) replicando el comportamiento legacy
+    // Excluir residencias cuya privada esta dada de baja (estatusId 2) o sistema (4)
     const where: Record<string, unknown> = {
       estatusId: { not: 5 },
+      privada: {
+        estatusId: { notIn: [2, 4] },
+      },
     };
+
+    if (residenciaId) {
+      where.id = parseInt(residenciaId);
+    }
 
     if (privadaId) {
       where.privadaId = parseInt(privadaId);

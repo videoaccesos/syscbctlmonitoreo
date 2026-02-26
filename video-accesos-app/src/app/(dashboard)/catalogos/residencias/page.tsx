@@ -282,8 +282,22 @@ export default function ResidenciasPage() {
         throw new Error(json.error || "Error al guardar");
       }
 
-      closeModal();
-      fetchResidencias();
+      if (editing) {
+        // Si estaba editando, simplemente cerrar y refrescar
+        closeModal();
+        fetchResidencias();
+      } else {
+        // Si era nueva, re-abrir en modo edicion para agregar residentes
+        const created = await res.json();
+        closeModal();
+        await fetchResidencias();
+        // Abrir la residencia creada en modo edicion con residentes vacios
+        const newResidencia: Residencia = {
+          ...created,
+          residentes: [],
+        };
+        openEdit(newResidencia);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -335,6 +349,22 @@ export default function ResidenciasPage() {
     setResidenteError("");
   };
 
+  // Recargar residentes de una residencia especifica (para actualizar el modal)
+  const refreshEditingResidencia = useCallback(async (residenciaId: number) => {
+    try {
+      const res = await fetch(`/api/catalogos/residencias?privadaId=&search=&page=1&limit=1&residenciaId=${residenciaId}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const found = (json.data || []).find((r: Residencia) => r.id === residenciaId);
+      if (found) {
+        setEditing(found);
+      }
+    } catch {
+      // fallback: recargar toda la lista
+    }
+    fetchResidencias();
+  }, [fetchResidencias]);
+
   const handleSaveResidente = async () => {
     if (!residenteForm.nombre.trim()) {
       setResidenteError("El nombre es requerido");
@@ -371,7 +401,11 @@ export default function ResidenciasPage() {
       }
 
       closeResidenteModal();
-      fetchResidencias();
+      if (residenteResidenciaId) {
+        await refreshEditingResidencia(residenteResidenciaId);
+      } else {
+        fetchResidencias();
+      }
     } catch (err) {
       setResidenteError(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -386,7 +420,11 @@ export default function ResidenciasPage() {
       });
       if (!res.ok) throw new Error();
       setDeleteResidenteConfirm(null);
-      fetchResidencias();
+      if (editing) {
+        await refreshEditingResidencia(editing.id);
+      } else {
+        fetchResidencias();
+      }
     } catch {
       setError("Error al dar de baja residente");
     }
@@ -968,6 +1006,106 @@ export default function ResidenciasPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
                 />
               </div>
+
+              {/* Seccion de Residentes (solo al editar) */}
+              {editing && (
+                <div className="border-t border-gray-200 pt-4 mt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                      <User className="h-4 w-4" />
+                      Residentes ({editing.residentes?.length || 0})
+                    </h3>
+                    <button
+                      onClick={() => openCreateResidente(editing.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar Residente
+                    </button>
+                  </div>
+
+                  {(!editing.residentes || editing.residentes.length === 0) ? (
+                    <p className="text-gray-400 text-sm text-center py-3 bg-gray-50 rounded-lg">
+                      No hay residentes registrados. Usa el boton de arriba para agregar.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 text-xs text-gray-500 border-b border-gray-200">
+                            <th className="text-left py-2 px-3 font-medium">Nombre</th>
+                            <th className="text-left py-2 px-3 font-medium">Celular</th>
+                            <th className="text-left py-2 px-3 font-medium">Email</th>
+                            <th className="text-center py-2 px-3 font-medium">Estado</th>
+                            <th className="text-center py-2 px-3 font-medium">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {editing.residentes.map((res) => (
+                            <tr key={res.id} className="hover:bg-gray-50">
+                              <td className="py-2 px-3 font-medium text-gray-800">
+                                {res.apePaterno} {res.apeMaterno} {res.nombre}
+                              </td>
+                              <td className="py-2 px-3 text-gray-600">
+                                {res.celular || "—"}
+                              </td>
+                              <td className="py-2 px-3 text-gray-600">
+                                {res.email || "—"}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    res.estatusId === 1
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {res.estatusId === 1 ? "Activo" : "Baja"}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => openEditResidente(res, editing.id)}
+                                    className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                    title="Editar residente"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  {deleteResidenteConfirm === res.id ? (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => handleDeleteResidente(res.id)}
+                                        className="px-1.5 py-0.5 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
+                                      >
+                                        Sí
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteResidenteConfirm(null)}
+                                        className="px-1.5 py-0.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition"
+                                      >
+                                        No
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setDeleteResidenteConfirm(res.id)}
+                                      className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                      title="Dar de baja"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Footer del modal */}
