@@ -128,6 +128,21 @@ export default function ResidenciasPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
+  // Residente CRUD
+  const [residenteModalOpen, setResidenteModalOpen] = useState(false);
+  const [editingResidente, setEditingResidente] = useState<ResidenteInfo | null>(null);
+  const [residenteResidenciaId, setResidenteResidenciaId] = useState<number | null>(null);
+  const [residenteForm, setResidenteForm] = useState({
+    nombre: "",
+    apePaterno: "",
+    apeMaterno: "",
+    celular: "",
+    email: "",
+  });
+  const [savingResidente, setSavingResidente] = useState(false);
+  const [residenteError, setResidenteError] = useState("");
+  const [deleteResidenteConfirm, setDeleteResidenteConfirm] = useState<string | null>(null);
+
   // ── Helper para extraer IDs de tarjeta de los slots ─────────────────────
   const extractTarjetaIds = (slots: TarjetaSlots[]): string[] => {
     const ids: string[] = [];
@@ -286,6 +301,94 @@ export default function ResidenciasPage() {
       fetchResidencias();
     } catch {
       setError("Error al eliminar residencia");
+    }
+  };
+
+  // ── CRUD Residentes ─────────────────────────────────────────────────────
+
+  const openCreateResidente = (residenciaId: number) => {
+    setEditingResidente(null);
+    setResidenteResidenciaId(residenciaId);
+    setResidenteForm({ nombre: "", apePaterno: "", apeMaterno: "", celular: "", email: "" });
+    setResidenteError("");
+    setResidenteModalOpen(true);
+  };
+
+  const openEditResidente = (res: ResidenteInfo, residenciaId: number) => {
+    setEditingResidente(res);
+    setResidenteResidenciaId(residenciaId);
+    setResidenteForm({
+      nombre: res.nombre || "",
+      apePaterno: res.apePaterno || "",
+      apeMaterno: res.apeMaterno || "",
+      celular: res.celular || "",
+      email: res.email || "",
+    });
+    setResidenteError("");
+    setResidenteModalOpen(true);
+  };
+
+  const closeResidenteModal = () => {
+    setResidenteModalOpen(false);
+    setEditingResidente(null);
+    setResidenteResidenciaId(null);
+    setResidenteError("");
+  };
+
+  const handleSaveResidente = async () => {
+    if (!residenteForm.nombre.trim()) {
+      setResidenteError("El nombre es requerido");
+      return;
+    }
+
+    setSavingResidente(true);
+    setResidenteError("");
+
+    try {
+      if (editingResidente) {
+        const res = await fetch(`/api/catalogos/residentes/${editingResidente.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(residenteForm),
+        });
+        if (!res.ok) {
+          const json = await res.json();
+          throw new Error(json.error || "Error al actualizar");
+        }
+      } else {
+        const res = await fetch("/api/catalogos/residentes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...residenteForm,
+            residenciaId: residenteResidenciaId,
+          }),
+        });
+        if (!res.ok) {
+          const json = await res.json();
+          throw new Error(json.error || "Error al crear");
+        }
+      }
+
+      closeResidenteModal();
+      fetchResidencias();
+    } catch (err) {
+      setResidenteError(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setSavingResidente(false);
+    }
+  };
+
+  const handleDeleteResidente = async (residenteId: string) => {
+    try {
+      const res = await fetch(`/api/catalogos/residentes/${residenteId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error();
+      setDeleteResidenteConfirm(null);
+      fetchResidencias();
+    } catch {
+      setError("Error al dar de baja residente");
     }
   };
 
@@ -497,94 +600,137 @@ export default function ResidenciasPage() {
                         <tr>
                           <td colSpan={9} className="px-4 py-0">
                             <div className="bg-gray-50 border border-gray-200 rounded-lg my-2 p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                                  <User className="h-4 w-4" />
+                                  Residentes ({residenteCount})
+                                </h4>
+                                <button
+                                  onClick={() => openCreateResidente(r.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  Agregar Residente
+                                </button>
+                              </div>
                               {residenteCount === 0 ? (
                                 <p className="text-gray-400 text-sm text-center py-2">
                                   No hay residentes registrados en esta residencia
                                 </p>
                               ) : (
-                                <div className="space-y-3">
-                                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                                    <User className="h-4 w-4" />
-                                    Residentes ({residenteCount})
-                                  </h4>
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                      <thead>
-                                        <tr className="text-xs text-gray-500 border-b border-gray-200">
-                                          <th className="text-left py-2 px-3 font-medium">Nombre</th>
-                                          <th className="text-left py-2 px-3 font-medium">Celular</th>
-                                          <th className="text-left py-2 px-3 font-medium">Email</th>
-                                          <th className="text-left py-2 px-3 font-medium">Estado</th>
-                                          <th className="text-left py-2 px-3 font-medium">Tarjetas Asignadas</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-gray-100">
-                                        {r.residentes!.map((res) => {
-                                          const tarjetasH = extractTarjetaIds(
-                                            res.tarjetasAsignadas || []
-                                          );
-                                          const tarjetasB = extractTarjetaIds(
-                                            res.tarjetasSinRenovacion || []
-                                          );
-                                          const allTarjetas = [
-                                            ...tarjetasH,
-                                            ...tarjetasB,
-                                          ];
-                                          return (
-                                            <tr
-                                              key={res.id}
-                                              className="hover:bg-white/50"
-                                            >
-                                              <td className="py-2 px-3 font-medium text-gray-800">
-                                                {res.apePaterno} {res.apeMaterno}{" "}
-                                                {res.nombre}
-                                              </td>
-                                              <td className="py-2 px-3 text-gray-600">
-                                                {res.celular || "—"}
-                                              </td>
-                                              <td className="py-2 px-3 text-gray-600">
-                                                {res.email || "—"}
-                                              </td>
-                                              <td className="py-2 px-3">
-                                                <span
-                                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                    res.estatusId === 1
-                                                      ? "bg-green-100 text-green-700"
-                                                      : "bg-red-100 text-red-700"
-                                                  }`}
-                                                >
-                                                  {res.estatusId === 1
-                                                    ? "Activo"
-                                                    : "Baja"}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="text-xs text-gray-500 border-b border-gray-200">
+                                        <th className="text-left py-2 px-3 font-medium">Nombre</th>
+                                        <th className="text-left py-2 px-3 font-medium">Celular</th>
+                                        <th className="text-left py-2 px-3 font-medium">Email</th>
+                                        <th className="text-left py-2 px-3 font-medium">Estado</th>
+                                        <th className="text-left py-2 px-3 font-medium">Tarjetas Asignadas</th>
+                                        <th className="text-center py-2 px-3 font-medium">Acciones</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {r.residentes!.map((res) => {
+                                        const tarjetasH = extractTarjetaIds(
+                                          res.tarjetasAsignadas || []
+                                        );
+                                        const tarjetasB = extractTarjetaIds(
+                                          res.tarjetasSinRenovacion || []
+                                        );
+                                        const allTarjetas = [
+                                          ...tarjetasH,
+                                          ...tarjetasB,
+                                        ];
+                                        return (
+                                          <tr
+                                            key={res.id}
+                                            className="hover:bg-white/50"
+                                          >
+                                            <td className="py-2 px-3 font-medium text-gray-800">
+                                              {res.apePaterno} {res.apeMaterno}{" "}
+                                              {res.nombre}
+                                            </td>
+                                            <td className="py-2 px-3 text-gray-600">
+                                              {res.celular || "—"}
+                                            </td>
+                                            <td className="py-2 px-3 text-gray-600">
+                                              {res.email || "—"}
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <span
+                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                  res.estatusId === 1
+                                                    ? "bg-green-100 text-green-700"
+                                                    : "bg-red-100 text-red-700"
+                                                }`}
+                                              >
+                                                {res.estatusId === 1
+                                                  ? "Activo"
+                                                  : "Baja"}
+                                              </span>
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              {allTarjetas.length === 0 ? (
+                                                <span className="text-gray-400 text-xs">
+                                                  Sin tarjetas
                                                 </span>
-                                              </td>
-                                              <td className="py-2 px-3">
-                                                {allTarjetas.length === 0 ? (
-                                                  <span className="text-gray-400 text-xs">
-                                                    Sin tarjetas
-                                                  </span>
-                                                ) : (
-                                                  <div className="flex flex-wrap gap-1">
-                                                    {allTarjetas.map(
-                                                      (tid, idx) => (
-                                                        <span
-                                                          key={idx}
-                                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-mono"
-                                                        >
-                                                          <CreditCard className="h-3 w-3" />
-                                                          {tid}
-                                                        </span>
-                                                      )
-                                                    )}
+                                              ) : (
+                                                <div className="flex flex-wrap gap-1">
+                                                  {allTarjetas.map(
+                                                    (tid, idx) => (
+                                                      <span
+                                                        key={idx}
+                                                        className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-mono"
+                                                      >
+                                                        <CreditCard className="h-3 w-3" />
+                                                        {tid}
+                                                      </span>
+                                                    )
+                                                  )}
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                  onClick={() => openEditResidente(res, r.id)}
+                                                  className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                                  title="Editar residente"
+                                                >
+                                                  <Pencil className="h-3.5 w-3.5" />
+                                                </button>
+                                                {deleteResidenteConfirm === res.id ? (
+                                                  <div className="flex items-center gap-1">
+                                                    <button
+                                                      onClick={() => handleDeleteResidente(res.id)}
+                                                      className="px-1.5 py-0.5 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
+                                                    >
+                                                      Sí
+                                                    </button>
+                                                    <button
+                                                      onClick={() => setDeleteResidenteConfirm(null)}
+                                                      className="px-1.5 py-0.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition"
+                                                    >
+                                                      No
+                                                    </button>
                                                   </div>
+                                                ) : (
+                                                  <button
+                                                    onClick={() => setDeleteResidenteConfirm(res.id)}
+                                                    className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                                    title="Dar de baja"
+                                                  >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                  </button>
                                                 )}
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
                               )}
                             </div>
@@ -839,6 +985,134 @@ export default function ResidenciasPage() {
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {editing ? "Guardar Cambios" : "Crear Residencia"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Residente */}
+      {residenteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={closeResidenteModal}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {editingResidente ? "Editar Residente" : "Nuevo Residente"}
+              </h2>
+              <button
+                onClick={closeResidenteModal}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {residenteError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {residenteError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={residenteForm.nombre}
+                  onChange={(e) =>
+                    setResidenteForm((prev) => ({ ...prev, nombre: e.target.value }))
+                  }
+                  maxLength={50}
+                  placeholder="Nombre del residente"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Apellido Paterno
+                  </label>
+                  <input
+                    type="text"
+                    value={residenteForm.apePaterno}
+                    onChange={(e) =>
+                      setResidenteForm((prev) => ({ ...prev, apePaterno: e.target.value }))
+                    }
+                    maxLength={50}
+                    placeholder="Ap. Paterno"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Apellido Materno
+                  </label>
+                  <input
+                    type="text"
+                    value={residenteForm.apeMaterno}
+                    onChange={(e) =>
+                      setResidenteForm((prev) => ({ ...prev, apeMaterno: e.target.value }))
+                    }
+                    maxLength={50}
+                    placeholder="Ap. Materno"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Celular
+                </label>
+                <input
+                  type="text"
+                  value={residenteForm.celular}
+                  onChange={(e) =>
+                    setResidenteForm((prev) => ({ ...prev, celular: e.target.value }))
+                  }
+                  maxLength={14}
+                  placeholder="(000) 000-0000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={residenteForm.email}
+                  onChange={(e) =>
+                    setResidenteForm((prev) => ({ ...prev, email: e.target.value }))
+                  }
+                  maxLength={100}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                onClick={closeResidenteModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveResidente}
+                disabled={savingResidente}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {savingResidente && <Loader2 className="h-4 w-4 animate-spin" />}
+                {editingResidente ? "Guardar Cambios" : "Agregar Residente"}
               </button>
             </div>
           </div>

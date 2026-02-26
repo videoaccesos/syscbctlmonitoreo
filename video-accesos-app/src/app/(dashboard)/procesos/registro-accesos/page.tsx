@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ClipboardList,
   Loader2,
-  Phone,
   Clock,
   Filter,
   ShieldCheck,
@@ -957,22 +956,9 @@ export default function RegistroAccesosPage() {
                 </div>
               )}
 
-              {/* Info de la residencia */}
+              {/* Info de la residencia - solo interfon, sin telefonos por seguridad */}
               {selectedResidencia && (
                 <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                  {selectedResidencia.telefono1 && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" /> {selectedResidencia.telefono1}
-                    </span>
-                  )}
-                  {selectedResidencia.telefono2 && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" /> {selectedResidencia.telefono2}
-                    </span>
-                  )}
-                  {selectedResidencia.telefonoInterfon && (
-                    <span>Tel Interfon: {selectedResidencia.telefonoInterfon}</span>
-                  )}
                   {selectedResidencia.observaciones && (
                     <span className="text-amber-600 font-medium">
                       Nota: {selectedResidencia.observaciones}
@@ -1061,11 +1047,6 @@ export default function RegistroAccesosPage() {
                             {s.tipoLabel}
                           </span>
                           <span className="font-medium">{s.nombre}</span>
-                          {s.celular && (
-                            <span className="text-gray-400 text-xs ml-2">
-                              {s.celular}
-                            </span>
-                          )}
                         </button>
                       ))}
                     </div>
@@ -1161,11 +1142,6 @@ export default function RegistroAccesosPage() {
                                   {nombre}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {r.celular && (
-                                    <span className="mr-3">
-                                      Cel: {r.celular}
-                                    </span>
-                                  )}
                                   {r.reportarAcceso === 1 && (
                                     <span className="text-green-600">
                                       Notificar
@@ -1214,11 +1190,6 @@ export default function RegistroAccesosPage() {
                                   {nombre}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {v.celular && (
-                                    <span className="mr-3">
-                                      Cel: {v.celular}
-                                    </span>
-                                  )}
                                   {v.observaciones && (
                                     <span className="text-amber-600">
                                       {v.observaciones.substring(0, 30)}
