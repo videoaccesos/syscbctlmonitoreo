@@ -6,9 +6,21 @@ import { prisma } from "@/lib/prisma";
 // Corregir fechas invalidas (0000-00-00) en la tabla de asignaciones
 async function fixInvalidDates() {
   try {
+    // Desactivar validacion de fechas cero temporalmente
     await prisma.$executeRawUnsafe(
       `SET SESSION sql_mode = REPLACE(REPLACE(@@SESSION.sql_mode, 'NO_ZERO_DATE', ''), 'NO_ZERO_IN_DATE', '')`
     );
+    // Hacer las columnas nullable si no lo son
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE residencias_residentes_tarjetas MODIFY COLUMN fecha_vencimiento DATE NULL`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE residencias_residentes_tarjetas MODIFY COLUMN fecha DATE NULL`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE residencias_residentes_tarjetas MODIFY COLUMN fecha_modificacion DATE NULL`
+    );
+    // Corregir fechas invalidas a NULL
     await prisma.$executeRawUnsafe(
       `UPDATE residencias_residentes_tarjetas SET fecha_vencimiento = NULL WHERE fecha_vencimiento = '0000-00-00'`
     );
