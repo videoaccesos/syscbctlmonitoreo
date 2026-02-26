@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { nombre, apePaterno, apeMaterno, telefono, celular, email, observaciones } = body;
+    const { nombre, apePaterno, apeMaterno, telefono, celular, fechanac, email, observaciones } = body;
 
     if (!nombre) {
       return NextResponse.json(
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         apeMaterno: apeMaterno?.trim() || "",
         telefono: telefono?.trim() || "",
         celular: celular?.trim() || "",
+        fechanac: fechanac?.trim() || "000000",
         email: email?.trim() || "",
         observaciones: observaciones?.trim() || "",
         estatusId: 1,

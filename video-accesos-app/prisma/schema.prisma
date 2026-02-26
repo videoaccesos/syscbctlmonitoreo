@@ -406,6 +406,7 @@ model RegistroGeneral {
   nombre            String   @default("") @db.VarChar(50)
   telefono          String   @default("") @db.VarChar(14)
   celular           String   @default("") @db.VarChar(14)
+  fechanac          String   @default("000000") @db.VarChar(30)
   email             String   @default("") @db.VarChar(100)
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
