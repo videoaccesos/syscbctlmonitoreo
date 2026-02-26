@@ -72,9 +72,10 @@ const emptyForm: FormData = {
 };
 
 const ESTATUS_MAP: Record<number, { label: string; color: string }> = {
-  1: { label: "Activo", color: "bg-green-100 text-green-800" },
-  2: { label: "Sin Interfon", color: "bg-yellow-100 text-yellow-800" },
+  1: { label: "Interfón Activo", color: "bg-green-100 text-green-800" },
+  2: { label: "Sin Interfón", color: "bg-yellow-100 text-yellow-800" },
   3: { label: "Moroso", color: "bg-red-100 text-red-800" },
+  4: { label: "Sin Derechos", color: "bg-gray-100 text-gray-800" },
 };
 
 // ── Componente principal ─────────────────────────────────────────────────────
@@ -276,6 +277,13 @@ export default function ResidenciasPage() {
           Agregar
         </button>
       </div>
+
+      {/* Error global */}
+      {error && !modalOpen && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -662,9 +670,10 @@ export default function ResidenciasPage() {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                 >
-                  <option value="1">Activo</option>
-                  <option value="2">Sin Interfon</option>
+                  <option value="1">Interfón Activo</option>
+                  <option value="2">Sin Interfón</option>
                   <option value="3">Moroso</option>
+                  <option value="4">Sin Derechos</option>
                 </select>
               </div>
 

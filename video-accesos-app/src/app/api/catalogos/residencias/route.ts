@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
     const privadaId = searchParams.get("privadaId");
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
+    // Excluir eliminados (estatus 5) replicando el comportamiento legacy
+    const where: Record<string, unknown> = {
+      estatusId: { not: 5 },
+    };
 
     if (privadaId) {
       where.privadaId = parseInt(privadaId);

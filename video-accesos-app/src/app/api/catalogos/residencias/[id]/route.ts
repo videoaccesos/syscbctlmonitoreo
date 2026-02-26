@@ -22,7 +22,7 @@ export async function GET(
           select: { id: true, descripcion: true },
         },
         residentes: {
-          where: { estatusId: 1 },
+          where: { estatusId: { not: 5 } },
           orderBy: { apePaterno: "asc" },
         },
       },
