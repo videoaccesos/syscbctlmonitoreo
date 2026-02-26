@@ -8,6 +8,26 @@ function placeholders(count: number): string {
   return Array(count).fill("?").join(",");
 }
 
+// SQL helper: genera las 5 ramas UNION ALL para buscar en los 5 slots de tarjeta
+// de AMBAS tablas de asignacion (folio H y folio B)
+function unionTarjetaSlots(
+  tableAlias: string,
+  table: string,
+  condition: string,
+  selectExtra: string = ""
+): string {
+  const slots = ["tarjeta_id", "tarjeta_id2", "tarjeta_id3", "tarjeta_id4", "tarjeta_id5"];
+  return slots
+    .map(
+      (slot) =>
+        `SELECT ${tableAlias}.${slot} AS tid${selectExtra ? ", " + selectExtra : ""} FROM ${table} ${tableAlias}
+         INNER JOIN residencias_residentes res ON ${tableAlias}.residente_id = res.residente_id
+         INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+         WHERE ${condition} AND ${tableAlias}.${slot} != ''`
+    )
+    .join("\nUNION ALL\n");
+}
+
 // GET /api/catalogos/tarjetas - Listar tarjetas con busqueda, filtros y paginacion
 export async function GET(request: NextRequest) {
   try {
@@ -26,44 +46,18 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Si hay filtro por privada, obtener los IDs de tarjetas asignadas a esa privada
-    // Ruta: ResidenteTarjeta -> Residente -> Residencia -> Privada (relacion real, no campo directo)
+    // Busca en AMBAS tablas: folio H (con renovacion) y folio B (sin renovacion)
     let tarjetaIdsForPrivada: number[] | null = null;
     if (privadaId) {
       const pid = parseInt(privadaId, 10);
       if (!isNaN(pid)) {
+        const sqlH = unionTarjetaSlots("rrt", "residencias_residentes_tarjetas", "r.privada_id = ?");
+        const sqlB = unionTarjetaSlots("rrt", "residencias_residentes_tarjetas_no_renovacion", "r.privada_id = ?");
+
         const rows = await prisma.$queryRawUnsafe<Array<{ tid: string }>>(
-          `SELECT DISTINCT tid FROM (
-            SELECT rrt.tarjeta_id AS tid
-            FROM residencias_residentes_tarjetas rrt
-            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
-            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
-            WHERE r.privada_id = ? AND rrt.tarjeta_id != ''
-            UNION ALL
-            SELECT rrt.tarjeta_id2
-            FROM residencias_residentes_tarjetas rrt
-            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
-            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
-            WHERE r.privada_id = ? AND rrt.tarjeta_id2 != ''
-            UNION ALL
-            SELECT rrt.tarjeta_id3
-            FROM residencias_residentes_tarjetas rrt
-            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
-            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
-            WHERE r.privada_id = ? AND rrt.tarjeta_id3 != ''
-            UNION ALL
-            SELECT rrt.tarjeta_id4
-            FROM residencias_residentes_tarjetas rrt
-            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
-            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
-            WHERE r.privada_id = ? AND rrt.tarjeta_id4 != ''
-            UNION ALL
-            SELECT rrt.tarjeta_id5
-            FROM residencias_residentes_tarjetas rrt
-            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
-            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
-            WHERE r.privada_id = ? AND rrt.tarjeta_id5 != ''
-          ) AS t`,
-          pid, pid, pid, pid, pid
+          `SELECT DISTINCT tid FROM (${sqlH} UNION ALL ${sqlB}) AS t`,
+          // 5 params para tabla H + 5 params para tabla B
+          pid, pid, pid, pid, pid, pid, pid, pid, pid, pid
         );
         tarjetaIdsForPrivada = rows
           .map((r) => parseInt(r.tid, 10))
@@ -105,51 +99,41 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Buscar asignaciones de privada para las tarjetas devueltas
-    // Ruta: ResidenteTarjeta -> Residente -> Residencia -> Privada
+    // Busca en AMBAS tablas de asignacion via residente -> residencia -> privada
     const tarjetaIds = tarjetas.map((t) => String(t.id));
-    const tarjetaLecturas = tarjetas.map((t) => t.lectura).filter((l) => l !== "");
     const privadaMap: Record<string, { id: number; descripcion: string }> = {};
 
     if (tarjetaIds.length > 0) {
-      const allValues = [...tarjetaIds, ...tarjetaLecturas];
-      const ph = placeholders(allValues.length);
+      const ph = placeholders(tarjetaIds.length);
+
+      // Tabla H: residencias_residentes_tarjetas
+      const slotsH = ["tarjeta_id", "tarjeta_id2", "tarjeta_id3", "tarjeta_id4", "tarjeta_id5"];
+      const unionsH = slotsH.map(
+        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.${s} IN (${ph}) AND rrt.${s} != ''`
+      ).join("\nUNION ALL\n");
+
+      // Tabla B: residencias_residentes_tarjetas_no_renovacion
+      const unionsB = slotsH.map(
+        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas_no_renovacion rrt WHERE rrt.${s} IN (${ph}) AND rrt.${s} != ''`
+      ).join("\nUNION ALL\n");
+
+      // 10 juegos de parametros: 5 para H + 5 para B
+      const params = Array(10).fill(tarjetaIds).flat();
 
       const assignments = await prisma.$queryRawUnsafe<
         Array<{ tid: string; privada_id: number; descripcion: string }>
       >(
         `SELECT DISTINCT sub.tid, p.privada_id, p.descripcion
-         FROM (
-           SELECT rrt.tarjeta_id AS tid, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id IN (${ph}) AND rrt.tarjeta_id != ''
-           UNION ALL
-           SELECT rrt.tarjeta_id2, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id2 IN (${ph}) AND rrt.tarjeta_id2 != ''
-           UNION ALL
-           SELECT rrt.tarjeta_id3, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id3 IN (${ph}) AND rrt.tarjeta_id3 != ''
-           UNION ALL
-           SELECT rrt.tarjeta_id4, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id4 IN (${ph}) AND rrt.tarjeta_id4 != ''
-           UNION ALL
-           SELECT rrt.tarjeta_id5, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id5 IN (${ph}) AND rrt.tarjeta_id5 != ''
-         ) sub
+         FROM (${unionsH} UNION ALL ${unionsB}) sub
          INNER JOIN residencias_residentes res ON sub.residente_id = res.residente_id
          INNER JOIN residencias r ON res.residencia_id = r.residencia_id
          INNER JOIN privadas p ON r.privada_id = p.privada_id`,
-        ...allValues, ...allValues, ...allValues, ...allValues, ...allValues
+        ...params
       );
 
-      // Mapear: tid puede ser un ID numerico o una lectura
-      const lecturaToId: Record<string, number> = {};
-      for (const t of tarjetas) {
-        lecturaToId[t.lectura] = t.id;
-      }
-
       for (const row of assignments) {
-        const tarjetaId = tarjetaIds.includes(row.tid)
-          ? row.tid
-          : lecturaToId[row.tid] !== undefined
-            ? String(lecturaToId[row.tid])
-            : null;
-
-        if (tarjetaId && !privadaMap[tarjetaId]) {
-          privadaMap[tarjetaId] = {
+        if (!privadaMap[row.tid]) {
+          privadaMap[row.tid] = {
             id: row.privada_id,
             descripcion: row.descripcion,
           };

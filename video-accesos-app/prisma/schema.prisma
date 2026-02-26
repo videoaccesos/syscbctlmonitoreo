@@ -374,8 +374,9 @@ model Residente {
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
   usuarioModId      Int      @default(0) @map("usuario_id")
 
-  residencia        Residencia          @relation(fields: [residenciaId], references: [id])
-  tarjetasAsignadas ResidenteTarjeta[]
+  residencia                  Residencia                      @relation(fields: [residenciaId], references: [id])
+  tarjetasAsignadas           ResidenteTarjeta[]              @relation("TarjetasConRenovacion")
+  tarjetasSinRenovacion       ResidenteTarjetaNoRenovacion[]  @relation("TarjetasSinRenovacion")
 
   @@index([residenciaId])
   @@map("residencias_residentes")
@@ -478,10 +479,53 @@ model ResidenteTarjeta {
   usuarioModId            Int      @default(0) @map("usuario_id")
   observaciones           String   @default("") @db.VarChar(100)
 
-  residente Residente @relation(fields: [residenteId], references: [id])
+  residente Residente @relation("TarjetasConRenovacion", fields: [residenteId], references: [id])
 
   @@index([residenteId])
   @@map("residencias_residentes_tarjetas")
+}
+
+// residencias_residentes_tarjetas_no_renovacion: asignaciones sin renovacion (folio B)
+model ResidenteTarjetaNoRenovacion {
+  id                      Int      @id @default(autoincrement()) @map("asignacion_id")
+  privada                 Int      @default(0)
+  tarjetaId               String   @default("") @map("tarjeta_id") @db.VarChar(11)
+  tarjetaId2              String   @default("") @map("tarjeta_id2") @db.VarChar(11)
+  tarjetaId3              String   @default("") @map("tarjeta_id3") @db.VarChar(11)
+  tarjetaId4              String   @default("") @map("tarjeta_id4") @db.VarChar(11)
+  tarjetaId5              String   @default("") @map("tarjeta_id5") @db.VarChar(11)
+  numeroSerie             String   @default("") @map("numero_serie") @db.VarChar(6)
+  numeroSerie2            String   @default("") @map("numero_serie2") @db.VarChar(6)
+  numeroSerie3            String   @default("") @map("numero_serie3") @db.VarChar(6)
+  numeroSerie4            String   @default("") @map("numero_serie4") @db.VarChar(6)
+  numeroSerie5            String   @default("") @map("numero_serie5") @db.VarChar(6)
+  residenteId             String   @map("residente_id") @db.VarChar(100)
+  compradorId             String   @default("") @map("comprador_id") @db.VarChar(100)
+  mostrarNombreComprador  Int      @default(0) @map("mostrar_nombre_comprador") @db.TinyInt
+  fecha                   DateTime? @db.Date
+  lecturaTipoId           Int      @default(0) @map("lectura_tipo_id") @db.SmallInt
+  lecturaEpc              String   @default("") @map("lectura_epc") @db.VarChar(20)
+  folioContrato           String   @default("") @map("folio_contrato") @db.VarChar(10)
+  precio                  Float    @default(0)
+  descuento               Float    @default(0)
+  IVA                     Float    @default(0)
+  utilizoSeguro           Int      @default(0) @map("utilizo_seguro") @db.TinyInt
+  utilizoSeguro2          Int      @default(0) @map("utilizo_seguro2") @db.TinyInt
+  utilizoSeguro3          Int      @default(0) @map("utilizo_seguro3") @db.TinyInt
+  utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
+  utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
+  concepto                String   @default("") @db.VarChar(100)
+  interfonExtra           Int      @default(0) @map("interfon_extra")
+  estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
+  fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
+  tipoPago                Int      @default(0) @map("tipo_pago")
+  usuarioModId            Int      @default(0) @map("usuario_id")
+  observaciones           String   @default("") @db.VarChar(100)
+
+  residente Residente @relation("TarjetasSinRenovacion", fields: [residenteId], references: [id])
+
+  @@index([residenteId])
+  @@map("residencias_residentes_tarjetas_no_renovacion")
 }
 
 // ============================================================
