@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+
+// Helper: construir placeholders para IN clause
+function placeholders(count: number): string {
+  return Array(count).fill("?").join(",");
+}
 
 // GET /api/catalogos/tarjetas - Listar tarjetas con busqueda, filtros y paginacion
 export async function GET(request: NextRequest) {
@@ -26,19 +30,20 @@ export async function GET(request: NextRequest) {
     if (privadaId) {
       const pid = parseInt(privadaId, 10);
       if (!isNaN(pid)) {
-        const rows = await prisma.$queryRaw<Array<{ tid: string }>>`
-          SELECT DISTINCT tid FROM (
-            SELECT tarjeta_id AS tid FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id != ''
+        const rows = await prisma.$queryRawUnsafe<Array<{ tid: string }>>(
+          `SELECT DISTINCT tid FROM (
+            SELECT tarjeta_id AS tid FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id != ''
             UNION ALL
-            SELECT tarjeta_id2 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id2 != ''
+            SELECT tarjeta_id2 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id2 != ''
             UNION ALL
-            SELECT tarjeta_id3 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id3 != ''
+            SELECT tarjeta_id3 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id3 != ''
             UNION ALL
-            SELECT tarjeta_id4 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id4 != ''
+            SELECT tarjeta_id4 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id4 != ''
             UNION ALL
-            SELECT tarjeta_id5 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id5 != ''
-          ) AS t
-        `;
+            SELECT tarjeta_id5 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id5 != ''
+          ) AS t`,
+          pid, pid, pid, pid, pid
+        );
         tarjetaIdsForPrivada = rows
           .map((r) => parseInt(r.tid, 10))
           .filter((n) => !isNaN(n));
@@ -47,28 +52,20 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {};
 
-    // Filtro por tipoId (1=Peatonal, 2=Vehicular)
     if (tipoId) {
       const tipo = parseInt(tipoId, 10);
-      if (!isNaN(tipo)) {
-        where.tipoId = tipo;
-      }
+      if (!isNaN(tipo)) where.tipoId = tipo;
     }
 
-    // Filtro por estatusId (1=Activa, 2=Asignada, 3=Danada, 4=Consignacion, 5=Baja)
     if (estatusId) {
       const estatus = parseInt(estatusId, 10);
-      if (!isNaN(estatus)) {
-        where.estatusId = estatus;
-      }
+      if (!isNaN(estatus)) where.estatusId = estatus;
     }
 
-    // Busqueda por lectura
     if (search) {
       where.lectura = { contains: search };
     }
 
-    // Filtrar por IDs de tarjetas de la privada
     if (tarjetaIdsForPrivada !== null) {
       if (tarjetaIdsForPrivada.length === 0) {
         return NextResponse.json({ data: [], total: 0, page, limit });
@@ -88,34 +85,53 @@ export async function GET(request: NextRequest) {
 
     // Buscar asignaciones de privada para las tarjetas devueltas
     const tarjetaIds = tarjetas.map((t) => String(t.id));
+    const tarjetaLecturas = tarjetas.map((t) => t.lectura).filter((l) => l !== "");
     let privadaMap: Record<string, { id: number; descripcion: string }> = {};
 
     if (tarjetaIds.length > 0) {
-      // Buscar en la tabla de asignaciones cual privada tiene cada tarjeta
-      const assignments = await prisma.$queryRaw<
+      // Buscar por ID numerico (sistema nuevo) y por lectura (datos legacy)
+      const allValues = [...tarjetaIds, ...tarjetaLecturas];
+      const ph = placeholders(allValues.length);
+
+      const assignments = await prisma.$queryRawUnsafe<
         Array<{ tid: string; privada_id: number; descripcion: string }>
-      >(Prisma.sql`
-        SELECT DISTINCT t.tid, p.privada_id, p.descripcion
-        FROM (
-          SELECT tarjeta_id AS tid, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id IN (${Prisma.join(tarjetaIds)})
-          UNION ALL
-          SELECT tarjeta_id2, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id2 IN (${Prisma.join(tarjetaIds)})
-          UNION ALL
-          SELECT tarjeta_id3, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id3 IN (${Prisma.join(tarjetaIds)})
-          UNION ALL
-          SELECT tarjeta_id4, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id4 IN (${Prisma.join(tarjetaIds)})
-          UNION ALL
-          SELECT tarjeta_id5, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id5 IN (${Prisma.join(tarjetaIds)})
-        ) AS t
-        INNER JOIN privadas p ON t.privada = p.privada_id
-        WHERE t.tid != ''
-      `);
+      >(
+        `SELECT DISTINCT sub.tid, p.privada_id, p.descripcion
+         FROM (
+           SELECT tarjeta_id AS tid, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id IN (${ph}) AND tarjeta_id != ''
+           UNION ALL
+           SELECT tarjeta_id2, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id2 IN (${ph}) AND tarjeta_id2 != ''
+           UNION ALL
+           SELECT tarjeta_id3, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id3 IN (${ph}) AND tarjeta_id3 != ''
+           UNION ALL
+           SELECT tarjeta_id4, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id4 IN (${ph}) AND tarjeta_id4 != ''
+           UNION ALL
+           SELECT tarjeta_id5, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id5 IN (${ph}) AND tarjeta_id5 != ''
+         ) sub
+         INNER JOIN privadas p ON sub.privada = p.privada_id`,
+        ...allValues, ...allValues, ...allValues, ...allValues, ...allValues
+      );
+
+      // Mapear: tid puede ser un ID numerico o una lectura
+      const lecturaToId: Record<string, number> = {};
+      for (const t of tarjetas) {
+        lecturaToId[t.lectura] = t.id;
+      }
 
       for (const row of assignments) {
-        privadaMap[row.tid] = {
-          id: row.privada_id,
-          descripcion: row.descripcion,
-        };
+        // Determinar a que tarjeta corresponde: por ID directo o por lectura
+        const tarjetaId = tarjetaIds.includes(row.tid)
+          ? row.tid
+          : lecturaToId[row.tid] !== undefined
+            ? String(lecturaToId[row.tid])
+            : null;
+
+        if (tarjetaId && !privadaMap[tarjetaId]) {
+          privadaMap[tarjetaId] = {
+            id: row.privada_id,
+            descripcion: row.descripcion,
+          };
+        }
       }
     }
 
@@ -149,7 +165,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Validacion basica
     if (!body.lectura || body.lectura.trim() === "") {
       return NextResponse.json(
         { error: "La lectura es requerida" },
@@ -172,11 +187,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar duplicado por lectura
     const existente = await prisma.tarjeta.findFirst({
-      where: {
-        lectura: body.lectura.trim(),
-      },
+      where: { lectura: body.lectura.trim() },
     });
 
     if (existente) {

@@ -3,6 +3,66 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+// Corregir fechas invalidas (0000-00-00) en la tabla de asignaciones
+async function fixInvalidDates() {
+  try {
+    await prisma.$executeRawUnsafe(
+      `SET SESSION sql_mode = REPLACE(REPLACE(@@SESSION.sql_mode, 'NO_ZERO_DATE', ''), 'NO_ZERO_IN_DATE', '')`
+    );
+    await prisma.$executeRawUnsafe(
+      `UPDATE residencias_residentes_tarjetas SET fecha_vencimiento = NULL WHERE fecha_vencimiento = '0000-00-00'`
+    );
+    await prisma.$executeRawUnsafe(
+      `UPDATE residencias_residentes_tarjetas SET fecha = NULL WHERE fecha = '0000-00-00'`
+    );
+    await prisma.$executeRawUnsafe(
+      `UPDATE residencias_residentes_tarjetas SET fecha_modificacion = NULL WHERE fecha_modificacion = '0000-00-00'`
+    );
+  } catch (e) {
+    console.error("Error al corregir fechas invalidas:", e);
+  }
+}
+
+// Ejecutar query principal de asignaciones
+async function queryAsignaciones(
+  where: Record<string, unknown>,
+  skip: number,
+  limit: number
+) {
+  return Promise.all([
+    prisma.residenteTarjeta.findMany({
+      where,
+      include: {
+        residente: {
+          select: {
+            id: true,
+            nombre: true,
+            apePaterno: true,
+            apeMaterno: true,
+            residencia: {
+              select: {
+                id: true,
+                nroCasa: true,
+                calle: true,
+                privada: {
+                  select: {
+                    id: true,
+                    descripcion: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { id: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.residenteTarjeta.count({ where }),
+  ]);
+}
+
 // GET /api/procesos/asignacion-tarjetas - Listar asignaciones de tarjetas con filtros y paginacion
 export async function GET(request: NextRequest) {
   try {
@@ -26,21 +86,14 @@ export async function GET(request: NextRequest) {
       where.estatusId = parseInt(estatusId, 10);
     }
 
-    // Filtro por privada (a traves de residente -> residencia -> privada)
+    // Filtro por privada: usar el campo directo "privada" en la tabla
     if (privadaId) {
-      where.residente = {
-        residencia: {
-          privadaId: parseInt(privadaId, 10),
-        },
-      };
+      where.privada = parseInt(privadaId, 10);
     }
 
     // Busqueda por nombre de residente
     if (search) {
       where.residente = {
-        ...(typeof where.residente === "object" && where.residente !== null
-          ? where.residente
-          : {}),
         OR: [
           { nombre: { contains: search } },
           { apePaterno: { contains: search } },
@@ -49,38 +102,21 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const [asignaciones, total] = await Promise.all([
-      prisma.residenteTarjeta.findMany({
-        where,
-        include: {
-          residente: {
-            select: {
-              id: true,
-              nombre: true,
-              apePaterno: true,
-              apeMaterno: true,
-              residencia: {
-                select: {
-                  id: true,
-                  nroCasa: true,
-                  calle: true,
-                  privada: {
-                    select: {
-                      id: true,
-                      descripcion: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { fechaModificacion: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.residenteTarjeta.count({ where }),
-    ]);
+    let asignaciones;
+    let total;
+
+    try {
+      [asignaciones, total] = await queryAsignaciones(where, skip, limit);
+    } catch (error: unknown) {
+      // Si falla por fechas invalidas (0000-00-00), corregir y reintentar
+      const prismaError = error as { code?: string };
+      if (prismaError?.code === "P2020") {
+        await fixInvalidDates();
+        [asignaciones, total] = await queryAsignaciones(where, skip, limit);
+      } else {
+        throw error;
+      }
+    }
 
     return NextResponse.json({
       data: asignaciones,
