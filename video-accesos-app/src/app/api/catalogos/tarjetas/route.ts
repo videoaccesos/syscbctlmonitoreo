@@ -26,21 +26,42 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Si hay filtro por privada, obtener los IDs de tarjetas asignadas a esa privada
+    // Ruta: ResidenteTarjeta -> Residente -> Residencia -> Privada (relacion real, no campo directo)
     let tarjetaIdsForPrivada: number[] | null = null;
     if (privadaId) {
       const pid = parseInt(privadaId, 10);
       if (!isNaN(pid)) {
         const rows = await prisma.$queryRawUnsafe<Array<{ tid: string }>>(
           `SELECT DISTINCT tid FROM (
-            SELECT tarjeta_id AS tid FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id != ''
+            SELECT rrt.tarjeta_id AS tid
+            FROM residencias_residentes_tarjetas rrt
+            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
+            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+            WHERE r.privada_id = ? AND rrt.tarjeta_id != ''
             UNION ALL
-            SELECT tarjeta_id2 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id2 != ''
+            SELECT rrt.tarjeta_id2
+            FROM residencias_residentes_tarjetas rrt
+            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
+            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+            WHERE r.privada_id = ? AND rrt.tarjeta_id2 != ''
             UNION ALL
-            SELECT tarjeta_id3 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id3 != ''
+            SELECT rrt.tarjeta_id3
+            FROM residencias_residentes_tarjetas rrt
+            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
+            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+            WHERE r.privada_id = ? AND rrt.tarjeta_id3 != ''
             UNION ALL
-            SELECT tarjeta_id4 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id4 != ''
+            SELECT rrt.tarjeta_id4
+            FROM residencias_residentes_tarjetas rrt
+            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
+            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+            WHERE r.privada_id = ? AND rrt.tarjeta_id4 != ''
             UNION ALL
-            SELECT tarjeta_id5 FROM residencias_residentes_tarjetas WHERE privada = ? AND tarjeta_id5 != ''
+            SELECT rrt.tarjeta_id5
+            FROM residencias_residentes_tarjetas rrt
+            INNER JOIN residencias_residentes res ON rrt.residente_id = res.residente_id
+            INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+            WHERE r.privada_id = ? AND rrt.tarjeta_id5 != ''
           ) AS t`,
           pid, pid, pid, pid, pid
         );
@@ -84,12 +105,12 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Buscar asignaciones de privada para las tarjetas devueltas
+    // Ruta: ResidenteTarjeta -> Residente -> Residencia -> Privada
     const tarjetaIds = tarjetas.map((t) => String(t.id));
     const tarjetaLecturas = tarjetas.map((t) => t.lectura).filter((l) => l !== "");
-    let privadaMap: Record<string, { id: number; descripcion: string }> = {};
+    const privadaMap: Record<string, { id: number; descripcion: string }> = {};
 
     if (tarjetaIds.length > 0) {
-      // Buscar por ID numerico (sistema nuevo) y por lectura (datos legacy)
       const allValues = [...tarjetaIds, ...tarjetaLecturas];
       const ph = placeholders(allValues.length);
 
@@ -98,17 +119,19 @@ export async function GET(request: NextRequest) {
       >(
         `SELECT DISTINCT sub.tid, p.privada_id, p.descripcion
          FROM (
-           SELECT tarjeta_id AS tid, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id IN (${ph}) AND tarjeta_id != ''
+           SELECT rrt.tarjeta_id AS tid, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id IN (${ph}) AND rrt.tarjeta_id != ''
            UNION ALL
-           SELECT tarjeta_id2, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id2 IN (${ph}) AND tarjeta_id2 != ''
+           SELECT rrt.tarjeta_id2, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id2 IN (${ph}) AND rrt.tarjeta_id2 != ''
            UNION ALL
-           SELECT tarjeta_id3, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id3 IN (${ph}) AND tarjeta_id3 != ''
+           SELECT rrt.tarjeta_id3, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id3 IN (${ph}) AND rrt.tarjeta_id3 != ''
            UNION ALL
-           SELECT tarjeta_id4, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id4 IN (${ph}) AND tarjeta_id4 != ''
+           SELECT rrt.tarjeta_id4, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id4 IN (${ph}) AND rrt.tarjeta_id4 != ''
            UNION ALL
-           SELECT tarjeta_id5, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id5 IN (${ph}) AND tarjeta_id5 != ''
+           SELECT rrt.tarjeta_id5, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.tarjeta_id5 IN (${ph}) AND rrt.tarjeta_id5 != ''
          ) sub
-         INNER JOIN privadas p ON sub.privada = p.privada_id`,
+         INNER JOIN residencias_residentes res ON sub.residente_id = res.residente_id
+         INNER JOIN residencias r ON res.residencia_id = r.residencia_id
+         INNER JOIN privadas p ON r.privada_id = p.privada_id`,
         ...allValues, ...allValues, ...allValues, ...allValues, ...allValues
       );
 
@@ -119,7 +142,6 @@ export async function GET(request: NextRequest) {
       }
 
       for (const row of assignments) {
-        // Determinar a que tarjeta corresponde: por ID directo o por lectura
         const tarjetaId = tarjetaIds.includes(row.tid)
           ? row.tid
           : lecturaToId[row.tid] !== undefined

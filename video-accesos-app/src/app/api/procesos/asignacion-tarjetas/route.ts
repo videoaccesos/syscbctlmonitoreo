@@ -86,14 +86,21 @@ export async function GET(request: NextRequest) {
       where.estatusId = parseInt(estatusId, 10);
     }
 
-    // Filtro por privada: usar el campo directo "privada" en la tabla
+    // Filtro por privada (a traves de residente -> residencia -> privada)
     if (privadaId) {
-      where.privada = parseInt(privadaId, 10);
+      where.residente = {
+        residencia: {
+          privadaId: parseInt(privadaId, 10),
+        },
+      };
     }
 
     // Busqueda por nombre de residente
     if (search) {
       where.residente = {
+        ...(typeof where.residente === "object" && where.residente !== null
+          ? where.residente
+          : {}),
         OR: [
           { nombre: { contains: search } },
           { apePaterno: { contains: search } },
