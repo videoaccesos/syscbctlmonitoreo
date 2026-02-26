@@ -303,7 +303,7 @@ model Privada {
   precioVehicular   Int      @default(0) @map("precio_vehicular")
   precioPeatonal    Int      @default(0) @map("precio_peatonal")
   precioMensualidad Int      @default(0) @map("precio_mensualidad")
-  venceContrato     String? @map("vence_contrato")
+  venceContrato     DateTime? @map("vence_contrato") @db.Date
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")

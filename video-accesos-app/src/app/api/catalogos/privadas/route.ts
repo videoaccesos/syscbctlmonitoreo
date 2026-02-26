@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         precioVehicular: parseInt(body.precioVehicular, 10) || 0,
         precioPeatonal: parseInt(body.precioPeatonal, 10) || 0,
         precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
-        venceContrato: body.venceContrato || null,
+        venceContrato: body.venceContrato ? new Date(body.venceContrato) : null,
         observaciones: body.observaciones?.trim() || "",
         estatusId: 1,
         usuarioModId: 0,
