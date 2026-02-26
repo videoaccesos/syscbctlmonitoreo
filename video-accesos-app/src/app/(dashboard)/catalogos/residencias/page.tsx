@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Plus,
   Search,
@@ -8,9 +8,13 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   X,
   Home,
   Loader2,
+  User,
+  CreditCard,
 } from "lucide-react";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -18,6 +22,27 @@ import {
 interface Privada {
   id: number;
   descripcion: string;
+}
+
+interface TarjetaSlots {
+  tarjetaId: string;
+  tarjetaId2: string;
+  tarjetaId3: string;
+  tarjetaId4: string;
+  tarjetaId5: string;
+  estatusId: number;
+}
+
+interface ResidenteInfo {
+  id: string;
+  nombre: string;
+  apePaterno: string;
+  apeMaterno: string;
+  celular: string | null;
+  email: string | null;
+  estatusId: number;
+  tarjetasAsignadas: TarjetaSlots[];
+  tarjetasSinRenovacion: TarjetaSlots[];
 }
 
 interface Residencia {
@@ -32,6 +57,7 @@ interface Residencia {
   observaciones: string | null;
   estatusId: number;
   privada: { id: number; descripcion: string };
+  residentes?: ResidenteInfo[];
 }
 
 interface Pagination {
@@ -100,6 +126,20 @@ export default function ResidenciasPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // ── Helper para extraer IDs de tarjeta de los slots ─────────────────────
+  const extractTarjetaIds = (slots: TarjetaSlots[]): string[] => {
+    const ids: string[] = [];
+    for (const s of slots) {
+      if (s.tarjetaId) ids.push(s.tarjetaId);
+      if (s.tarjetaId2) ids.push(s.tarjetaId2);
+      if (s.tarjetaId3) ids.push(s.tarjetaId3);
+      if (s.tarjetaId4) ids.push(s.tarjetaId4);
+      if (s.tarjetaId5) ids.push(s.tarjetaId5);
+    }
+    return ids;
+  };
 
   // ── Cargar privadas (para dropdown) ──────────────────────────────────────
 
@@ -316,6 +356,7 @@ export default function ResidenciasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="w-10 px-2 py-3"></th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   #Casa
                 </th>
@@ -331,8 +372,8 @@ export default function ResidenciasPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   Tel. Interfon
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  Teléfono
+                <th className="text-center px-4 py-3 font-semibold text-gray-600">
+                  Residentes
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   Estado
@@ -345,14 +386,14 @@ export default function ResidenciasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12">
+                  <td colSpan={9} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
                     <p className="text-gray-400 mt-2 text-sm">Cargando...</p>
                   </td>
                 </tr>
               ) : residencias.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12">
+                  <td colSpan={9} className="text-center py-12">
                     <Home className="h-8 w-8 text-gray-300 mx-auto" />
                     <p className="text-gray-400 mt-2">
                       No se encontraron residencias
@@ -365,70 +406,192 @@ export default function ResidenciasPage() {
                     label: "Desconocido",
                     color: "bg-gray-100 text-gray-800",
                   };
+                  const isExpanded = expandedRow === r.id;
+                  const residenteCount = r.residentes?.length || 0;
                   return (
-                    <tr
-                      key={r.id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {r.nroCasa}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{r.calle}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {r.privada?.descripcion || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {r.interfon || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {r.telefonoInterfon || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {r.telefono1 || "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${estatus.color}`}
-                        >
-                          {estatus.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
+                    <React.Fragment key={r.id}>
+                      <tr
+                        className={`hover:bg-gray-50 transition-colors ${
+                          isExpanded ? "bg-blue-50/50" : ""
+                        }`}
+                      >
+                        <td className="px-2 py-3">
                           <button
-                            onClick={() => openEdit(r)}
-                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="Editar"
+                            onClick={() =>
+                              setExpandedRow(isExpanded ? null : r.id)
+                            }
+                            className="p-1 rounded hover:bg-gray-200 transition"
+                            title={isExpanded ? "Contraer" : "Ver residentes y tarjetas"}
                           >
-                            <Pencil className="h-4 w-4" />
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-gray-500" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-gray-500" />
+                            )}
                           </button>
-                          {deleteConfirm === r.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleDelete(r.id)}
-                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
-                              >
-                                Sí
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirm(null)}
-                                className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition"
-                              >
-                                No
-                              </button>
-                            </div>
-                          ) : (
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {r.nroCasa}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{r.calle}</td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {r.privada?.descripcion || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {r.interfon || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {r.telefonoInterfon || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center gap-1 text-sm text-gray-600">
+                            <User className="h-3.5 w-3.5" />
+                            {residenteCount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${estatus.color}`}
+                          >
+                            {estatus.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => setDeleteConfirm(r.id)}
-                              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Eliminar"
+                              onClick={() => openEdit(r)}
+                              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="Editar"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Pencil className="h-4 w-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                            {deleteConfirm === r.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleDelete(r.id)}
+                                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
+                                >
+                                  Sí
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirm(null)}
+                                  className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirm(r.id)}
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {/* Fila expandida: Residentes y Tarjetas */}
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-0">
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg my-2 p-4">
+                              {residenteCount === 0 ? (
+                                <p className="text-gray-400 text-sm text-center py-2">
+                                  No hay residentes registrados en esta residencia
+                                </p>
+                              ) : (
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                                    <User className="h-4 w-4" />
+                                    Residentes ({residenteCount})
+                                  </h4>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-200">
+                                          <th className="text-left py-2 px-3 font-medium">Nombre</th>
+                                          <th className="text-left py-2 px-3 font-medium">Celular</th>
+                                          <th className="text-left py-2 px-3 font-medium">Email</th>
+                                          <th className="text-left py-2 px-3 font-medium">Estado</th>
+                                          <th className="text-left py-2 px-3 font-medium">Tarjetas Asignadas</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {r.residentes!.map((res) => {
+                                          const tarjetasH = extractTarjetaIds(
+                                            res.tarjetasAsignadas || []
+                                          );
+                                          const tarjetasB = extractTarjetaIds(
+                                            res.tarjetasSinRenovacion || []
+                                          );
+                                          const allTarjetas = [
+                                            ...tarjetasH,
+                                            ...tarjetasB,
+                                          ];
+                                          return (
+                                            <tr
+                                              key={res.id}
+                                              className="hover:bg-white/50"
+                                            >
+                                              <td className="py-2 px-3 font-medium text-gray-800">
+                                                {res.apePaterno} {res.apeMaterno}{" "}
+                                                {res.nombre}
+                                              </td>
+                                              <td className="py-2 px-3 text-gray-600">
+                                                {res.celular || "—"}
+                                              </td>
+                                              <td className="py-2 px-3 text-gray-600">
+                                                {res.email || "—"}
+                                              </td>
+                                              <td className="py-2 px-3">
+                                                <span
+                                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                    res.estatusId === 1
+                                                      ? "bg-green-100 text-green-700"
+                                                      : "bg-red-100 text-red-700"
+                                                  }`}
+                                                >
+                                                  {res.estatusId === 1
+                                                    ? "Activo"
+                                                    : "Baja"}
+                                                </span>
+                                              </td>
+                                              <td className="py-2 px-3">
+                                                {allTarjetas.length === 0 ? (
+                                                  <span className="text-gray-400 text-xs">
+                                                    Sin tarjetas
+                                                  </span>
+                                                ) : (
+                                                  <div className="flex flex-wrap gap-1">
+                                                    {allTarjetas.map(
+                                                      (tid, idx) => (
+                                                        <span
+                                                          key={idx}
+                                                          className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-mono"
+                                                        >
+                                                          <CreditCard className="h-3 w-3" />
+                                                          {tid}
+                                                        </span>
+                                                      )
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}

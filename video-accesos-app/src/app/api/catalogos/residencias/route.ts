@@ -41,6 +41,38 @@ export async function GET(request: NextRequest) {
           privada: {
             select: { id: true, descripcion: true },
           },
+          residentes: {
+            select: {
+              id: true,
+              nombre: true,
+              apePaterno: true,
+              apeMaterno: true,
+              celular: true,
+              email: true,
+              estatusId: true,
+              tarjetasAsignadas: {
+                select: {
+                  tarjetaId: true,
+                  tarjetaId2: true,
+                  tarjetaId3: true,
+                  tarjetaId4: true,
+                  tarjetaId5: true,
+                  estatusId: true,
+                },
+              },
+              tarjetasSinRenovacion: {
+                select: {
+                  tarjetaId: true,
+                  tarjetaId2: true,
+                  tarjetaId3: true,
+                  tarjetaId4: true,
+                  tarjetaId5: true,
+                  estatusId: true,
+                },
+              },
+            },
+            orderBy: { apePaterno: "asc" },
+          },
         },
         orderBy: { id: "desc" },
         skip,
