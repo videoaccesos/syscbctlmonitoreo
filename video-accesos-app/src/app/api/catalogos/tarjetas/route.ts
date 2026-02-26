@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 // GET /api/catalogos/tarjetas - Listar tarjetas con busqueda, filtros y paginacion
 export async function GET(request: NextRequest) {
@@ -15,9 +16,34 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const tipoId = searchParams.get("tipoId");
     const estatusId = searchParams.get("estatusId");
+    const privadaId = searchParams.get("privadaId");
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const skip = (page - 1) * limit;
+
+    // Si hay filtro por privada, obtener los IDs de tarjetas asignadas a esa privada
+    let tarjetaIdsForPrivada: number[] | null = null;
+    if (privadaId) {
+      const pid = parseInt(privadaId, 10);
+      if (!isNaN(pid)) {
+        const rows = await prisma.$queryRaw<Array<{ tid: string }>>`
+          SELECT DISTINCT tid FROM (
+            SELECT tarjeta_id AS tid FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id != ''
+            UNION ALL
+            SELECT tarjeta_id2 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id2 != ''
+            UNION ALL
+            SELECT tarjeta_id3 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id3 != ''
+            UNION ALL
+            SELECT tarjeta_id4 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id4 != ''
+            UNION ALL
+            SELECT tarjeta_id5 FROM residencias_residentes_tarjetas WHERE privada = ${pid} AND tarjeta_id5 != ''
+          ) AS t
+        `;
+        tarjetaIdsForPrivada = rows
+          .map((r) => parseInt(r.tid, 10))
+          .filter((n) => !isNaN(n));
+      }
+    }
 
     const where: Record<string, unknown> = {};
 
@@ -42,6 +68,14 @@ export async function GET(request: NextRequest) {
       where.lectura = { contains: search };
     }
 
+    // Filtrar por IDs de tarjetas de la privada
+    if (tarjetaIdsForPrivada !== null) {
+      if (tarjetaIdsForPrivada.length === 0) {
+        return NextResponse.json({ data: [], total: 0, page, limit });
+      }
+      where.id = { in: tarjetaIdsForPrivada };
+    }
+
     const [tarjetas, total] = await Promise.all([
       prisma.tarjeta.findMany({
         where,
@@ -52,8 +86,46 @@ export async function GET(request: NextRequest) {
       prisma.tarjeta.count({ where }),
     ]);
 
+    // Buscar asignaciones de privada para las tarjetas devueltas
+    const tarjetaIds = tarjetas.map((t) => String(t.id));
+    let privadaMap: Record<string, { id: number; descripcion: string }> = {};
+
+    if (tarjetaIds.length > 0) {
+      // Buscar en la tabla de asignaciones cual privada tiene cada tarjeta
+      const assignments = await prisma.$queryRaw<
+        Array<{ tid: string; privada_id: number; descripcion: string }>
+      >(Prisma.sql`
+        SELECT DISTINCT t.tid, p.privada_id, p.descripcion
+        FROM (
+          SELECT tarjeta_id AS tid, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id IN (${Prisma.join(tarjetaIds)})
+          UNION ALL
+          SELECT tarjeta_id2, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id2 IN (${Prisma.join(tarjetaIds)})
+          UNION ALL
+          SELECT tarjeta_id3, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id3 IN (${Prisma.join(tarjetaIds)})
+          UNION ALL
+          SELECT tarjeta_id4, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id4 IN (${Prisma.join(tarjetaIds)})
+          UNION ALL
+          SELECT tarjeta_id5, privada FROM residencias_residentes_tarjetas WHERE tarjeta_id5 IN (${Prisma.join(tarjetaIds)})
+        ) AS t
+        INNER JOIN privadas p ON t.privada = p.privada_id
+        WHERE t.tid != ''
+      `);
+
+      for (const row of assignments) {
+        privadaMap[row.tid] = {
+          id: row.privada_id,
+          descripcion: row.descripcion,
+        };
+      }
+    }
+
+    const data = tarjetas.map((t) => ({
+      ...t,
+      privadaAsignada: privadaMap[String(t.id)] || null,
+    }));
+
     return NextResponse.json({
-      data: tarjetas,
+      data,
       total,
       page,
       limit,

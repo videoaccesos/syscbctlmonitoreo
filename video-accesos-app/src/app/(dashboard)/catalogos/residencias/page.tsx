@@ -329,6 +329,9 @@ export default function ResidenciasPage() {
                   Interfon
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
+                  Tel. Interfon
+                </th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   Teléfono
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
@@ -342,14 +345,14 @@ export default function ResidenciasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12">
+                  <td colSpan={8} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
                     <p className="text-gray-400 mt-2 text-sm">Cargando...</p>
                   </td>
                 </tr>
               ) : residencias.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12">
+                  <td colSpan={8} className="text-center py-12">
                     <Home className="h-8 w-8 text-gray-300 mx-auto" />
                     <p className="text-gray-400 mt-2">
                       No se encontraron residencias
@@ -376,6 +379,9 @@ export default function ResidenciasPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {r.interfon || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {r.telefonoInterfon || "—"}
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {r.telefono1 || "—"}

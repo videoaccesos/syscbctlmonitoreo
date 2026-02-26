@@ -138,6 +138,7 @@ export async function PUT(
         precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
         venceContrato: body.venceContrato ? new Date(body.venceContrato) : null,
         observaciones: body.observaciones?.trim() || "",
+        ...(body.estatusId ? { estatusId: parseInt(body.estatusId, 10) } : {}),
       },
     });
 

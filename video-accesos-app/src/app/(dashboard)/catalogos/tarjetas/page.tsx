@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /* ---------- tipos ---------- */
+interface Privada {
+  id: number;
+  descripcion: string;
+}
+
 interface Tarjeta {
   id: number;
   lectura: string;
@@ -11,6 +16,7 @@ interface Tarjeta {
   tipoId: number;
   estatusId: number;
   fecha: string | null;
+  privadaAsignada: { id: number; descripcion: string } | null;
 }
 
 interface ApiResponse {
@@ -50,6 +56,7 @@ type FormData = typeof emptyForm;
 export default function TarjetasPage() {
   /* ---------- state ---------- */
   const [items, setItems] = useState<Tarjeta[]>([]);
+  const [privadas, setPrivadas] = useState<Privada[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -61,6 +68,7 @@ export default function TarjetasPage() {
   // filtros
   const [filterEstatus, setFilterEstatus] = useState("");
   const [filterTipo, setFilterTipo] = useState("");
+  const [filterPrivadaId, setFilterPrivadaId] = useState("");
 
   // modal
   const [showModal, setShowModal] = useState(false);
@@ -73,6 +81,22 @@ export default function TarjetasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Tarjeta | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /* ---------- fetch privadas ---------- */
+  const fetchPrivadas = useCallback(async () => {
+    try {
+      const res = await fetch("/api/catalogos/privadas?pageSize=200&estatusId=1");
+      if (!res.ok) return;
+      const json = await res.json();
+      setPrivadas(json.data || []);
+    } catch {
+      console.error("Error al cargar privadas");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPrivadas();
+  }, [fetchPrivadas]);
+
   /* ---------- fetch ---------- */
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -84,6 +108,7 @@ export default function TarjetasPage() {
       if (search) params.set("search", search);
       if (filterEstatus) params.set("estatusId", filterEstatus);
       if (filterTipo) params.set("tipoId", filterTipo);
+      if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
 
       const res = await fetch(`/api/catalogos/tarjetas?${params}`);
       if (!res.ok) throw new Error("Error al obtener tarjetas");
@@ -96,7 +121,7 @@ export default function TarjetasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, filterEstatus, filterTipo]);
+  }, [page, pageSize, search, filterEstatus, filterTipo, filterPrivadaId]);
 
   useEffect(() => {
     fetchData();
@@ -115,6 +140,9 @@ export default function TarjetasPage() {
   const clearSearch = () => {
     setSearchInput("");
     setSearch("");
+    setFilterEstatus("");
+    setFilterTipo("");
+    setFilterPrivadaId("");
     setPage(1);
   };
 
@@ -230,6 +258,8 @@ export default function TarjetasPage() {
     }
   };
 
+  const hasFilters = search || filterEstatus || filterTipo || filterPrivadaId;
+
   /* ================================================================ */
   /* RENDER                                                           */
   /* ================================================================ */
@@ -271,7 +301,7 @@ export default function TarjetasPage() {
           >
             Buscar
           </button>
-          {search && (
+          {hasFilters && (
             <button
               onClick={clearSearch}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition"
@@ -282,7 +312,7 @@ export default function TarjetasPage() {
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-600">Estado:</label>
             <select
@@ -316,6 +346,24 @@ export default function TarjetasPage() {
               <option value="2">Vehicular</option>
             </select>
           </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">Privada:</label>
+            <select
+              value={filterPrivadaId}
+              onChange={(e) => {
+                setFilterPrivadaId(e.target.value);
+                setPage(1);
+              }}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todas</option>
+              {privadas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.descripcion}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -329,6 +377,7 @@ export default function TarjetasPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Lectura</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Nro. Serie</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Tipo</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Privada</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Estado</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Fecha</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
@@ -337,13 +386,13 @@ export default function TarjetasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={8} className="text-center py-12 text-gray-400">
                     Cargando...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={8} className="text-center py-12 text-gray-400">
                     No se encontraron tarjetas
                   </td>
                 </tr>
@@ -361,6 +410,9 @@ export default function TarjetasPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">
                       {TIPOS[item.tipoId] || `Tipo ${item.tipoId}`}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {item.privadaAsignada ? item.privadaAsignada.descripcion : "-"}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
