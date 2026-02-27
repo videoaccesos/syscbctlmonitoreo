@@ -185,6 +185,7 @@ export default function AccesPhone({
   const setupSessionEvents = useCallback(
     (session: RTCSession, callerNumber: string) => {
       session.on("accepted", () => {
+        console.log("[AccesPhone] Session accepted");
         setRinging(false);
         setInCall(true);
         if (ringtoneRef.current) {
@@ -195,23 +196,47 @@ export default function AccesPhone({
       });
 
       session.on("confirmed", () => {
+        console.log("[AccesPhone] Session confirmed");
         attachRemoteAudio(session);
       });
 
-      session.on("ended", () => {
+      session.on("ended", (e) => {
+        console.log("[AccesPhone] Session ended:", e?.cause || "unknown cause");
         cleanupCall();
         onCallEndedRef.current?.();
       });
 
-      session.on("failed", () => {
+      session.on("failed", (e) => {
+        console.error("[AccesPhone] Session failed:", e?.cause || "unknown cause", e?.message?.reason_phrase || "");
         cleanupCall();
         onCallEndedRef.current?.();
       });
 
       session.on("peerconnection", (e) => {
+        console.log("[AccesPhone] PeerConnection created");
         const pc = e.peerconnection;
         if (pc) {
+          pc.onicegatheringstatechange = () => {
+            console.log("[AccesPhone] ICE gathering state:", pc.iceGatheringState);
+          };
+          pc.oniceconnectionstatechange = () => {
+            console.log("[AccesPhone] ICE connection state:", pc.iceConnectionState);
+          };
+          pc.onconnectionstatechange = () => {
+            console.log("[AccesPhone] Connection state:", pc.connectionState);
+          };
+          pc.onsignalingstatechange = () => {
+            console.log("[AccesPhone] Signaling state:", pc.signalingState);
+          };
+          pc.onicecandidate = (event) => {
+            if (event.candidate) {
+              console.log("[AccesPhone] ICE candidate:", event.candidate.candidate);
+            } else {
+              console.log("[AccesPhone] ICE gathering complete (null candidate)");
+            }
+          };
           pc.ontrack = (event: RTCTrackEvent) => {
+            console.log("[AccesPhone] Remote track received:", event.track.kind, event.track.readyState);
             if (!remoteAudioRef.current) return;
             if (event.streams?.[0]) {
               remoteAudioRef.current.srcObject = event.streams[0];
@@ -290,10 +315,12 @@ export default function AccesPhone({
 
       ua.on("newRTCSession", (data: IncomingRTCSessionEvent | OutgoingRTCSessionEvent) => {
         const session = data.session;
+        console.log("[AccesPhone] newRTCSession - originator:", data.originator, "direction:", session.direction);
 
         if (data.originator === "remote") {
           // Incoming call
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
+          console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
 
           sessionRef.current = session;
           setRinging(true);
@@ -344,12 +371,22 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   const answerCall = useCallback(() => {
     if (sessionRef.current) {
-      sessionRef.current.answer({
-        mediaConstraints: { audio: true, video: false },
-        pcConfig: {
-          iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
-        },
-      });
+      try {
+        console.log("[AccesPhone] Attempting to answer call...");
+        console.log("[AccesPhone] Session status:", sessionRef.current.status);
+        console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
+        sessionRef.current.answer({
+          mediaConstraints: { audio: true, video: false },
+          pcConfig: {
+            iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+          },
+        });
+        console.log("[AccesPhone] answer() called successfully");
+      } catch (err) {
+        console.error("[AccesPhone] Error answering call:", err);
+      }
+    } else {
+      console.warn("[AccesPhone] No session to answer");
     }
   }, []);
 
