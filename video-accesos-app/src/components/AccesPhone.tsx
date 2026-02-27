@@ -31,10 +31,14 @@ const RECONNECT_MAX_ATTEMPTS = 0;  // 0 = unlimited
 // ---------------------------------------------------------------------------
 
 interface AccesPhoneConfig {
-  sipUri: string;
-  sipPassword: string;
   wsServer: string;
+  extension: string;
+  sipPassword: string;
+  sipDomain: string;
   displayName: string;
+  cameraProxyUrl: string;
+  cameraRefreshMs: number;
+  videoAutoOnCall: boolean;
 }
 
 interface CallInfo {
@@ -51,10 +55,14 @@ interface AccesPhoneProps {
 
 // Default SIP config - stored in localStorage
 const DEFAULT_CONFIG: AccesPhoneConfig = {
-  sipUri: "1001@accessbotpbx.info",
-  sipPassword: "",
   wsServer: "wss://accessbotpbx.info:8089/ws",
+  extension: "",
+  sipPassword: "",
+  sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
+  cameraProxyUrl: "camera_proxy.php",
+  cameraRefreshMs: 500,
+  videoAutoOnCall: true,
 };
 
 const STORAGE_KEY = "accesphone_config";
@@ -326,7 +334,7 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   const connectSIPInternal = useCallback(async () => {
     if (uaRef.current) return;
-    if (!config.sipUri || !config.sipPassword || !config.wsServer) {
+    if (!config.extension || !config.sipPassword || !config.wsServer || !config.sipDomain) {
       setStatusText("Configure SIP primero");
       setShowSettings(true);
       return;
@@ -341,15 +349,14 @@ export default function AccesPhone({
       const JsSIP = await import("jssip");
 
       const socket = new JsSIP.WebSocketInterface(config.wsServer);
-      const uriParts = config.sipUri.split("@");
-      const sipDomain = uriParts[1] || "accessbotpbx.info";
+      const sipUri = `sip:${config.extension}@${config.sipDomain}`;
 
       const ua = new JsSIP.UA({
         sockets: [socket],
-        uri: `sip:${config.sipUri}`,
+        uri: sipUri,
         password: config.sipPassword,
         display_name: config.displayName,
-        realm: sipDomain,
+        realm: config.sipDomain,
         register: true,
         register_expires: 300,
         session_timers: false,
@@ -565,17 +572,18 @@ export default function AccesPhone({
   const saveSettings = () => {
     saveConfigToStorage(config);
     setShowSettings(false);
+    // Always reconnect after saving (like the original "Guardar y Conectar")
     if (uaRef.current) {
       disconnectSIP();
-      setTimeout(() => connectSIP(), 500);
     }
+    setTimeout(() => connectSIP(), 500);
   };
 
   // Auto-connect on mount if credentials are saved
   useEffect(() => {
     mountedRef.current = true;
     const cfg = loadConfig();
-    if (cfg.sipUri && cfg.sipPassword && cfg.wsServer) {
+    if (cfg.extension && cfg.sipPassword && cfg.wsServer && cfg.sipDomain) {
       console.log("[AccesPhone] Credenciales encontradas, auto-conectando...");
       // Small delay to let the component fully mount
       const t = setTimeout(() => {
@@ -889,33 +897,6 @@ export default function AccesPhone({
             <div className="p-6 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">
-                  URI SIP (usuario@dominio)
-                </label>
-                <input
-                  type="text"
-                  value={config.sipUri}
-                  onChange={(e) =>
-                    setConfig({ ...config, sipUri: e.target.value })
-                  }
-                  placeholder="1001@accessbotpbx.info"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Contrasena SIP
-                </label>
-                <input
-                  type="password"
-                  value={config.sipPassword}
-                  onChange={(e) =>
-                    setConfig({ ...config, sipPassword: e.target.value })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
                   Servidor WebSocket
                 </label>
                 <input
@@ -930,17 +911,93 @@ export default function AccesPhone({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Nombre para mostrar
+                  Extension
                 </label>
                 <input
                   type="text"
-                  value={config.displayName}
+                  value={config.extension}
                   onChange={(e) =>
-                    setConfig({ ...config, displayName: e.target.value })
+                    setConfig({ ...config, extension: e.target.value })
                   }
-                  placeholder="Monitoreo"
+                  placeholder="103"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Contrasena
+                </label>
+                <input
+                  type="password"
+                  value={config.sipPassword}
+                  onChange={(e) =>
+                    setConfig({ ...config, sipPassword: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Dominio SIP
+                </label>
+                <input
+                  type="text"
+                  value={config.sipDomain}
+                  onChange={(e) =>
+                    setConfig({ ...config, sipDomain: e.target.value })
+                  }
+                  placeholder="accessbotpbx.info"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Separador - Configuracion de Video */}
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Video / Camaras</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  URL Proxy Camaras
+                </label>
+                <input
+                  type="text"
+                  value={config.cameraProxyUrl}
+                  onChange={(e) =>
+                    setConfig({ ...config, cameraProxyUrl: e.target.value })
+                  }
+                  placeholder="camera_proxy.php"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Refresh (ms)
+                </label>
+                <input
+                  type="number"
+                  value={config.cameraRefreshMs}
+                  onChange={(e) =>
+                    setConfig({ ...config, cameraRefreshMs: parseInt(e.target.value) || 500 })
+                  }
+                  placeholder="500"
+                  min={100}
+                  max={10000}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="videoAutoOnCall"
+                  checked={config.videoAutoOnCall}
+                  onChange={(e) =>
+                    setConfig({ ...config, videoAutoOnCall: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="videoAutoOnCall" className="text-sm text-gray-700">
+                  Video automatico en llamadas
+                </label>
               </div>
             </div>
             <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
@@ -952,9 +1009,9 @@ export default function AccesPhone({
               </button>
               <button
                 onClick={saveSettings}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition"
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
               >
-                Guardar
+                Guardar y Conectar
               </button>
             </div>
           </div>
