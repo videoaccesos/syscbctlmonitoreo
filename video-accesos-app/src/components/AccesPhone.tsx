@@ -207,7 +207,8 @@ export default function AccesPhone({
       });
 
       session.on("failed", (e) => {
-        console.error("[AccesPhone] Session failed:", e?.cause || "unknown cause", e?.message?.reason_phrase || "");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        console.error("[AccesPhone] Session failed:", e?.cause || "unknown cause", (e?.message as any)?.reason_phrase || "");
         cleanupCall();
         onCallEndedRef.current?.();
       });
