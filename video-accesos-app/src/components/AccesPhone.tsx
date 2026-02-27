@@ -323,21 +323,27 @@ export default function AccesPhone({
   // Connect / Disconnect SIP
   // -----------------------------------------------------------
   const connectSIPInternal = useCallback(async () => {
-    console.log('[AccesPhone] connectSIPInternal LLAMADO', {
-      yaConectado: !!uaRef.current,
-      extension: configRef.current.extension || '(vacío)',
-      wsServer: configRef.current.wsServer || '(vacío)',
-      sipDomain: configRef.current.sipDomain || '(vacío)',
-      tienePassword: !!configRef.current.sipPassword,
-    });
-
     if (uaRef.current) {
       console.log('[AccesPhone] Ya hay un UA activo, saliendo');
       return;
     }
 
-    // Read config from ref to avoid stale closures
-    const cfg = configRef.current;
+    // Read config from ref, but fallback to localStorage if ref is stale
+    // (React Strict Mode can cause configRef to be overwritten with defaults)
+    let cfg = configRef.current;
+    if (!cfg.extension || !cfg.sipPassword) {
+      console.log('[AccesPhone] configRef incompleto, releyendo localStorage...');
+      cfg = loadConfig();
+      configRef.current = cfg;
+    }
+
+    console.log('[AccesPhone] connectSIPInternal LLAMADO', {
+      extension: cfg.extension || '(vacío)',
+      wsServer: cfg.wsServer || '(vacío)',
+      sipDomain: cfg.sipDomain || '(vacío)',
+      tienePassword: !!cfg.sipPassword,
+    });
+
     if (!cfg.extension || !cfg.sipPassword || !cfg.wsServer || !cfg.sipDomain) {
       console.warn('[AccesPhone] Config incompleta, mostrando settings');
       setStatusText("Configure SIP primero");
