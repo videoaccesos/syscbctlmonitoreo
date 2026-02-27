@@ -552,6 +552,48 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
+  // Helper: try to get microphone, fallback to silent stream if not available
+  const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
+    // First, enumerate devices for diagnostics
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((d) => d.kind === "audioinput");
+      console.log("[AccesPhone] Audio input devices found:", audioInputs.length);
+      audioInputs.forEach((d, i) => {
+        console.log(`[AccesPhone]   mic[${i}]: "${d.label}" id=${d.deviceId.substring(0, 8)}...`);
+      });
+      if (audioInputs.length === 0) {
+        console.warn("[AccesPhone] NO audio input devices detected!");
+      }
+    } catch (enumErr) {
+      console.warn("[AccesPhone] Could not enumerate devices:", enumErr);
+    }
+
+    // Try to get real microphone
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log("[AccesPhone] Microphone acquired OK");
+      return stream;
+    } catch (micErr) {
+      console.warn("[AccesPhone] Microphone unavailable:", micErr);
+      console.log("[AccesPhone] Creating silent audio stream as fallback (listen-only mode)");
+
+      // Create a silent audio stream so the call can still connect
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const dst = ctx.createMediaStreamDestination();
+      oscillator.connect(dst);
+      oscillator.start();
+      // Immediately stop to produce silence
+      const silentStream = dst.stream;
+      silentStream.getAudioTracks().forEach((t) => {
+        t.enabled = false; // muted silent track
+      });
+      console.log("[AccesPhone] Silent fallback stream created - call will be LISTEN-ONLY");
+      return silentStream;
+    }
+  }, []);
+
   const answerCall = useCallback(async () => {
     if (!sessionRef.current) {
       console.warn("[AccesPhone] No session to answer");
@@ -562,21 +604,18 @@ export default function AccesPhone({
       console.log("[AccesPhone] Session status:", sessionRef.current.status);
       console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
 
-      // Pre-acquire media stream to avoid NotReadableError
-      console.log("[AccesPhone] Pre-acquiring microphone...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
-      console.log("[AccesPhone] Microphone acquired OK, tracks:", stream.getAudioTracks().length);
 
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
       });
-      console.log("[AccesPhone] answer() called successfully with pre-acquired stream");
+      console.log("[AccesPhone] answer() called successfully");
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
     }
-  }, []);
+  }, [acquireMicOrFallback]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
@@ -617,11 +656,9 @@ export default function AccesPhone({
     if (!dialNumber || !connected || !uaRef.current) return;
 
     try {
-      // Pre-acquire media stream to avoid NotReadableError
-      console.log("[AccesPhone] Pre-acquiring microphone for outgoing call...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log("[AccesPhone] Preparing outgoing call to:", dialNumber);
+      const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
-      console.log("[AccesPhone] Microphone acquired OK for call to:", dialNumber);
 
       const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
         mediaConstraints: { audio: true, video: false },
@@ -643,10 +680,10 @@ export default function AccesPhone({
 
       setupSessionEvents(session, dialNumber);
     } catch (err) {
-      console.error("[AccesPhone] Error starting call (microphone?):", err);
-      setStatusText("Error: no se pudo acceder al micrófono");
+      console.error("[AccesPhone] Error starting call:", err);
+      setStatusText("Error al iniciar llamada");
     }
-  }, [dialNumber, connected, setupSessionEvents]);
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback]);
 
   // -----------------------------------------------------------
   // Settings
