@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import dynamic from "next/dynamic";
 import {
   Search,
   X,
@@ -17,7 +18,13 @@ import {
   UserPlus,
   Users,
   Eye,
+  PhoneIncoming,
 } from "lucide-react";
+
+// Dynamic import - JsSIP requires browser APIs (WebRTC, WebSocket)
+const AccesPhone = dynamic(() => import("@/components/AccesPhone"), {
+  ssr: false,
+});
 
 // ---------------------------------------------------------------------------
 // Types
@@ -275,6 +282,18 @@ export default function RegistroAccesosPage() {
     "residentes"
   );
 
+  // Incoming call notification
+  const [incomingCallNumber, setIncomingCallNumber] = useState("");
+  const [incomingCallResidencia, setIncomingCallResidencia] = useState<{
+    id: number;
+    nroCasa: string;
+    calle: string;
+    privada: { id: number; descripcion: string };
+    observaciones: string | null;
+    estatusId: number;
+  } | null>(null);
+  const [lookingUpCaller, setLookingUpCaller] = useState(false);
+
   // Registro General modal
   const [showRegGeneral, setShowRegGeneral] = useState(false);
   const [regNombre, setRegNombre] = useState("");
@@ -520,6 +539,73 @@ export default function RegistroAccesosPage() {
     setTimerSeconds(0);
   };
 
+  // -----------------------------------------------------------
+  // AccesPhone - Incoming call handler
+  // -----------------------------------------------------------
+  const handleIncomingCall = useCallback(
+    async (callerNumber: string) => {
+      setIncomingCallNumber(callerNumber);
+      setIncomingCallResidencia(null);
+      setLookingUpCaller(true);
+
+      try {
+        const res = await fetch(
+          `/api/procesos/registro-accesos/buscar-por-telefono?telefono=${encodeURIComponent(callerNumber)}`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          if (json.found && json.data) {
+            setIncomingCallResidencia({
+              id: json.data.id,
+              nroCasa: json.data.nroCasa,
+              calle: json.data.calle,
+              privada: json.data.privada,
+              observaciones: json.data.observaciones,
+              estatusId: json.data.estatusId,
+            });
+
+            // Auto-populate form: select privada and residencia
+            const privId = String(json.data.privada.id);
+            setFormPrivadaId(privId);
+            setSelectedResidencia(json.data);
+            setResidencias([]);
+            setResidenciaSearch("");
+            setFormSolicitanteId("");
+            setFormSolicitanteNombre("");
+
+            // Start timer for new registro
+            setTimerRunning(true);
+            setTimerSeconds(0);
+          }
+        }
+      } catch {
+        console.error("Error al buscar residencia por telefono");
+      } finally {
+        setLookingUpCaller(false);
+      }
+    },
+    []
+  );
+
+  const handleCallAnswered = useCallback(
+    (callerNumber: string) => {
+      // If we found a residencia, ensure timer is running
+      if (incomingCallResidencia) {
+        if (!timerRunning) {
+          setTimerRunning(true);
+          setTimerSeconds(0);
+        }
+      }
+      setIncomingCallNumber(callerNumber);
+    },
+    [incomingCallResidencia, timerRunning]
+  );
+
+  const handleCallEnded = useCallback(() => {
+    setIncomingCallNumber("");
+    // Don't clear the form - let the operator finish the registro
+  }, []);
+
   const selectSolicitante = (id: string, nombre: string) => {
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombre);
@@ -740,6 +826,57 @@ export default function RegistroAccesosPage() {
           </div>
         </div>
       </div>
+
+      {/* Incoming call banner */}
+      {incomingCallNumber && (
+        <div className={`rounded-lg border px-4 py-3 flex items-center gap-3 ${
+          incomingCallResidencia
+            ? "bg-green-50 border-green-300"
+            : lookingUpCaller
+              ? "bg-yellow-50 border-yellow-300"
+              : "bg-orange-50 border-orange-300"
+        }`}>
+          <PhoneIncoming className={`h-5 w-5 ${
+            incomingCallResidencia ? "text-green-600" : "text-orange-600"
+          }`} />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-gray-900">
+              Llamada entrante: {incomingCallNumber}
+            </div>
+            {lookingUpCaller && (
+              <div className="text-xs text-yellow-700 flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Buscando residencia...
+              </div>
+            )}
+            {incomingCallResidencia && (
+              <div className="text-xs text-green-700">
+                Identificado: <strong>{incomingCallResidencia.privada.descripcion}</strong>
+                {" - "}#{incomingCallResidencia.nroCasa} {incomingCallResidencia.calle}
+                {incomingCallResidencia.observaciones && (
+                  <span className="text-red-600 ml-2 font-semibold">
+                    NOTA: {incomingCallResidencia.observaciones}
+                  </span>
+                )}
+              </div>
+            )}
+            {!lookingUpCaller && !incomingCallResidencia && (
+              <div className="text-xs text-orange-700">
+                Numero no encontrado en el sistema
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              setIncomingCallNumber("");
+              setIncomingCallResidencia(null);
+            }}
+            className="p-1 text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Messages */}
       {error && (
@@ -1584,6 +1721,15 @@ export default function RegistroAccesosPage() {
       {/* ================================================================= */}
       {/* Modal Registrar nueva persona                                      */}
       {/* ================================================================= */}
+      {/* ================================================================= */}
+      {/* AccesPhone Softphone Widget                                       */}
+      {/* ================================================================= */}
+      <AccesPhone
+        onIncomingCall={handleIncomingCall}
+        onCallAnswered={handleCallAnswered}
+        onCallEnded={handleCallEnded}
+      />
+
       {showRegGeneral && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
