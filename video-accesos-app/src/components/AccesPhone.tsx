@@ -137,6 +137,18 @@ export default function AccesPhone({
     onCallEndedRef.current = onCallEnded;
   }, [onIncomingCall, onCallAnswered, onCallEnded]);
 
+  // Stable refs to avoid stale closures in async callbacks / timers
+  const configRef = useRef<AccesPhoneConfig>(DEFAULT_CONFIG);
+  const reconnectAttemptRef = useRef(0);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  useEffect(() => {
+    reconnectAttemptRef.current = reconnectAttempt;
+  }, [reconnectAttempt]);
+
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
@@ -252,6 +264,9 @@ export default function AccesPhone({
     [cleanupCall, speakerOn]
   );
 
+  // Ref to always hold the latest connectSIPInternal (avoids stale closures in timers)
+  const connectSIPInternalRef = useRef<(() => Promise<void>) | undefined>(undefined);
+
   // -----------------------------------------------------------
   // Schedule auto-reconnect (exponential backoff)
   // -----------------------------------------------------------
@@ -272,6 +287,7 @@ export default function AccesPhone({
     console.log(`[AccesPhone] Reconectando en ${delay / 1000}s (intento ${attempt + 1})...`);
     setReconnecting(true);
     setReconnectAttempt(attempt + 1);
+    reconnectAttemptRef.current = attempt + 1;
     setStatusText(`Reconectando en ${Math.round(delay / 1000)}s...`);
 
     reconnectTimerRef.current = setTimeout(() => {
@@ -286,10 +302,9 @@ export default function AccesPhone({
         uaRef.current = null;
       }
       setReconnecting(false);
-      // connectSIP will be called via the effect below
-      connectSIPInternal();
+      // Call via ref to always get the latest version (avoids stale closure)
+      connectSIPInternalRef.current?.();
     }, delay);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // -----------------------------------------------------------
@@ -309,7 +324,10 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   const connectSIPInternal = useCallback(async () => {
     if (uaRef.current) return;
-    if (!config.extension || !config.sipPassword || !config.wsServer || !config.sipDomain) {
+
+    // Read config from ref to avoid stale closures
+    const cfg = configRef.current;
+    if (!cfg.extension || !cfg.sipPassword || !cfg.wsServer || !cfg.sipDomain) {
       setStatusText("Configure SIP primero");
       setShowSettings(true);
       return;
@@ -323,13 +341,13 @@ export default function AccesPhone({
       // Dynamic import to avoid SSR issues
       const JsSIP = await import("jssip");
 
-      const socket = new JsSIP.WebSocketInterface(config.wsServer);
-      const sipUri = `sip:${config.extension}@${config.sipDomain}`;
+      const socket = new JsSIP.WebSocketInterface(cfg.wsServer);
+      const sipUri = `sip:${cfg.extension}@${cfg.sipDomain}`;
 
       const ua = new JsSIP.UA({
         sockets: [socket],
         uri: sipUri,
-        password: config.sipPassword,
+        password: cfg.sipPassword,
         register: true,
         register_expires: 600,
         session_timers: false,
@@ -346,22 +364,16 @@ export default function AccesPhone({
         setConnected(false);
         setConnecting(false);
 
-        // Clean up the old UA reference
-        if (uaRef.current) {
-          try {
-            uaRef.current.stop();
-          } catch {
-            // ignore
-          }
-          uaRef.current = null;
-        }
+        // Just clear the reference - do NOT call ua.stop() here as it can
+        // fire another 'disconnected' event recursively
+        uaRef.current = null;
 
         if (manualDisconnectRef.current) {
           setStatusText("Desconectado");
         } else {
-          // Auto-reconnect
+          // Auto-reconnect - read attempt from ref to avoid stale closure
           setStatusText("Conexion perdida");
-          scheduleReconnect(reconnectAttempt);
+          scheduleReconnect(reconnectAttemptRef.current);
         }
       });
 
@@ -371,6 +383,7 @@ export default function AccesPhone({
         setConnecting(false);
         setReconnecting(false);
         setReconnectAttempt(0);
+        reconnectAttemptRef.current = 0;
         setStatusText("Registrado");
       });
 
@@ -388,7 +401,7 @@ export default function AccesPhone({
 
         // If registration fails but WS is connected, schedule retry
         if (!manualDisconnectRef.current) {
-          scheduleReconnect(reconnectAttempt);
+          scheduleReconnect(reconnectAttemptRef.current);
         }
       });
 
@@ -433,17 +446,25 @@ export default function AccesPhone({
 
       // Schedule reconnect on connection error
       if (!manualDisconnectRef.current) {
-        scheduleReconnect(reconnectAttempt);
+        scheduleReconnect(reconnectAttemptRef.current);
       }
     }
-  }, [config, setupSessionEvents, scheduleReconnect, reconnectAttempt]);
+  // Dependencies: only setupSessionEvents (for session handling) and scheduleReconnect
+  // Config is read from configRef, reconnectAttempt from reconnectAttemptRef
+  }, [setupSessionEvents, scheduleReconnect]);
+
+  // Keep ref in sync so timers always call the latest version
+  useEffect(() => {
+    connectSIPInternalRef.current = connectSIPInternal;
+  }, [connectSIPInternal]);
 
   // Public connect (resets manual disconnect flag)
   const connectSIP = useCallback(() => {
     manualDisconnectRef.current = false;
     cancelReconnect();
-    connectSIPInternal();
-  }, [connectSIPInternal, cancelReconnect]);
+    // Call via ref to always get the latest version
+    connectSIPInternalRef.current?.();
+  }, [cancelReconnect]);
 
   const disconnectSIP = useCallback(() => {
     manualDisconnectRef.current = true;
@@ -543,12 +564,15 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   const saveSettings = () => {
     saveConfigToStorage(config);
+    // Also update the ref immediately so reconnect sees the new config
+    configRef.current = config;
     setShowSettings(false);
     // Always reconnect after saving (like the original "Guardar y Conectar")
     if (uaRef.current) {
       disconnectSIP();
     }
-    setTimeout(() => connectSIP(), 500);
+    // Use ref to avoid stale closure
+    setTimeout(() => connectSIPInternalRef.current?.(), 500);
   };
 
   // Auto-connect on mount if credentials are saved
@@ -557,10 +581,13 @@ export default function AccesPhone({
     const cfg = loadConfig();
     if (cfg.extension && cfg.sipPassword && cfg.wsServer && cfg.sipDomain) {
       console.log("[AccesPhone] Credenciales encontradas, auto-conectando...");
+      // Ensure configRef has the loaded config before connecting
+      configRef.current = cfg;
       // Small delay to let the component fully mount
       const t = setTimeout(() => {
         if (mountedRef.current && !uaRef.current) {
-          connectSIP();
+          // Call via ref to always get the latest version
+          connectSIPInternalRef.current?.();
         }
       }, 1000);
       return () => clearTimeout(t);
