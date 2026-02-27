@@ -120,6 +120,7 @@ export default function AccesPhone({
   // Refs
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,6 +188,11 @@ export default function AccesPhone({
     setCallInfo(null);
     setMuted(false);
     sessionRef.current = null;
+    // Stop local media stream tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
@@ -546,21 +552,29 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
-  const answerCall = useCallback(() => {
-    if (sessionRef.current) {
-      try {
-        console.log("[AccesPhone] Attempting to answer call...");
-        console.log("[AccesPhone] Session status:", sessionRef.current.status);
-        console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
-        sessionRef.current.answer({
-          mediaConstraints: { audio: true, video: false },
-        });
-        console.log("[AccesPhone] answer() called successfully");
-      } catch (err) {
-        console.error("[AccesPhone] Error answering call:", err);
-      }
-    } else {
+  const answerCall = useCallback(async () => {
+    if (!sessionRef.current) {
       console.warn("[AccesPhone] No session to answer");
+      return;
+    }
+    try {
+      console.log("[AccesPhone] Attempting to answer call...");
+      console.log("[AccesPhone] Session status:", sessionRef.current.status);
+      console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
+
+      // Pre-acquire media stream to avoid NotReadableError
+      console.log("[AccesPhone] Pre-acquiring microphone...");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      console.log("[AccesPhone] Microphone acquired OK, tracks:", stream.getAudioTracks().length);
+
+      sessionRef.current.answer({
+        mediaConstraints: { audio: true, video: false },
+        mediaStream: stream,
+      });
+      console.log("[AccesPhone] answer() called successfully with pre-acquired stream");
+    } catch (err) {
+      console.error("[AccesPhone] Error answering call:", err);
     }
   }, []);
 
@@ -599,27 +613,39 @@ export default function AccesPhone({
     setSpeakerOn(!speakerOn);
   }, [speakerOn]);
 
-  const makeCall = useCallback(() => {
+  const makeCall = useCallback(async () => {
     if (!dialNumber || !connected || !uaRef.current) return;
 
-    const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
-      mediaConstraints: { audio: true, video: false },
-      rtcOfferConstraints: {
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: false,
-      },
-    });
+    try {
+      // Pre-acquire media stream to avoid NotReadableError
+      console.log("[AccesPhone] Pre-acquiring microphone for outgoing call...");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      console.log("[AccesPhone] Microphone acquired OK for call to:", dialNumber);
 
-    sessionRef.current = session;
-    setCallInfo({
-      number: dialNumber,
-      direction: "outgoing",
-      startTime: new Date(),
-    });
-    setInCall(true);
-    setDialNumber("");
+      const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
+        mediaConstraints: { audio: true, video: false },
+        mediaStream: stream,
+        rtcOfferConstraints: {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false,
+        },
+      });
 
-    setupSessionEvents(session, dialNumber);
+      sessionRef.current = session;
+      setCallInfo({
+        number: dialNumber,
+        direction: "outgoing",
+        startTime: new Date(),
+      });
+      setInCall(true);
+      setDialNumber("");
+
+      setupSessionEvents(session, dialNumber);
+    } catch (err) {
+      console.error("[AccesPhone] Error starting call (microphone?):", err);
+      setStatusText("Error: no se pudo acceder al micrófono");
+    }
   }, [dialNumber, connected, setupSessionEvents]);
 
   // -----------------------------------------------------------
