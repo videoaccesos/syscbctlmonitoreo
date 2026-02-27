@@ -185,24 +185,6 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
-  // Attach remote audio from RTCSession
-  // -----------------------------------------------------------
-  const attachRemoteAudio = useCallback((session: RTCSession) => {
-    const pc = session.connection;
-    if (pc && remoteAudioRef.current) {
-      const receivers = pc.getReceivers();
-      if (receivers.length > 0) {
-        const stream = new MediaStream();
-        receivers.forEach((receiver) => {
-          stream.addTrack(receiver.track);
-        });
-        remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch(() => {});
-      }
-    }
-  }, []);
-
-  // -----------------------------------------------------------
   // Setup session event handlers
   // -----------------------------------------------------------
   const setupSessionEvents = useCallback(
@@ -219,8 +201,7 @@ export default function AccesPhone({
       });
 
       session.on("confirmed", () => {
-        console.log("[AccesPhone] Session confirmed");
-        attachRemoteAudio(session);
+        console.log("[AccesPhone] Session confirmed - audio should already be attached via peerconnection track event");
       });
 
       session.on("ended", (e) => {
@@ -240,41 +221,35 @@ export default function AccesPhone({
         console.log("[AccesPhone] PeerConnection created");
         const pc = e.peerconnection;
         if (pc) {
-          pc.onicegatheringstatechange = () => {
-            console.log("[AccesPhone] ICE gathering state:", pc.iceGatheringState);
-          };
+          // Remote audio - matching working softphone implementation
+          pc.addEventListener("track", (ev: RTCTrackEvent) => {
+            console.log("[AccesPhone] Remote track received:", ev.track.kind);
+            if (remoteAudioRef.current && ev.streams?.[0]) {
+              remoteAudioRef.current.srcObject = ev.streams[0];
+              remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              remoteAudioRef.current.play().catch(() => {});
+            }
+          });
+
+          // Backwards compatibility for older browsers
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          pc.addEventListener("addstream", (ev: any) => {
+            console.log("[AccesPhone] addstream event received");
+            if (ev.stream && ev.stream.getAudioTracks().length > 0) {
+              if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = ev.stream;
+                remoteAudioRef.current.play().catch(() => {});
+              }
+            }
+          });
+
           pc.oniceconnectionstatechange = () => {
             console.log("[AccesPhone] ICE connection state:", pc.iceConnectionState);
-          };
-          pc.onconnectionstatechange = () => {
-            console.log("[AccesPhone] Connection state:", pc.connectionState);
-          };
-          pc.onsignalingstatechange = () => {
-            console.log("[AccesPhone] Signaling state:", pc.signalingState);
-          };
-          pc.onicecandidate = (event) => {
-            if (event.candidate) {
-              console.log("[AccesPhone] ICE candidate:", event.candidate.candidate);
-            } else {
-              console.log("[AccesPhone] ICE gathering complete (null candidate)");
-            }
-          };
-          pc.ontrack = (event: RTCTrackEvent) => {
-            console.log("[AccesPhone] Remote track received:", event.track.kind, event.track.readyState);
-            if (!remoteAudioRef.current) return;
-            if (event.streams?.[0]) {
-              remoteAudioRef.current.srcObject = event.streams[0];
-            } else {
-              // Fallback: some browsers don't populate streams
-              const stream = new MediaStream([event.track]);
-              remoteAudioRef.current.srcObject = stream;
-            }
-            remoteAudioRef.current.play().catch(() => {});
           };
         }
       });
     },
-    [attachRemoteAudio, cleanupCall]
+    [cleanupCall, speakerOn]
   );
 
   // -----------------------------------------------------------
@@ -355,11 +330,10 @@ export default function AccesPhone({
         sockets: [socket],
         uri: sipUri,
         password: config.sipPassword,
-        display_name: config.displayName,
-        realm: config.sipDomain,
         register: true,
-        register_expires: 300,
+        register_expires: 600,
         session_timers: false,
+        user_agent: "Access Phone v3.1",
       });
 
       ua.on("connected", () => {
@@ -496,9 +470,6 @@ export default function AccesPhone({
         console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
         sessionRef.current.answer({
           mediaConstraints: { audio: true, video: false },
-          pcConfig: {
-            iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
-          },
         });
         console.log("[AccesPhone] answer() called successfully");
       } catch (err) {
@@ -547,10 +518,11 @@ export default function AccesPhone({
   const makeCall = useCallback(() => {
     if (!dialNumber || !connected || !uaRef.current) return;
 
-    const session = uaRef.current.call(dialNumber, {
+    const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
       mediaConstraints: { audio: true, video: false },
-      pcConfig: {
-        iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+      rtcOfferConstraints: {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
       },
     });
 
@@ -632,8 +604,9 @@ export default function AccesPhone({
 
   return (
     <>
-      {/* Hidden audio elements */}
+      {/* Hidden audio elements - matching working softphone */}
       <audio ref={remoteAudioRef} autoPlay />
+      <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
       <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
 
       {/* Floating phone widget */}
