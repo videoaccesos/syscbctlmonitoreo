@@ -224,9 +224,25 @@ export default function AccesPhone({
 
       session.on("failed", (e) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.error("[AccesPhone] Session failed:", e?.cause || "unknown cause", (e?.message as any)?.reason_phrase || "");
+        const evt = e as any;
+        console.error("[AccesPhone] Session failed:", evt?.cause || "unknown cause");
+        console.error("[AccesPhone] Session failed details:", {
+          cause: evt?.cause,
+          status_code: evt?.message?.status_code,
+          reason_phrase: evt?.message?.reason_phrase,
+          originator: evt?.originator,
+        });
+        if (evt?.cause === "Internal Error" || evt?.cause === "internal error") {
+          console.error("[AccesPhone] INTERNAL ERROR - posible problema con SDP/WebRTC/media");
+        }
         cleanupCall();
         onCallEndedRef.current?.();
+      });
+
+      // Log SDP events for debugging
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      session.on("sdp", (e: any) => {
+        console.log("[AccesPhone] SDP event:", e?.type, "\n", e?.sdp?.substring(0, 500));
       });
 
       session.on("peerconnection", (e) => {
@@ -257,6 +273,14 @@ export default function AccesPhone({
 
           pc.oniceconnectionstatechange = () => {
             console.log("[AccesPhone] ICE connection state:", pc.iceConnectionState);
+          };
+
+          pc.onsignalingstatechange = () => {
+            console.log("[AccesPhone] Signaling state:", pc.signalingState);
+          };
+
+          pc.onconnectionstatechange = () => {
+            console.log("[AccesPhone] Connection state:", pc.connectionState);
           };
         }
       });
@@ -361,6 +385,9 @@ export default function AccesPhone({
       const JsSIP = await import("jssip");
       console.log('[AccesPhone] JsSIP importado OK');
 
+      // Enable JsSIP internal debug logging
+      JsSIP.debug.enable('JsSIP:*');
+
       console.log('[AccesPhone] Creando WebSocket hacia:', cfg.wsServer);
       const socket = new JsSIP.WebSocketInterface(cfg.wsServer);
       const sipUri = `sip:${cfg.extension}@${cfg.sipDomain}`;
@@ -456,6 +483,12 @@ export default function AccesPhone({
 
           // Setup session events
           setupSessionEvents(session, callerNumber);
+
+          // Listen for getUserMedia failure on this session
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          session.on("getusermediafailed", (e: any) => {
+            console.error("[AccesPhone] getUserMedia FAILED:", e);
+          });
         }
       });
 
