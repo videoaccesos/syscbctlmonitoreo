@@ -212,10 +212,15 @@ export default function AccesPhone({
         const pc = e.peerconnection;
         if (pc) {
           pc.ontrack = (event: RTCTrackEvent) => {
-            if (remoteAudioRef.current && event.streams?.[0]) {
+            if (!remoteAudioRef.current) return;
+            if (event.streams?.[0]) {
               remoteAudioRef.current.srcObject = event.streams[0];
-              remoteAudioRef.current.play().catch(() => {});
+            } else {
+              // Fallback: some browsers don't populate streams
+              const stream = new MediaStream([event.track]);
+              remoteAudioRef.current.srcObject = stream;
             }
+            remoteAudioRef.current.play().catch(() => {});
           };
         }
       });
@@ -341,6 +346,9 @@ export default function AccesPhone({
     if (sessionRef.current) {
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
+        pcConfig: {
+          iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+        },
       });
     }
   }, []);
