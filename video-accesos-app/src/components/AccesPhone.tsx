@@ -323,11 +323,23 @@ export default function AccesPhone({
   // Connect / Disconnect SIP
   // -----------------------------------------------------------
   const connectSIPInternal = useCallback(async () => {
-    if (uaRef.current) return;
+    console.log('[AccesPhone] connectSIPInternal LLAMADO', {
+      yaConectado: !!uaRef.current,
+      extension: configRef.current.extension || '(vacío)',
+      wsServer: configRef.current.wsServer || '(vacío)',
+      sipDomain: configRef.current.sipDomain || '(vacío)',
+      tienePassword: !!configRef.current.sipPassword,
+    });
+
+    if (uaRef.current) {
+      console.log('[AccesPhone] Ya hay un UA activo, saliendo');
+      return;
+    }
 
     // Read config from ref to avoid stale closures
     const cfg = configRef.current;
     if (!cfg.extension || !cfg.sipPassword || !cfg.wsServer || !cfg.sipDomain) {
+      console.warn('[AccesPhone] Config incompleta, mostrando settings');
       setStatusText("Configure SIP primero");
       setShowSettings(true);
       return;
@@ -339,10 +351,14 @@ export default function AccesPhone({
 
     try {
       // Dynamic import to avoid SSR issues
+      console.log('[AccesPhone] Importando JsSIP...');
       const JsSIP = await import("jssip");
+      console.log('[AccesPhone] JsSIP importado OK');
 
+      console.log('[AccesPhone] Creando WebSocket hacia:', cfg.wsServer);
       const socket = new JsSIP.WebSocketInterface(cfg.wsServer);
       const sipUri = `sip:${cfg.extension}@${cfg.sipDomain}`;
+      console.log('[AccesPhone] SIP URI:', sipUri);
 
       const ua = new JsSIP.UA({
         sockets: [socket],
@@ -437,12 +453,15 @@ export default function AccesPhone({
         }
       });
 
+      console.log('[AccesPhone] Llamando ua.start()...');
       ua.start();
       uaRef.current = ua;
+      console.log('[AccesPhone] UA iniciado, esperando eventos de conexión...');
+      setStatusText("Conectando WebSocket...");
     } catch (err) {
       console.error("[AccesPhone] Error al conectar SIP:", err);
       setConnecting(false);
-      setStatusText("Error al conectar");
+      setStatusText(`Error: ${err instanceof Error ? err.message : String(err)}`);
 
       // Schedule reconnect on connection error
       if (!manualDisconnectRef.current) {
@@ -460,10 +479,15 @@ export default function AccesPhone({
 
   // Public connect (resets manual disconnect flag)
   const connectSIP = useCallback(() => {
+    console.log('[AccesPhone] connectSIP() llamado');
     manualDisconnectRef.current = false;
     cancelReconnect();
-    // Call via ref to always get the latest version
-    connectSIPInternalRef.current?.();
+    if (connectSIPInternalRef.current) {
+      connectSIPInternalRef.current();
+    } else {
+      console.error('[AccesPhone] ERROR: connectSIPInternalRef.current es undefined!');
+      setStatusText('Error interno - recargue la página');
+    }
   }, [cancelReconnect]);
 
   const disconnectSIP = useCallback(() => {
@@ -563,6 +587,7 @@ export default function AccesPhone({
   // Settings
   // -----------------------------------------------------------
   const saveSettings = () => {
+    console.log('[AccesPhone] saveSettings - guardando y conectando...');
     saveConfigToStorage(config);
     // Also update the ref immediately so reconnect sees the new config
     configRef.current = config;
@@ -571,26 +596,46 @@ export default function AccesPhone({
     if (uaRef.current) {
       disconnectSIP();
     }
-    // Use ref to avoid stale closure
-    setTimeout(() => connectSIPInternalRef.current?.(), 500);
+    // Use connectSIP() which properly resets manualDisconnectRef and cancelReconnect
+    setTimeout(() => {
+      console.log('[AccesPhone] saveSettings timeout - llamando connectSIP()');
+      connectSIP();
+    }, 500);
   };
 
   // Auto-connect on mount if credentials are saved
   useEffect(() => {
     mountedRef.current = true;
     const cfg = loadConfig();
+    console.log('[AccesPhone] MONTADO - verificando credenciales:', {
+      extension: cfg.extension || '(vacío)',
+      tienePassword: !!cfg.sipPassword,
+      wsServer: cfg.wsServer || '(vacío)',
+      sipDomain: cfg.sipDomain || '(vacío)',
+    });
     if (cfg.extension && cfg.sipPassword && cfg.wsServer && cfg.sipDomain) {
-      console.log("[AccesPhone] Credenciales encontradas, auto-conectando...");
+      console.log("[AccesPhone] Credenciales encontradas, auto-conectando en 1s...");
       // Ensure configRef has the loaded config before connecting
       configRef.current = cfg;
       // Small delay to let the component fully mount
       const t = setTimeout(() => {
+        console.log('[AccesPhone] Auto-connect timer disparado:', {
+          mounted: mountedRef.current,
+          yaConectado: !!uaRef.current,
+          refDisponible: !!connectSIPInternalRef.current,
+        });
         if (mountedRef.current && !uaRef.current) {
-          // Call via ref to always get the latest version
-          connectSIPInternalRef.current?.();
+          if (connectSIPInternalRef.current) {
+            connectSIPInternalRef.current();
+          } else {
+            console.error('[AccesPhone] ERROR: connectSIPInternalRef undefined en auto-connect!');
+            setStatusText('Error interno - recargue la página');
+          }
         }
       }, 1000);
       return () => clearTimeout(t);
+    } else {
+      console.log('[AccesPhone] Sin credenciales completas - esperando configuración manual');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
