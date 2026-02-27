@@ -16,7 +16,15 @@ import {
   X,
   ChevronUp,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
+
+// ---------------------------------------------------------------------------
+// Auto-reconnect constants
+// ---------------------------------------------------------------------------
+const RECONNECT_BASE_DELAY = 2000; // 2 seconds
+const RECONNECT_MAX_DELAY = 30000; // 30 seconds max
+const RECONNECT_MAX_ATTEMPTS = 0;  // 0 = unlimited
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,12 +105,19 @@ export default function AccesPhone({
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
 
+  // Auto-reconnect state
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [reconnecting, setReconnecting] = useState(false);
+
   // Refs
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualDisconnectRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -255,9 +270,61 @@ export default function AccesPhone({
   );
 
   // -----------------------------------------------------------
+  // Schedule auto-reconnect (exponential backoff)
+  // -----------------------------------------------------------
+  const scheduleReconnect = useCallback((attempt: number) => {
+    if (manualDisconnectRef.current) return;
+    if (!mountedRef.current) return;
+    if (RECONNECT_MAX_ATTEMPTS > 0 && attempt >= RECONNECT_MAX_ATTEMPTS) {
+      setStatusText("Reconexion fallida - reconecte manualmente");
+      setReconnecting(false);
+      return;
+    }
+
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY * Math.pow(2, attempt),
+      RECONNECT_MAX_DELAY
+    );
+
+    console.log(`[AccesPhone] Reconectando en ${delay / 1000}s (intento ${attempt + 1})...`);
+    setReconnecting(true);
+    setReconnectAttempt(attempt + 1);
+    setStatusText(`Reconectando en ${Math.round(delay / 1000)}s...`);
+
+    reconnectTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current || manualDisconnectRef.current) return;
+      // Clean up old UA before reconnecting
+      if (uaRef.current) {
+        try {
+          uaRef.current.stop();
+        } catch {
+          // ignore
+        }
+        uaRef.current = null;
+      }
+      setReconnecting(false);
+      // connectSIP will be called via the effect below
+      connectSIPInternal();
+    }, delay);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -----------------------------------------------------------
+  // Cancel scheduled reconnect
+  // -----------------------------------------------------------
+  const cancelReconnect = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    setReconnecting(false);
+    setReconnectAttempt(0);
+  }, []);
+
+  // -----------------------------------------------------------
   // Connect / Disconnect SIP
   // -----------------------------------------------------------
-  const connectSIP = useCallback(async () => {
+  const connectSIPInternal = useCallback(async () => {
     if (uaRef.current) return;
     if (!config.sipUri || !config.sipPassword || !config.wsServer) {
       setStatusText("Configure SIP primero");
@@ -265,6 +332,7 @@ export default function AccesPhone({
       return;
     }
 
+    manualDisconnectRef.current = false;
     setConnecting(true);
     setStatusText("Conectando...");
 
@@ -288,30 +356,59 @@ export default function AccesPhone({
       });
 
       ua.on("connected", () => {
+        console.log("[AccesPhone] WebSocket conectado");
         setStatusText("Conectado");
       });
 
       ua.on("disconnected", () => {
+        console.log("[AccesPhone] WebSocket desconectado, manual:", manualDisconnectRef.current);
         setConnected(false);
         setConnecting(false);
-        setStatusText("Desconectado");
+
+        // Clean up the old UA reference
+        if (uaRef.current) {
+          try {
+            uaRef.current.stop();
+          } catch {
+            // ignore
+          }
+          uaRef.current = null;
+        }
+
+        if (manualDisconnectRef.current) {
+          setStatusText("Desconectado");
+        } else {
+          // Auto-reconnect
+          setStatusText("Conexion perdida");
+          scheduleReconnect(reconnectAttempt);
+        }
       });
 
       ua.on("registered", () => {
+        console.log("[AccesPhone] SIP registrado exitosamente");
         setConnected(true);
         setConnecting(false);
+        setReconnecting(false);
+        setReconnectAttempt(0);
         setStatusText("Registrado");
       });
 
       ua.on("unregistered", () => {
+        console.log("[AccesPhone] SIP des-registrado");
         setConnected(false);
         setStatusText("No registrado");
       });
 
       ua.on("registrationFailed", (e) => {
+        console.error("[AccesPhone] Registro SIP fallido:", e.cause);
         setConnected(false);
         setConnecting(false);
         setStatusText(`Error: ${e.cause || "registro fallido"}`);
+
+        // If registration fails but WS is connected, schedule retry
+        if (!manualDisconnectRef.current) {
+          scheduleReconnect(reconnectAttempt);
+        }
       });
 
       ua.on("newRTCSession", (data: IncomingRTCSessionEvent | OutgoingRTCSessionEvent) => {
@@ -349,13 +446,27 @@ export default function AccesPhone({
       ua.start();
       uaRef.current = ua;
     } catch (err) {
-      console.error("Error al conectar SIP:", err);
+      console.error("[AccesPhone] Error al conectar SIP:", err);
       setConnecting(false);
       setStatusText("Error al conectar");
+
+      // Schedule reconnect on connection error
+      if (!manualDisconnectRef.current) {
+        scheduleReconnect(reconnectAttempt);
+      }
     }
-  }, [config, setupSessionEvents]);
+  }, [config, setupSessionEvents, scheduleReconnect, reconnectAttempt]);
+
+  // Public connect (resets manual disconnect flag)
+  const connectSIP = useCallback(() => {
+    manualDisconnectRef.current = false;
+    cancelReconnect();
+    connectSIPInternal();
+  }, [connectSIPInternal, cancelReconnect]);
 
   const disconnectSIP = useCallback(() => {
+    manualDisconnectRef.current = true;
+    cancelReconnect();
     if (uaRef.current) {
       uaRef.current.unregister();
       uaRef.current.stop();
@@ -365,7 +476,7 @@ export default function AccesPhone({
     setConnecting(false);
     setStatusText("Desconectado");
     cleanupCall();
-  }, [cleanupCall]);
+  }, [cleanupCall, cancelReconnect]);
 
   // -----------------------------------------------------------
   // Call actions
@@ -460,15 +571,36 @@ export default function AccesPhone({
     }
   };
 
+  // Auto-connect on mount if credentials are saved
+  useEffect(() => {
+    mountedRef.current = true;
+    const cfg = loadConfig();
+    if (cfg.sipUri && cfg.sipPassword && cfg.wsServer) {
+      console.log("[AccesPhone] Credenciales encontradas, auto-conectando...");
+      // Small delay to let the component fully mount
+      const t = setTimeout(() => {
+        if (mountedRef.current && !uaRef.current) {
+          connectSIP();
+        }
+      }, 1000);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
+      manualDisconnectRef.current = true; // prevent reconnect after unmount
+      cancelReconnect();
       if (uaRef.current) {
         uaRef.current.unregister();
         uaRef.current.stop();
         uaRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // -----------------------------------------------------------
@@ -486,7 +618,7 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   const statusColor = connected
     ? "bg-green-500"
-    : connecting
+    : connecting || reconnecting
       ? "bg-yellow-500 animate-pulse"
       : "bg-red-500";
 
@@ -526,8 +658,30 @@ export default function AccesPhone({
             </div>
 
             {/* Status bar */}
-            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
-              {statusText}
+            <div className={`px-4 py-1.5 border-b border-gray-200 text-xs flex items-center justify-between ${
+              reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-500"
+            }`}>
+              <span className="flex items-center gap-1.5">
+                {reconnecting && <RefreshCw className="h-3 w-3 animate-spin" />}
+                {statusText}
+                {reconnectAttempt > 0 && !connected && (
+                  <span className="text-yellow-600 font-medium">
+                    (intento {reconnectAttempt})
+                  </span>
+                )}
+              </span>
+              {reconnecting && (
+                <button
+                  onClick={() => {
+                    cancelReconnect();
+                    manualDisconnectRef.current = true;
+                    setStatusText("Desconectado");
+                  }}
+                  className="text-yellow-600 hover:text-yellow-800 text-xs underline"
+                >
+                  Cancelar
+                </button>
+              )}
             </div>
 
             {/* Call in progress / Incoming call */}
@@ -661,6 +815,17 @@ export default function AccesPhone({
                   className="w-full rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition"
                 >
                   Desconectar
+                </button>
+              ) : reconnecting ? (
+                <button
+                  onClick={() => {
+                    cancelReconnect();
+                    connectSIP();
+                  }}
+                  className="w-full rounded-lg bg-yellow-500 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-600 transition flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Reconectando... (clic para forzar)
                 </button>
               ) : (
                 <button
