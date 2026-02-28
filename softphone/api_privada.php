@@ -259,14 +259,28 @@ $conn->close();
 
 function buildVideos($row) {
     $videos = [];
+    $privada_id = $row['privada_id'] ?? 0;
     for ($i = 1; $i <= 3; $i++) {
         $url = trim($row["video_{$i}"] ?? '');
         $alias = trim($row["alias_video{$i}"] ?? '');
         if (!empty($url)) {
+            // Determinar si la URL necesita proxy (Hikvision ISAPI o solo canal numérico)
+            $needsProxy = false;
+            if (preg_match('/^\d+$/', $url)) {
+                // Solo número de canal -> siempre necesita proxy
+                $needsProxy = true;
+            } elseif (stripos($url, '/ISAPI/') !== false || stripos($url, '/picture') !== false) {
+                // URL Hikvision completa -> necesita proxy para auth Digest
+                $needsProxy = true;
+            }
+
             $videos[] = [
-                'id'    => $i,
-                'url'   => $url,
-                'alias' => $alias ?: "Cámara {$i}"
+                'id'          => $i,
+                'url'         => $url,
+                'alias'       => $alias ?: "Cámara {$i}",
+                'privada_id'  => (int)$privada_id,
+                'needs_proxy' => $needsProxy,
+                'proxy_url'   => $needsProxy ? "camera_proxy.php?privada_id={$privada_id}&cam={$i}" : $url
             ];
         }
     }

@@ -196,6 +196,14 @@
         .privada-info.active { display: block; }
         .privada-info-text { color: #10b981; font-size: 10px; font-weight: 500; }
 
+        /* SNAPSHOT FLASH & CAPTURE */
+        .snapshot-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 20; transition: opacity 0.1s; }
+        .snapshot-flash.active { opacity: 0.8; transition: opacity 0s; }
+        .video-privada-info { display: none; background: linear-gradient(to right, #0f172a, #1e293b); padding: 4px 10px; font-size: 10px; color: #94a3b8; }
+        .video-privada-info.active { display: flex; align-items: center; justify-content: space-between; }
+        .video-privada-info .vpinfo-name { color: #10b981; font-weight: 600; }
+        .video-privada-info .vpinfo-source { color: #64748b; font-size: 9px; }
+
         @media (max-width: 480px) { .phone-wrapper { right: -100%; top: auto; bottom: 0; transform: none; width: 100%; } .phone-wrapper.open { right: 0; } .phone-tab { display: none; } .phone-container { width: 100%; border-radius: 16px 16px 0 0; } }
     </style>
 </head>
@@ -228,13 +236,19 @@
                     <img id="cameraSnapshot" src="" alt="Cámara">
                     <div class="video-overlay">
                         <div class="video-info"><span class="video-live" id="videoLive">● LIVE</span><span class="video-channel" id="videoChannelName">Cargando...</span></div>
-                        <div class="video-controls"><button class="video-btn" id="videoPauseBtn" onclick="toggleVideoPause()" title="Pausar">⏸</button><button class="video-btn" onclick="toggleFullscreen()" title="Pantalla completa">⛶</button></div>
+                        <div class="video-controls">
+                            <button class="video-btn" id="videoPauseBtn" onclick="toggleVideoPause()" title="Pausar">⏸</button>
+                            <button class="video-btn" id="snapshotBtn" onclick="captureSnapshot()" title="Capturar foto">📸</button>
+                            <button class="video-btn" onclick="toggleFullscreen()" title="Pantalla completa">⛶</button>
+                        </div>
                     </div>
                     <div class="video-status" id="videoStatus">-- FPS</div>
                     <div class="video-loading" id="videoLoading"><div class="video-loading-spinner"></div><div>Cambiando cámara...</div></div>
                     <div class="video-error" id="videoError"><div class="video-error-icon">📹</div><div>Sin señal</div></div>
+                    <div class="snapshot-flash" id="snapshotFlash"></div>
                 </div>
                 <div class="video-selector" id="videoSelector"></div>
+                <div class="video-privada-info" id="videoPrivadaInfo"></div>
             </div>
             <!-- PRIVADA SELECTOR -->
             <div class="privada-bar">
@@ -577,7 +591,13 @@
             } else {
                 b.textContent='⏸';b.classList.remove('active');
                 document.getElementById('videoLive').style.display='inline';
-                startVideoRefresh();
+                // Reanudar con el tipo correcto de refresh
+                const cam = availableCameras.find(c => c.channel === currentChannel);
+                if (cam && cam.isPrivadaVideo) {
+                    startPrivadaVideoRefresh();
+                } else {
+                    startVideoRefresh();
+                }
             }
         }
 
@@ -585,6 +605,61 @@
             const c=document.getElementById('videoContainer');
             if(document.fullscreenElement) document.exitFullscreen();
             else c.requestFullscreen().catch(e=>console.log(e));
+        }
+
+        // --- Captura de snapshot para bitácora de accesos ---
+        function captureSnapshot() {
+            const cam = availableCameras.find(c => c.channel === currentChannel);
+            if (!cam) return;
+
+            // Efecto flash
+            const flash = document.getElementById('snapshotFlash');
+            flash.classList.add('active');
+            setTimeout(() => flash.classList.remove('active'), 150);
+
+            if (cam.isPrivadaVideo && cam.needsProxy && cam.privadaId) {
+                // Guardar snapshot en servidor via proxy
+                const saveUrl = `${videoSettings.proxyUrl}?privada_id=${cam.privadaId}&cam=${cam.camIndex}&save=1&t=${Date.now()}`;
+                fetch(saveUrl).then(r => {
+                    if (r.ok) {
+                        showSnapshotNotification('Snapshot guardado en servidor');
+                    } else {
+                        showSnapshotNotification('Error al guardar snapshot', true);
+                    }
+                }).catch(() => showSnapshotNotification('Error de conexión', true));
+            }
+
+            // Descargar localmente también
+            const img = document.getElementById('cameraSnapshot');
+            if (img.src && !img.src.endsWith('.svg')) {
+                const a = document.createElement('a');
+                a.href = img.src;
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                a.download = `snapshot_${cam.name.replace(/\s+/g, '_')}_${ts}.jpg`;
+                a.click();
+            }
+        }
+
+        function showSnapshotNotification(msg, isError) {
+            const info = document.getElementById('videoPrivadaInfo');
+            info.innerHTML = `<span class="vpinfo-name" style="color:${isError ? '#ef4444' : '#10b981'}">${msg}</span>`;
+            info.classList.add('active');
+            setTimeout(() => {
+                updateVideoPrivadaInfo();
+            }, 2000);
+        }
+
+        function updateVideoPrivadaInfo() {
+            const info = document.getElementById('videoPrivadaInfo');
+            if (currentPrivada && privadaVideos.length > 0) {
+                const sel = document.getElementById('privadaSelect');
+                const name = sel.options[sel.selectedIndex]?.text || '';
+                info.innerHTML = `<span class="vpinfo-name">${name}</span><span class="vpinfo-source">${privadaVideos.length} cam(s) | Proxy activo</span>`;
+                info.classList.add('active');
+            } else {
+                info.classList.remove('active');
+                info.innerHTML = '';
+            }
         }
 
         async function getCameraForExtension(ext) {
@@ -858,6 +933,8 @@
             privadaVideos = [];
             privadaRelays = [];
             document.getElementById('privadaInfo').classList.remove('active');
+            document.getElementById('videoPrivadaInfo').classList.remove('active');
+            document.getElementById('videoPrivadaInfo').innerHTML = '';
             renderRelayButtons([]);
             // Restaurar cámaras del proxy
             loadCameraList();
@@ -870,6 +947,10 @@
                 channel: 'privada_video_' + v.id,
                 name: v.alias,
                 url: v.url,
+                privadaId: v.privada_id || 0,
+                camIndex: v.id,
+                needsProxy: v.needs_proxy || false,
+                proxyUrl: v.proxy_url || v.url,
                 isPrivadaVideo: true
             }));
 
@@ -884,7 +965,7 @@
             }
         }
 
-        // --- Refresh de video MJPEG desde URLs de privada ---
+        // --- Refresh de video desde URLs de privada (via proxy para Hikvision) ---
         function startPrivadaVideoRefresh() {
             stopVideoRefresh();
             consecutiveErrors = 0;
@@ -897,13 +978,12 @@
             document.getElementById('videoLive').style.display = 'inline';
 
             if (cam.isPrivadaVideo) {
-                // Las URLs de video de la BD pueden ser:
-                // 1. MJPEG stream directo (video_1 contiene URL completa)
-                // 2. URL de snapshot que se refresca
-                refreshPrivadaSnapshot(cam.url);
+                // Usar proxy_url si necesita autenticación Digest (Hikvision)
+                const feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
+                refreshPrivadaSnapshot(feedUrl);
                 videoRefreshInterval = setInterval(() => {
                     if (!videoPaused && !switchingCamera) {
-                        refreshPrivadaSnapshot(cam.url);
+                        refreshPrivadaSnapshot(feedUrl);
                     }
                 }, videoSettings.refreshRate);
                 document.getElementById('videoStatus').textContent = `${Math.round(1000/videoSettings.refreshRate)} FPS`;
@@ -912,12 +992,11 @@
             }
         }
 
-        function refreshPrivadaSnapshot(videoUrl) {
+        function refreshPrivadaSnapshot(feedUrl) {
             const img = document.getElementById('cameraSnapshot');
             const ch = currentChannel;
-            // Agregar timestamp para evitar cache
-            const separator = videoUrl.includes('?') ? '&' : '?';
-            const src = `${videoUrl}${separator}t=${Date.now()}`;
+            const separator = feedUrl.includes('?') ? '&' : '?';
+            const src = `${feedUrl}${separator}t=${Date.now()}`;
             const pre = new Image();
             pre.onload = function() {
                 if (currentChannel === ch) {
@@ -971,9 +1050,10 @@
             renderCameraSelector();
 
             if (cam.isPrivadaVideo) {
-                // Precargar primer frame desde URL de privada
-                const separator = cam.url.includes('?') ? '&' : '?';
-                const src = `${cam.url}${separator}t=${Date.now()}`;
+                // Precargar primer frame - usar proxy si necesita auth Hikvision
+                const feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
+                const separator = feedUrl.includes('?') ? '&' : '?';
+                const src = `${feedUrl}${separator}t=${Date.now()}`;
                 const firstFrame = new Image();
                 const switchTimeout = setTimeout(() => { finishPrivadaCameraSwitch(false, cam); }, 3000);
 
@@ -1035,7 +1115,7 @@
         const _originalShowVideoPanel = showVideoPanel;
         showVideoPanel = function(ch) {
             if (privadaVideos.length > 0) {
-                // Usar cámaras de privada
+                // Usar cámaras de privada via proxy
                 if (ch) {
                     const cam = availableCameras.find(c => c.channel === ch);
                     if (cam) {
@@ -1047,9 +1127,11 @@
                 document.getElementById('videoToggleBtn').classList.add('active');
                 renderCameraSelector();
                 startPrivadaVideoRefresh();
+                updateVideoPrivadaInfo();
             } else {
                 // Sin cámaras de privada, usar proxy original
                 _originalShowVideoPanel(ch);
+                document.getElementById('videoPrivadaInfo').classList.remove('active');
             }
         };
 
