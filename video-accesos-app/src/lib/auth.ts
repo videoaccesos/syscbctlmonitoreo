@@ -1,0 +1,151 @@
+import { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const crypt = require("unix-crypt-td-js");
+import { prisma } from "./prisma";
+
+/**
+ * Verifica una contraseña contra el hash DES crypt almacenado por el sistema legacy PHP.
+ * El sistema legacy usa: substr(crypt($cadena, 0), 0, 10)
+ * Los hashes almacenados usan salt DES de 2 caracteres (primeros 2 chars del hash).
+ */
+function verificarContrasena(input: string, hashAlmacenado: string): boolean {
+  const salt = hashAlmacenado.substring(0, 2);
+  const hashCalculado = crypt(input, salt).substring(0, 10);
+  return hashCalculado === hashAlmacenado;
+}
+
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "credentials",
+      credentials: {
+        usuario: { label: "Usuario", type: "text" },
+        contrasena: { label: "Contraseña", type: "password" },
+      },
+      async authorize(credentials) {
+        console.log("[AUTH] authorize() llamado con usuario:", credentials?.usuario);
+
+        if (!credentials?.usuario || !credentials?.contrasena) {
+          console.log("[AUTH] Credenciales vacías");
+          return null;
+        }
+
+        let usuario;
+        try {
+          usuario = await prisma.usuario.findFirst({
+            where: {
+              usuario: credentials.usuario,
+              estatusId: 1,
+            },
+            select: {
+              id: true,
+              usuario: true,
+              contrasena: true,
+              modificarFechas: true,
+              empleadoId: true,
+              privadaId: true,
+              estatusId: true,
+              empleado: {
+                select: {
+                  nombre: true,
+                  apePaterno: true,
+                  email: true,
+                  puestoId: true,
+                  nroOperador: true,
+                },
+              },
+            },
+          });
+        } catch (err) {
+          console.error("[AUTH] Error en consulta Prisma:", err);
+          return null;
+        }
+
+        console.log("[AUTH] Usuario encontrado:", usuario ? `ID=${usuario.id}, estatus=${usuario.estatusId}` : "NO");
+
+        if (!usuario) return null;
+
+        console.log("[AUTH] Hash almacenado:", usuario.contrasena, "longitud:", usuario.contrasena.length);
+        const salt = usuario.contrasena.substring(0, 2);
+        const hashCalculado = crypt(credentials.contrasena, salt).substring(0, 10);
+        console.log("[AUTH] Salt:", salt, "Hash calculado:", hashCalculado, "Coincide:", hashCalculado === usuario.contrasena);
+
+        // BD legacy usa DES crypt de PHP: substr(crypt($pass, 0), 0, 10)
+        if (!verificarContrasena(credentials.contrasena, usuario.contrasena)) return null;
+
+        // Registrar inicio de sesión en bitácora y actualizar última sesión
+        // Wrapped en try/catch para que errores de auditoría no bloqueen el login
+        try {
+          // Truncar a segundos para coincidir con DateTime(0) de MySQL,
+          // evitando el error "found no record(s)" de Prisma al hacer SELECT post-INSERT.
+          const ahora = new Date();
+          ahora.setMilliseconds(0);
+          await prisma.bitacoraInicio.create({
+            data: {
+              usuarioId: usuario.id,
+              inicioSesion: ahora,
+              direccionIp: "",
+              hostName: "",
+            },
+          });
+          await prisma.usuario.update({
+            where: { id: usuario.id },
+            data: { ultimaSesion: new Date() },
+            select: { id: true },
+          });
+        } catch (err) {
+          console.error("[AUTH] Error en bitácora/update (login continúa):", err);
+        }
+
+        return {
+          id: String(usuario.id),
+          name: usuario.empleado
+            ? `${usuario.empleado.nombre} ${usuario.empleado.apePaterno}`
+            : usuario.usuario,
+          email: usuario.empleado?.email || "",
+          image: null,
+          usuarioId: usuario.id,
+          empleadoId: usuario.empleadoId,
+          puestoId: usuario.empleado?.puestoId,
+          nroOperador: usuario.empleado?.nroOperador,
+          modificarFechas: usuario.modificarFechas,
+          privadaId: usuario.privadaId,
+        };
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        const u = user as unknown as Record<string, unknown>;
+        token.usuarioId = u.usuarioId as number;
+        token.empleadoId = u.empleadoId as number | null;
+        token.puestoId = u.puestoId as number | undefined;
+        token.nroOperador = u.nroOperador as string | undefined;
+        token.modificarFechas = u.modificarFechas as string;
+        token.privadaId = u.privadaId as number | null;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.usuarioId = token.usuarioId as number;
+        session.user.empleadoId = token.empleadoId as number | null;
+        session.user.puestoId = token.puestoId as number | undefined;
+        session.user.nroOperador = token.nroOperador as string | undefined;
+        session.user.modificarFechas = token.modificarFechas as string;
+        session.user.privadaId = token.privadaId as number | null;
+      }
+      return session;
+    },
+  },
+  pages: {
+    signIn: "/login",
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 2 * 60 * 60, // 2 horas
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};

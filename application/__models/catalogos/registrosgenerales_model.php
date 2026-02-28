@@ -1,31 +1,33 @@
 <?php
 class RegistrosGenerales_Model extends CI_model
 {
-	public function guardar($strRegistroGeneralID,$strApePaterno,$strApeMaterno,$strNombre,$strTelefono,$strCelular,$strEmail,$strObservaciones,$intEstatusID){
+	public function guardar($strRegistroGeneralID,$strApePaterno,$strApeMaterno,$strNombre,$strTelefono,$strCelular,$strFechanac,$strEmail,$strObservaciones,$intEstatusID){
 		$datos = array(
 			'registro_general_id' => $strRegistroGeneralID,
-			'ape_paterno' => $strApePaterno,
-			'ape_materno' => $strApeMaterno,
-			'nombre' => $strNombre, 
+			'ape_paterno' => strtoupper($strApePaterno),
+			'ape_materno' => strtoupper($strApeMaterno),
+			'nombre' => strtoupper($strNombre),
 			'telefono' => $strTelefono,
 			'celular' => $strCelular,
-			'email' => $strEmail,
-			'observaciones' => $strObservaciones,
+			'fechanac' => $strFechanac,
+			'email' => strtoupper($strEmail),
+			'observaciones' => strtoupper($strObservaciones),
 			'estatus_id' => $intEstatusID,
 			'usuario_id' => $this->session->userdata('usuario_id'));
 		$this->db->insert('registros_generales',$datos);
 		return $this->db->_error_message();
 	}
 
-	public function modificar($strRegistroGeneralID,$strApePaterno,$strApeMaterno,$strNombre,$strTelefono,$strCelular,$strEmail,$strObservaciones,$intEstatusID){
-		$datos = array( 
-			'ape_paterno' => $strApePaterno,
-			'ape_materno' => $strApeMaterno,
-			'nombre' => $strNombre, 
+	public function modificar($strRegistroGeneralID,$strApePaterno,$strApeMaterno,$strNombre,$strTelefono,$strCelular,$strFechanac,$strEmail,$strObservaciones,$intEstatusID){
+		$datos = array(
+			'ape_paterno' => strtoupper($strApePaterno),
+			'ape_materno' => strtoupper($strApeMaterno),
+			'nombre' => strtoupper($strNombre),
 			'telefono' => $strTelefono,
 			'celular' => $strCelular,
-			'email' => $strEmail,
-			'observaciones' => $strObservaciones,
+			'fechanac' => $strFechanac,
+			'email' => strtoupper($strEmail),
+			'observaciones' => strtoupper($strObservaciones),
 			'estatus_id' => $intEstatusID,
 			'usuario_id' => $this->session->userdata('usuario_id'));
 		$this->db->where('registro_general_id',$strRegistroGeneralID);

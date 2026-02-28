@@ -94,6 +94,7 @@ class RegistrosGenerales extends MY_controller
 			$this->form_validation->set_rules('strNombre', 'Nombre', 'required|max_length[50]');
 			$this->form_validation->set_rules('strTelefono', 'Telefono', 'max_length[14]');
 			$this->form_validation->set_rules('strCelular', 'Celular', 'max_length[14]');
+			$this->form_validation->set_rules('strFechanac', 'fechanac', 'max_length[14]');
 			$this->form_validation->set_rules('strEmail', 'E-Mail', 'max_length[100]|valid_email');
 			$this->form_validation->set_rules('strObservaciones', 'Observaciones', '');
 			$this->form_validation->set_rules('intEstatusID', 'Estado', 'required|integer');
@@ -117,10 +118,11 @@ class RegistrosGenerales extends MY_controller
 						$this->input->post('strNombre'),
 						$this->input->post('strTelefono'),
 						$this->input->post('strCelular'),
+						$this->input->post('strFechanac'),
 						$this->input->post('strEmail'),
 						$this->input->post('strObservaciones'),
 						$this->input->post('intEstatusID')
-					);	
+					);
 					$id = $this->input->post('strRegistroGeneralID');
 					$intTipo=1;
 				}
@@ -140,6 +142,7 @@ class RegistrosGenerales extends MY_controller
 							$this->input->post('strNombre'),
 							$this->input->post('strTelefono'),
 							$this->input->post('strCelular'),
+							$this->input->post('strFechanac'),
 							$this->input->post('strEmail'),
 							$this->input->post('strObservaciones'),
 							$this->input->post('intEstatusID')

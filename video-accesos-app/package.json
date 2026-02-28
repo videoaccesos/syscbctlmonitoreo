@@ -1,0 +1,50 @@
+{
+  "name": "video-accesos-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:pull": "npx prisma db pull",
+    "db:seed": "npx prisma db seed",
+    "db:studio": "npx prisma studio",
+    "db:generate": "npx prisma generate",
+    "db:verify": "npx prisma db seed"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@prisma/client": "^5.22.0",
+    "@tanstack/react-table": "^8.21.3",
+    "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
+    "jssip": "^3.13.5",
+    "lucide-react": "^0.575.0",
+    "next": "16.1.6",
+    "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.13",
+    "prisma": "^5.22.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.71.2",
+    "recharts": "^3.7.0",
+    "unix-crypt-td-js": "^1.1.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
