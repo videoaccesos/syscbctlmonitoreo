@@ -3,211 +3,563 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Access Phone - Asistentes Inteligentes</title>
+    <title>Access Phone Pro - Asistentes Inteligentes</title>
     <script src="jssip.min.js"></script>
     <style>
+        :root {
+            --primary: #1e1b4b;
+            --primary-light: #2B2D6E;
+            --accent: #FF6B35;
+            --accent-light: #FFA500;
+            --success: #10b981;
+            --danger: #ef4444;
+            --danger-dark: #dc2626;
+            --text: #1e1b4b;
+            --text-muted: #64748b;
+            --text-light: #94a3b8;
+            --bg: #ffffff;
+            --bg-alt: #f8fafc;
+            --bg-dark: #0f172a;
+            --border: #e5e7eb;
+            --phone-width: 380px;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-lg: 16px;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        .phone-wrapper { position: fixed; right: -320px; top: 50%; transform: translateY(-50%); transition: right 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 9999; }
-        .phone-wrapper.open { right: 20px; }
-        .phone-tab { position: absolute; left: -50px; top: 50%; transform: translateY(-50%); width: 50px; height: 120px; background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); border-radius: 16px 0 0 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; box-shadow: -5px 0 20px rgba(255, 107, 53, 0.3); transition: all 0.3s ease; gap: 8px; }
-        .phone-tab:hover { width: 55px; left: -55px; }
-        .headset-icon { width: 28px; height: 28px; fill: white; }
-        .tab-text { color: white; font-size: 9px; font-weight: 700; text-transform: uppercase; writing-mode: vertical-rl; }
-        .phone-wrapper.ringing .phone-tab { animation: pulse 1s ease-in-out infinite; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-        @keyframes pulse { 0%, 100% { transform: translateY(-50%) scale(1); } 50% { transform: translateY(-50%) scale(1.05); } }
-        .phone-container { background: #ffffff; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); width: 300px; overflow: hidden; }
-        .phone-header { background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); color: white; padding: 10px 12px; position: relative; }
+
+        /* PHONE WRAPPER */
+        .phone-wrapper {
+            position: fixed; right: calc(-1 * var(--phone-width) - 20px); top: 50%; transform: translateY(-50%);
+            transition: right 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 9999;
+        }
+        .phone-wrapper.open { right: 16px; }
+
+        /* TAB */
+        .phone-tab {
+            position: absolute; left: -52px; top: 50%; transform: translateY(-50%);
+            width: 52px; height: 130px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+            border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: -5px 0 25px rgba(255, 107, 53, 0.3);
+            transition: all 0.3s ease; gap: 8px;
+        }
+        .phone-tab:hover { width: 58px; left: -58px; }
+        .headset-icon { width: 30px; height: 30px; fill: white; }
+        .tab-text { color: white; font-size: 9px; font-weight: 700; text-transform: uppercase; writing-mode: vertical-rl; letter-spacing: 1.5px; }
+        .phone-wrapper.ringing .phone-tab {
+            animation: pulse 0.8s ease-in-out infinite;
+            background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
+        }
+        @keyframes pulse { 0%,100%{transform:translateY(-50%) scale(1);}50%{transform:translateY(-50%) scale(1.08);} }
+
+        /* PHONE CONTAINER */
+        .phone-container {
+            background: var(--bg); border-radius: var(--radius-lg);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+            width: var(--phone-width); overflow: hidden;
+            max-height: 92vh; display: flex; flex-direction: column;
+        }
+
+        /* HEADER */
+        .phone-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white; padding: 12px 16px; flex-shrink: 0;
+        }
         .header-top { display: flex; align-items: center; justify-content: space-between; }
-        .logo-section { display: flex; align-items: center; gap: 8px; }
-        .logo-door { width: 26px; height: 26px; background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); border-radius: 6px; position: relative; }
-        .logo-door::before { content: ''; position: absolute; top: 3px; left: 6px; width: 14px; height: 17px; background: white; border-radius: 2px 2px 0 0; }
-        .logo-text h1 { font-size: 13px; font-weight: 700; }
-        .logo-text span { font-size: 8px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; }
+        .logo-section { display: flex; align-items: center; gap: 10px; }
+        .logo-icon {
+            width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 800; color: white;
+        }
+        .logo-text h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
+        .logo-text span { font-size: 9px; opacity: 0.8; text-transform: uppercase; letter-spacing: 1.5px; }
         .header-buttons { display: flex; gap: 6px; }
-        .header-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); width: 28px; height: 28px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: all 0.2s ease; color: white; }
+        .header-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+            width: 30px; height: 30px; border-radius: var(--radius-sm);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; transition: all 0.2s ease; color: white;
+        }
         .header-btn:hover { background: rgba(255,255,255,0.2); }
-        .connection-status { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 10px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 10px; width: fit-content; }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
-        .status-dot.connected { background: #10b981; }
+        .connection-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: 8px; background: rgba(255,255,255,0.08);
+            padding: 4px 10px; border-radius: 20px;
+        }
+        .connection-left { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); transition: background 0.3s; }
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+        .status-text { font-size: 10px; opacity: 0.9; }
+        .extension-badge {
+            font-size: 9px; background: rgba(255,255,255,0.15); padding: 2px 8px;
+            border-radius: 10px; font-weight: 600;
+        }
+
+        /* PRIVADA BAR */
+        .privada-bar {
+            background: linear-gradient(to right, var(--bg-dark), #1e293b);
+            padding: 8px 14px; display: flex; align-items: center; gap: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
+        }
+        .privada-label { color: var(--text-light); font-size: 10px; font-weight: 700; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.5px; }
+        .privada-select {
+            flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            color: white; padding: 5px 8px; border-radius: var(--radius-sm);
+            font-size: 11px; cursor: pointer; outline: none;
+        }
+        .privada-select option { background: #1e293b; color: white; }
+        .privada-info-strip {
+            display: none; background: linear-gradient(to right, rgba(16,185,129,0.1), rgba(16,185,129,0.05));
+            padding: 5px 14px; border-bottom: 1px solid rgba(16,185,129,0.2); flex-shrink: 0;
+        }
+        .privada-info-strip.active { display: flex; align-items: center; justify-content: space-between; }
+        .privada-info-strip .pis-text { color: var(--success); font-size: 10px; font-weight: 600; }
+        .privada-info-strip .pis-detail { color: var(--text-muted); font-size: 9px; }
 
         /* VIDEO PANEL */
-        .video-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease; background: #0f0f1a; }
-        .video-panel.active { max-height: 280px; padding: 8px; }
-        .video-container { position: relative; width: 100%; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; }
-        .video-container img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s ease; }
-        .video-overlay { position: absolute; top: 0; left: 0; right: 0; padding: 6px 10px; background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent); display: flex; justify-content: space-between; align-items: center; z-index: 2; }
-        .video-info { display: flex; align-items: center; gap: 6px; }
-        .video-live { background: #ef4444; color: white; font-size: 8px; font-weight: 700; padding: 2px 5px; border-radius: 3px; animation: blink 1s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .video-channel { color: white; font-size: 10px; font-weight: 600; }
+        .video-panel {
+            max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease;
+            background: #0a0a18; flex-shrink: 0;
+        }
+        .video-panel.active { max-height: 400px; padding: 10px; }
+        .video-main {
+            position: relative; width: 100%; background: #000;
+            border-radius: var(--radius); overflow: hidden; aspect-ratio: 16/9;
+        }
+        .video-main img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+            transition: opacity 0.15s ease;
+        }
+        .video-overlay {
+            position: absolute; top: 0; left: 0; right: 0;
+            padding: 8px 12px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent);
+            display: flex; justify-content: space-between; align-items: center; z-index: 2;
+        }
+        .video-info { display: flex; align-items: center; gap: 8px; }
+        .video-live {
+            background: var(--danger); color: white; font-size: 8px; font-weight: 800;
+            padding: 2px 6px; border-radius: 3px; animation: blink 1.2s infinite;
+            letter-spacing: 0.5px;
+        }
+        @keyframes blink { 0%,100%{opacity:1;}50%{opacity:0.4;} }
+        .video-cam-name { color: white; font-size: 11px; font-weight: 600; }
         .video-controls { display: flex; gap: 4px; }
-        .video-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 24px; height: 24px; border-radius: 6px; cursor: pointer; font-size: 11px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-        .video-btn:hover { background: rgba(255,255,255,0.3); }
-        .video-btn.active { background: #FF6B35; }
-        .video-status { position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.6); color: #94a3b8; font-size: 9px; padding: 2px 6px; border-radius: 4px; z-index: 2; }
-        .video-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #94a3b8; display: none; font-size: 12px; z-index: 1; }
+        .vid-btn {
+            background: rgba(255,255,255,0.15); border: none; color: white;
+            width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+            font-size: 12px; transition: all 0.2s; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .vid-btn:hover { background: rgba(255,255,255,0.3); }
+        .vid-btn.active { background: var(--accent); }
+        .video-fps {
+            position: absolute; bottom: 8px; right: 8px;
+            background: rgba(0,0,0,0.7); color: var(--text-light);
+            font-size: 9px; padding: 2px 8px; border-radius: 4px; z-index: 2;
+            font-family: monospace;
+        }
+        .video-error {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            text-align: center; color: var(--text-light); display: none;
+            font-size: 12px; z-index: 1;
+        }
         .video-error.show { display: block; }
-        .video-error-icon { font-size: 30px; margin-bottom: 6px; }
-        .video-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #94a3b8; display: none; font-size: 11px; z-index: 3; }
+        .video-error-icon { font-size: 36px; margin-bottom: 8px; opacity: 0.5; }
+        .video-loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            text-align: center; color: var(--text-light); display: none; font-size: 11px; z-index: 3;
+        }
         .video-loading.show { display: block; }
-        .video-loading-spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top-color: #FF6B35; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 6px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .video-selector { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
-        .camera-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 3px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; transition: all 0.2s; }
-        .camera-btn:hover { background: rgba(255,255,255,0.2); }
-        .camera-btn.active { background: linear-gradient(135deg, #FF6B35, #FFA500); border-color: transparent; }
-        .camera-btn:disabled { opacity: 0.5; cursor: wait; }
+        .video-loading-spinner {
+            width: 28px; height: 28px; border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: var(--accent); border-radius: 50%;
+            animation: spin 0.7s linear infinite; margin: 0 auto 8px;
+        }
+        @keyframes spin { to{transform:rotate(360deg);} }
+        .snapshot-flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0; pointer-events: none; z-index: 20;
+            transition: opacity 0.1s;
+        }
+        .snapshot-flash.active { opacity: 0.8; transition: opacity 0s; }
 
-        /* PHONE DISPLAY */
-        .phone-display { padding: 8px 12px; background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%); min-height: 44px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #e5e7eb; }
-        .phone-number { font-size: 20px; color: #1e1b4b; font-weight: 400; letter-spacing: 2px; font-family: 'SF Mono', Monaco, monospace; }
-        .call-info { display: none; flex-direction: column; align-items: center; gap: 2px; }
-        .call-info.active { display: flex; }
-        .call-timer { font-size: 16px; color: #1e1b4b; font-weight: 600; }
-        .call-status { font-size: 11px; color: #64748b; }
+        /* CAMERA SELECTOR */
+        .camera-selector {
+            display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+        }
+        .cam-btn {
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            color: white; padding: 4px 10px; border-radius: 6px;
+            font-size: 10px; cursor: pointer; transition: all 0.2s;
+            font-weight: 500;
+        }
+        .cam-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+        .cam-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-light)); border-color: transparent; font-weight: 700; }
+        .cam-btn:disabled { opacity: 0.4; cursor: wait; }
 
-        /* AUDIO CONTROLS */
-        .audio-controls { max-height: 0; overflow: hidden; transition: all 0.3s ease; background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%); }
-        .audio-controls.active { max-height: 200px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
-        .audio-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .audio-row:last-child { margin-bottom: 0; }
-        .audio-label { font-size: 10px; color: #64748b; font-weight: 600; min-width: 20px; text-align: center; }
-        .audio-slider { flex: 1; height: 4px; border-radius: 2px; background: #e5e7eb; outline: none; -webkit-appearance: none; }
-        .audio-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); cursor: pointer; }
-        .audio-value { font-size: 10px; color: #64748b; min-width: 28px; text-align: right; }
-        .mute-row { display: flex; gap: 6px; margin-top: 6px; }
-        .mute-btn { flex: 1; padding: 6px; background: linear-gradient(135deg, #64748b 0%, #475569 100%); color: white; border: none; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .mute-btn.muted { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-
-        /* TABS & DIALPAD */
-        .nav-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
-        .nav-tab { flex: 1; padding: 8px 4px; background: none; border: none; cursor: pointer; font-size: 10px; color: #64748b; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; transition: all 0.2s; }
-        .nav-tab.active { color: #FF6B35; }
-        .nav-tab::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #FF6B35; transform: scaleX(0); transition: transform 0.2s ease; }
-        .nav-tab.active::after { transform: scaleX(1); }
-        .nav-tab-icon { font-size: 14px; }
-        .tab-content { display: none; animation: fadeIn 0.3s ease; }
-        .tab-content.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .dialpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 12px; background: white; }
-        .dial-btn { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; font-size: 18px; font-weight: 500; color: #1e1b4b; cursor: pointer; transition: all 0.15s ease; }
-        .dial-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-color: #FF6B35; }
-        .dial-btn:active { transform: translateY(0); background: #f1f5f9; }
-        .dial-btn .letters { font-size: 8px; color: #94a3b8; margin-top: 1px; text-transform: uppercase; }
-        .action-buttons { display: flex; gap: 8px; padding: 8px 12px; background: #f8fafc; align-items: center; justify-content: center; }
-        .action-btn { width: 52px; height: 40px; border-radius: 10px; border: none; color: white; font-size: 16px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
-        .action-btn:hover { transform: translateY(-1px); }
-        .delete-btn { background: linear-gradient(135deg, #64748b 0%, #475569 100%); }
-        .audio-toggle-btn { width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 14px; transition: all 0.2s ease; background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); }
-        .audio-toggle-btn.active { background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); }
-        .video-toggle-btn { width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 14px; transition: all 0.2s ease; background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); }
-        .video-toggle-btn.active { background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); }
-        .call-btn { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
-        .hangup-btn { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); display: none; }
-
-        /* CALL LOG */
-        .call-log { max-height: 280px; overflow-y: auto; padding: 8px; }
-        .call-log-empty { text-align: center; padding: 30px; color: #94a3b8; font-size: 12px; }
-        .call-log-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
-        .call-log-item:hover { background: #f1f5f9; }
-        .call-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
-        .call-icon.incoming { background: rgba(16,185,129,0.1); color: #10b981; }
-        .call-icon.outgoing { background: rgba(59,130,246,0.1); color: #3b82f6; }
-        .call-icon.missed { background: rgba(239,68,68,0.1); color: #ef4444; }
-        .call-details { flex: 1; }
-        .call-contact { font-weight: 600; color: #1e1b4b; font-size: 12px; }
-        .call-number { font-size: 11px; color: #64748b; }
-        .call-meta { text-align: right; }
-        .call-time { font-size: 10px; color: #94a3b8; }
-        .call-duration { font-size: 11px; color: #64748b; }
-
-        /* CONTACTS */
-        .contacts-content { padding: 10px; }
-        .contacts-search { margin-bottom: 10px; position: relative; }
-        .search-input { width: 100%; padding: 8px 12px 8px 32px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 12px; background: #f8fafc; }
-        .search-input:focus { outline: none; border-color: #FF6B35; background: white; }
-        .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px; }
-        .contacts-list { max-height: 180px; overflow-y: auto; }
-        .contact-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease; }
-        .contact-item:hover { background: #f1f5f9; border-color: #FF6B35; }
-        .contact-info { flex: 1; cursor: pointer; }
-        .contact-name { font-weight: 600; color: #1e1b4b; font-size: 12px; }
-        .contact-number { color: #64748b; font-size: 11px; }
-        .contact-actions { display: flex; gap: 4px; align-items: center; }
-        .contact-type { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
-        .contact-type.vip { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; }
-        .contact-type.normal { background: #e5e7eb; color: #64748b; }
-        .contact-btn { width: 24px; height: 24px; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.2s ease; }
-        .contact-btn.edit { background: rgba(59,130,246,0.1); color: #3b82f6; }
-        .contact-btn.edit:hover { background: #3b82f6; color: white; }
-        .contact-btn.delete { background: rgba(239,68,68,0.1); color: #ef4444; }
-        .contact-btn.delete:hover { background: #ef4444; color: white; }
-        .add-contact-btn { width: 100%; padding: 8px; background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
-
-        /* MODALS */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 10000; }
-        .modal-content { background: white; width: 90%; max-width: 380px; margin: 60px auto; border-radius: 16px; overflow: hidden; }
-        .modal-header { background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .modal-title { font-size: 16px; font-weight: 600; }
-        .close-modal { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); width: 28px; height: 28px; border-radius: 8px; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .modal-body { padding: 15px; max-height: 70vh; overflow-y: auto; }
-        .setting-group { margin-bottom: 12px; }
-        .setting-group label { display: block; color: #1e1b4b; font-size: 12px; margin-bottom: 4px; font-weight: 600; }
-        .setting-group input { width: 100%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: #f8fafc; }
-        .setting-group input:focus { outline: none; border-color: #FF6B35; }
-        .settings-divider { margin: 15px 0; border: none; border-top: 1px solid #e5e7eb; }
-        .settings-section-title { font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 10px; }
-        .save-settings-btn { width: 100%; padding: 10px; background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); color: white; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
-        .incoming-call-modal { display: none; position: fixed; top: 20px; right: 20px; background: white; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); z-index: 10001; min-width: 300px; overflow: hidden; animation: slideDownBounce 0.5s ease; }
-        @keyframes slideDownBounce { 0% { transform: translateY(-100px); opacity: 0; } 60% { transform: translateY(10px); opacity: 1; } 80% { transform: translateY(-5px); } 100% { transform: translateY(0); } }
-        .incoming-header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 15px; text-align: center; }
-        .incoming-header h3 { font-size: 12px; font-weight: 500; margin-bottom: 8px; opacity: 0.9; }
-        .caller-number { font-size: 20px; font-weight: 700; }
-        .caller-name { font-size: 14px; opacity: 0.9; }
-        .incoming-actions { display: flex; padding: 15px; gap: 10px; background: #f8fafc; }
-        .answer-btn, .reject-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
-        .answer-btn { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
-        .reject-btn { background: #e5e7eb; color: #64748b; }
+        /* GRID VIEW */
+        .video-grid {
+            display: none; gap: 6px; margin-top: 8px;
+        }
+        .video-grid.active {
+            display: grid; grid-template-columns: 1fr 1fr;
+        }
+        .grid-cell {
+            position: relative; background: #111; border-radius: var(--radius-sm);
+            overflow: hidden; aspect-ratio: 16/9; cursor: pointer;
+            border: 2px solid transparent; transition: border-color 0.2s;
+        }
+        .grid-cell:hover { border-color: var(--accent); }
+        .grid-cell.active { border-color: var(--accent); }
+        .grid-cell img { width: 100%; height: 100%; object-fit: cover; }
+        .grid-cell-label {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            color: white; font-size: 9px; padding: 12px 6px 4px; font-weight: 600;
+        }
+        .video-privada-info {
+            display: none; background: rgba(16,185,129,0.1);
+            padding: 5px 10px; border-radius: 6px; margin-top: 6px;
+            font-size: 10px;
+        }
+        .video-privada-info.active { display: flex; align-items: center; justify-content: space-between; }
+        .video-privada-info .vpinfo-name { color: var(--success); font-weight: 600; }
+        .video-privada-info .vpinfo-source { color: var(--text-muted); font-size: 9px; }
 
         /* RELAY PANEL */
-        .relay-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease; background: #0f172a; }
-        .relay-panel.active { max-height: 200px; padding: 8px; }
-        .relay-panel-title { color: #94a3b8; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
-        .relay-buttons { display: flex; flex-direction: column; gap: 4px; }
-        .relay-btn { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: all 0.2s; color: white; }
-        .relay-btn:hover { background: rgba(255,107,53,0.2); border-color: #FF6B35; }
-        .relay-btn.activating { background: rgba(16,185,129,0.3); border-color: #10b981; animation: relayPulse 0.5s ease; }
-        .relay-btn.error { background: rgba(239,68,68,0.3); border-color: #ef4444; }
-        @keyframes relayPulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-        .relay-btn-info { display: flex; flex-direction: column; }
-        .relay-btn-name { font-size: 11px; font-weight: 600; }
-        .relay-btn-dns { font-size: 9px; color: #94a3b8; }
-        .relay-btn-icon { width: 28px; height: 28px; background: linear-gradient(135deg, #FF6B35, #FFA500); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-        .relay-toggle-btn { width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 14px; transition: all 0.2s ease; background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); }
-        .relay-toggle-btn.active { background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); }
+        .relay-panel {
+            max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease;
+            background: var(--bg-dark); flex-shrink: 0;
+        }
+        .relay-panel.active { max-height: 250px; padding: 10px 14px; overflow-y: auto; }
+        .relay-title {
+            color: var(--text-light); font-size: 10px; font-weight: 700;
+            text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .relay-grid { display: flex; flex-direction: column; gap: 6px; }
+        .relay-btn {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer;
+            transition: all 0.25s; color: white;
+        }
+        .relay-btn:hover { background: rgba(255,107,53,0.15); border-color: var(--accent); }
+        .relay-btn.activating {
+            background: rgba(16,185,129,0.2); border-color: var(--success);
+            animation: relayFlash 0.4s ease;
+        }
+        .relay-btn.error { background: rgba(239,68,68,0.2); border-color: var(--danger); }
+        @keyframes relayFlash { 0%{transform:scale(1);}50%{transform:scale(1.02);}100%{transform:scale(1);} }
+        .relay-info { display: flex; flex-direction: column; gap: 2px; }
+        .relay-name { font-size: 12px; font-weight: 600; }
+        .relay-dns { font-size: 9px; color: var(--text-light); font-family: monospace; }
+        .relay-icon {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border-radius: var(--radius-sm); display: flex;
+            align-items: center; justify-content: center; font-size: 16px;
+            flex-shrink: 0; transition: all 0.2s;
+        }
 
-        /* PRIVADA SELECTOR */
-        .privada-bar { background: linear-gradient(to right, #0f172a, #1e293b); padding: 6px 10px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .privada-bar label { color: #94a3b8; font-size: 9px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
-        .privada-select { flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 4px 6px; border-radius: 6px; font-size: 11px; cursor: pointer; }
-        .privada-select option { background: #1e293b; color: white; }
-        .privada-info { display: none; background: linear-gradient(to right, #0f172a, #1e293b); padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .privada-info.active { display: block; }
-        .privada-info-text { color: #10b981; font-size: 10px; font-weight: 500; }
+        /* DISPLAY */
+        .phone-display {
+            padding: 10px 16px; background: linear-gradient(to bottom, var(--bg-alt), #f1f5f9);
+            min-height: 48px; display: flex; align-items: center; justify-content: center;
+            border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        .phone-number {
+            font-size: 22px; color: var(--text); font-weight: 300;
+            letter-spacing: 3px; font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+        }
+        .call-info { display: none; flex-direction: column; align-items: center; gap: 2px; }
+        .call-info.active { display: flex; }
+        .call-timer { font-size: 18px; color: var(--text); font-weight: 600; font-family: monospace; }
+        .call-status { font-size: 11px; color: var(--text-muted); }
 
-        /* SNAPSHOT FLASH & CAPTURE */
-        .snapshot-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 20; transition: opacity 0.1s; }
-        .snapshot-flash.active { opacity: 0.8; transition: opacity 0s; }
-        .video-privada-info { display: none; background: linear-gradient(to right, #0f172a, #1e293b); padding: 4px 10px; font-size: 10px; color: #94a3b8; }
-        .video-privada-info.active { display: flex; align-items: center; justify-content: space-between; }
-        .video-privada-info .vpinfo-name { color: #10b981; font-weight: 600; }
-        .video-privada-info .vpinfo-source { color: #64748b; font-size: 9px; }
+        /* AUDIO CONTROLS */
+        .audio-controls {
+            max-height: 0; overflow: hidden; transition: all 0.3s ease;
+            background: var(--bg-alt); flex-shrink: 0;
+        }
+        .audio-controls.active { max-height: 200px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .audio-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .audio-row:last-child { margin-bottom: 0; }
+        .audio-icon { font-size: 14px; min-width: 22px; text-align: center; }
+        .audio-slider {
+            flex: 1; height: 4px; border-radius: 2px; background: var(--border);
+            outline: none; -webkit-appearance: none; cursor: pointer;
+        }
+        .audio-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            cursor: pointer; box-shadow: 0 2px 6px rgba(255,107,53,0.3);
+        }
+        .audio-value { font-size: 10px; color: var(--text-muted); min-width: 32px; text-align: right; font-family: monospace; }
+        .mute-row { display: flex; gap: 8px; margin-top: 8px; }
+        .mute-btn {
+            flex: 1; padding: 7px; background: linear-gradient(135deg, #64748b, #475569);
+            color: white; border: none; border-radius: var(--radius-sm);
+            font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .mute-btn.muted { background: linear-gradient(135deg, var(--danger), var(--danger-dark)); }
 
-        @media (max-width: 480px) { .phone-wrapper { right: -100%; top: auto; bottom: 0; transform: none; width: 100%; } .phone-wrapper.open { right: 0; } .phone-tab { display: none; } .phone-container { width: 100%; border-radius: 16px 16px 0 0; } }
+        /* TABS */
+        .nav-tabs {
+            display: flex; background: var(--bg-alt); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .nav-tab {
+            flex: 1; padding: 10px 4px; background: none; border: none; cursor: pointer;
+            font-size: 10px; color: var(--text-muted); display: flex; flex-direction: column;
+            align-items: center; gap: 3px; position: relative; transition: all 0.2s;
+            font-weight: 500;
+        }
+        .nav-tab.active { color: var(--accent); font-weight: 700; }
+        .nav-tab::after {
+            content: ''; position: absolute; bottom: 0; left: 10%; right: 10%; height: 2px;
+            background: var(--accent); transform: scaleX(0); transition: transform 0.2s ease;
+            border-radius: 1px;
+        }
+        .nav-tab.active::after { transform: scaleX(1); }
+        .nav-tab-icon { font-size: 15px; }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);} }
+
+        /* DIALPAD */
+        .dialpad {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+            padding: 10px 14px; background: white;
+        }
+        .dial-btn {
+            background: var(--bg-alt); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 12px; font-size: 20px;
+            font-weight: 500; color: var(--text); cursor: pointer;
+            transition: all 0.15s ease; display: flex; flex-direction: column;
+            align-items: center; gap: 2px;
+        }
+        .dial-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.08); border-color: var(--accent); }
+        .dial-btn:active { transform: translateY(0); background: #f1f5f9; }
+        .dial-btn .letters { font-size: 8px; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* ACTION BUTTONS */
+        .action-buttons {
+            display: flex; gap: 8px; padding: 10px 14px; background: var(--bg-alt);
+            align-items: center; justify-content: center;
+        }
+        .action-btn {
+            width: 48px; height: 42px; border-radius: var(--radius);
+            border: none; color: white; font-size: 16px; cursor: pointer;
+            transition: all 0.2s ease; display: flex; align-items: center;
+            justify-content: center;
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .delete-btn { background: linear-gradient(135deg, #64748b, #475569); }
+        .toggle-btn {
+            width: 38px; height: 38px; border-radius: 50%; border: none; color: white;
+            cursor: pointer; font-size: 14px; transition: all 0.2s ease;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        }
+        .toggle-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-light)); box-shadow: 0 0 12px rgba(255,107,53,0.4); }
+        .call-btn { background: linear-gradient(135deg, var(--success), #059669); }
+        .hangup-btn { background: linear-gradient(135deg, var(--danger), var(--danger-dark)); display: none; }
+
+        /* SCROLLABLE AREA */
+        .scroll-area { overflow-y: auto; flex: 1; min-height: 0; }
+
+        /* CALL LOG */
+        .call-log { padding: 10px; }
+        .call-log-empty { text-align: center; padding: 30px; color: var(--text-light); font-size: 12px; }
+        .call-log-item {
+            background: var(--bg-alt); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+            display: flex; align-items: center; gap: 10px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .call-log-item:hover { background: #f1f5f9; border-color: var(--accent); }
+        .call-icon {
+            width: 34px; height: 34px; border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; flex-shrink: 0;
+        }
+        .call-icon.incoming { background: rgba(16,185,129,0.1); color: var(--success); }
+        .call-icon.outgoing { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        .call-icon.missed { background: rgba(239,68,68,0.1); color: var(--danger); }
+        .call-details { flex: 1; }
+        .call-contact { font-weight: 600; color: var(--text); font-size: 12px; }
+        .call-number { font-size: 11px; color: var(--text-muted); }
+        .call-meta { text-align: right; }
+        .call-time { font-size: 10px; color: var(--text-light); }
+        .call-duration { font-size: 11px; color: var(--text-muted); }
+
+        /* CONTACTS */
+        .contacts-content { padding: 12px; }
+        .contacts-search { margin-bottom: 10px; position: relative; }
+        .search-input {
+            width: 100%; padding: 9px 14px 9px 34px; border: 1px solid var(--border);
+            border-radius: var(--radius); font-size: 12px; background: var(--bg-alt);
+            outline: none; transition: all 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(255,107,53,0.1); }
+        .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-light); font-size: 13px; }
+        .contacts-list { max-height: 200px; overflow-y: auto; }
+        .contact-item {
+            background: var(--bg-alt); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s ease;
+        }
+        .contact-item:hover { background: #f1f5f9; border-color: var(--accent); }
+        .contact-info { flex: 1; cursor: pointer; }
+        .contact-name { font-weight: 600; color: var(--text); font-size: 12px; }
+        .contact-number { color: var(--text-muted); font-size: 11px; }
+        .contact-actions { display: flex; gap: 4px; align-items: center; }
+        .contact-type {
+            padding: 2px 8px; border-radius: 4px; font-size: 9px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .contact-type.vip { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; }
+        .contact-type.normal { background: var(--border); color: var(--text-muted); }
+        .contact-btn {
+            width: 26px; height: 26px; border: none; border-radius: 6px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; transition: all 0.2s ease;
+        }
+        .contact-btn.edit { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        .contact-btn.edit:hover { background: #3b82f6; color: white; }
+        .contact-btn.delete { background: rgba(239,68,68,0.1); color: var(--danger); }
+        .contact-btn.delete:hover { background: var(--danger); color: white; }
+        .add-contact-btn {
+            width: 100%; padding: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            color: white; border: none; border-radius: var(--radius);
+            font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px;
+            transition: all 0.2s;
+        }
+        .add-contact-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,107,53,0.3); }
+
+        /* MODALS */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); z-index: 10000;
+        }
+        .modal-content {
+            background: white; width: 92%; max-width: 400px; margin: 50px auto;
+            border-radius: var(--radius-lg); overflow: hidden;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-size: 16px; font-weight: 600; }
+        .close-modal {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            width: 30px; height: 30px; border-radius: var(--radius-sm); color: white;
+            font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label {
+            display: block; color: var(--text); font-size: 12px; margin-bottom: 5px;
+            font-weight: 600;
+        }
+        .form-group input, .form-group select {
+            width: 100%; padding: 9px 14px; border: 1px solid var(--border);
+            border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-alt);
+            outline: none; transition: all 0.2s;
+        }
+        .form-group input:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(255,107,53,0.1); }
+        .form-divider { margin: 18px 0; border: none; border-top: 1px solid var(--border); }
+        .form-section-title {
+            font-size: 12px; font-weight: 700; color: var(--text-muted);
+            margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .save-btn {
+            width: 100%; padding: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            color: white; border: none; border-radius: var(--radius);
+            font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+        }
+        .save-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,107,53,0.3); }
+
+        /* INCOMING CALL MODAL */
+        .incoming-call-modal {
+            display: none; position: fixed; top: 20px; right: 20px;
+            background: white; border-radius: var(--radius-lg);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35); z-index: 10001;
+            min-width: 320px; overflow: hidden;
+            animation: slideDownBounce 0.5s ease;
+        }
+        @keyframes slideDownBounce { 0%{transform:translateY(-100px);opacity:0;}60%{transform:translateY(10px);opacity:1;}80%{transform:translateY(-5px);}100%{transform:translateY(0);} }
+        .incoming-header {
+            background: linear-gradient(135deg, var(--danger), var(--danger-dark));
+            color: white; padding: 18px 20px; text-align: center;
+        }
+        .incoming-header h3 { font-size: 12px; font-weight: 500; margin-bottom: 10px; opacity: 0.9; }
+        .caller-number { font-size: 22px; font-weight: 700; }
+        .caller-name { font-size: 14px; opacity: 0.9; margin-top: 4px; }
+        .caller-privada {
+            display: none; margin-top: 8px; background: rgba(255,255,255,0.15);
+            padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
+        }
+        .caller-privada.active { display: inline-block; }
+        .incoming-actions { display: flex; padding: 16px; gap: 12px; background: var(--bg-alt); }
+        .answer-btn, .reject-btn {
+            flex: 1; padding: 12px; border: none; border-radius: var(--radius);
+            font-size: 13px; font-weight: 700; cursor: pointer; display: flex;
+            align-items: center; justify-content: center; gap: 6px; transition: all 0.2s;
+        }
+        .answer-btn { background: linear-gradient(135deg, var(--success), #059669); color: white; }
+        .answer-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+        .reject-btn { background: var(--border); color: var(--text-muted); }
+        .reject-btn:hover { background: #d1d5db; }
+
+        /* CONTACT MODAL */
+        .contact-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); z-index: 10002; }
+        .contact-modal-content {
+            background: white; width: 90%; max-width: 360px; margin: 80px auto;
+            border-radius: var(--radius-lg); overflow: hidden;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.3);
+        }
+
+        /* TOAST NOTIFICATIONS */
+        .toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 10003; display: flex; flex-direction: column; gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--bg-dark); color: white; padding: 10px 20px;
+            border-radius: var(--radius); font-size: 12px; font-weight: 500;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            animation: toastIn 0.3s ease; pointer-events: auto;
+            display: flex; align-items: center; gap: 8px; min-width: 250px;
+        }
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--danger); }
+        .toast.info { border-left: 3px solid #3b82f6; }
+        .toast.fadeOut { animation: toastOut 0.3s ease forwards; }
+        @keyframes toastIn { from{opacity:0;transform:translateY(-20px);}to{opacity:1;transform:translateY(0);} }
+        @keyframes toastOut { from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-20px);} }
+
+        /* RESPONSIVE */
+        @media (max-width: 480px) {
+            .phone-wrapper { right: -100%; top: auto; bottom: 0; transform: none; width: 100%; }
+            .phone-wrapper.open { right: 0; }
+            .phone-tab { display: none; }
+            .phone-container { width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 100vh; }
+        }
     </style>
 </head>
 <body>
+    <!-- TOAST CONTAINER -->
+    <div class="toast-container" id="toastContainer"></div>
+
     <div class="phone-wrapper" id="phoneWrapper">
         <div class="phone-tab" onclick="togglePhone()">
             <svg class="headset-icon" viewBox="0 0 24 24" id="tabIcon">
@@ -217,733 +569,1147 @@
             <span class="tab-text">Access</span>
         </div>
         <div class="phone-container">
+            <!-- HEADER -->
             <div class="phone-header">
                 <div class="header-top">
                     <div class="logo-section">
-                        <div class="logo-door"></div>
-                        <div class="logo-text"><h1>ACCESS PHONE</h1><span>Asistentes Inteligentes</span></div>
+                        <div class="logo-icon">AP</div>
+                        <div class="logo-text"><h1>ACCESS PHONE</h1><span>Monitoreo Profesional</span></div>
                     </div>
                     <div class="header-buttons">
-                        <button class="header-btn" onclick="openSettings()" title="Configuración">⚙️</button>
-                        <button class="header-btn" onclick="togglePhone()" title="Minimizar">−</button>
+                        <button class="header-btn" onclick="openSettings()" title="Configuracion">&#9881;</button>
+                        <button class="header-btn" onclick="togglePhone()" title="Minimizar">&#8722;</button>
                     </div>
                 </div>
-                <div class="connection-status"><span class="status-dot" id="statusDot"></span><span id="statusText">Desconectado</span></div>
-            </div>
-            <!-- VIDEO PANEL -->
-            <div class="video-panel" id="videoPanel">
-                <div class="video-container" id="videoContainer">
-                    <img id="cameraSnapshot" src="" alt="Cámara">
-                    <div class="video-overlay">
-                        <div class="video-info"><span class="video-live" id="videoLive">● LIVE</span><span class="video-channel" id="videoChannelName">Cargando...</span></div>
-                        <div class="video-controls">
-                            <button class="video-btn" id="videoPauseBtn" onclick="toggleVideoPause()" title="Pausar">⏸</button>
-                            <button class="video-btn" id="snapshotBtn" onclick="captureSnapshot()" title="Capturar foto">📸</button>
-                            <button class="video-btn" onclick="toggleFullscreen()" title="Pantalla completa">⛶</button>
-                        </div>
+                <div class="connection-bar">
+                    <div class="connection-left">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span class="status-text" id="statusText">Desconectado</span>
                     </div>
-                    <div class="video-status" id="videoStatus">-- FPS</div>
-                    <div class="video-loading" id="videoLoading"><div class="video-loading-spinner"></div><div>Cambiando cámara...</div></div>
-                    <div class="video-error" id="videoError"><div class="video-error-icon">📹</div><div>Sin señal</div></div>
-                    <div class="snapshot-flash" id="snapshotFlash"></div>
+                    <span class="extension-badge" id="extensionBadge">--</span>
                 </div>
-                <div class="video-selector" id="videoSelector"></div>
-                <div class="video-privada-info" id="videoPrivadaInfo"></div>
             </div>
+
             <!-- PRIVADA SELECTOR -->
             <div class="privada-bar">
-                <label>Privada:</label>
+                <span class="privada-label">Privada:</span>
                 <select class="privada-select" id="privadaSelect" onchange="onPrivadaSelected(this.value)">
                     <option value="">-- Seleccionar --</option>
                 </select>
             </div>
-            <div class="privada-info" id="privadaInfo">
-                <span class="privada-info-text" id="privadaInfoText"></span>
+            <div class="privada-info-strip" id="privadaInfoStrip">
+                <span class="pis-text" id="privadaInfoText"></span>
+                <span class="pis-detail" id="privadaInfoDetail"></span>
             </div>
+
+            <!-- VIDEO PANEL -->
+            <div class="video-panel" id="videoPanel">
+                <div class="video-main" id="videoContainer">
+                    <img id="cameraSnapshot" src="" alt="Camara">
+                    <div class="video-overlay">
+                        <div class="video-info">
+                            <span class="video-live" id="videoLive">&#9679; LIVE</span>
+                            <span class="video-cam-name" id="videoChannelName">Cargando...</span>
+                        </div>
+                        <div class="video-controls">
+                            <button class="vid-btn" id="videoPauseBtn" onclick="toggleVideoPause()" title="Pausar">&#9208;</button>
+                            <button class="vid-btn" id="snapshotBtn" onclick="captureSnapshot()" title="Capturar">&#128248;</button>
+                            <button class="vid-btn" id="gridToggleBtn" onclick="toggleGridView()" title="Multi-camara">&#9638;</button>
+                            <button class="vid-btn" onclick="toggleFullscreen()" title="Pantalla completa">&#9974;</button>
+                        </div>
+                    </div>
+                    <div class="video-fps" id="videoStatus">-- FPS</div>
+                    <div class="video-loading" id="videoLoading"><div class="video-loading-spinner"></div><div>Cambiando camara...</div></div>
+                    <div class="video-error" id="videoError"><div class="video-error-icon">&#128249;</div><div>Sin senal</div></div>
+                    <div class="snapshot-flash" id="snapshotFlash"></div>
+                </div>
+                <!-- GRID VIEW -->
+                <div class="video-grid" id="videoGrid"></div>
+                <!-- CAMERA SELECTOR -->
+                <div class="camera-selector" id="videoSelector"></div>
+                <div class="video-privada-info" id="videoPrivadaInfo"></div>
+            </div>
+
             <!-- RELAY PANEL -->
             <div class="relay-panel" id="relayPanel">
-                <div class="relay-panel-title">🔓 Relays / Apertura</div>
-                <div class="relay-buttons" id="relayButtons">
-                    <div style="color:#64748b;font-size:11px;text-align:center;padding:10px;">Seleccione una privada</div>
+                <div class="relay-title">&#128275; Relays / Apertura Remota</div>
+                <div class="relay-grid" id="relayButtons">
+                    <div style="color:var(--text-muted);font-size:11px;text-align:center;padding:12px;">Seleccione una privada para ver relays</div>
                 </div>
             </div>
+
             <!-- DISPLAY -->
-            <div class="phone-display"><div class="phone-number" id="phoneNumber"></div><div class="call-info" id="callInfo"><div class="call-timer" id="callTimer">00:00</div><div class="call-status" id="callStatus"></div></div></div>
+            <div class="phone-display">
+                <div class="phone-number" id="phoneNumber"></div>
+                <div class="call-info" id="callInfo">
+                    <div class="call-timer" id="callTimer">00:00</div>
+                    <div class="call-status" id="callStatus"></div>
+                </div>
+            </div>
+
             <!-- AUDIO -->
             <div class="audio-controls" id="audioControls">
-                <div class="audio-row"><span class="audio-label">🎙</span><input type="range" class="audio-slider" id="micSlider" min="0" max="100" value="50" oninput="updateMicVolume(this.value)"><span class="audio-value" id="micLevel">50%</span></div>
-                <div class="audio-row"><span class="audio-label">🔊</span><input type="range" class="audio-slider" id="speakerSlider" min="0" max="100" value="75" oninput="updateSpeakerVolume(this.value)"><span class="audio-value" id="speakerLevel">75%</span></div>
-                <div class="audio-row"><span class="audio-label">🔔</span><input type="range" class="audio-slider" id="ringtoneSlider" min="0" max="100" value="80" oninput="updateRingtoneVolume(this.value)"><span class="audio-value" id="ringtoneLevel">80%</span></div>
-                <div class="mute-row"><button class="mute-btn" id="muteBtn" onclick="toggleMute()">🎙 Silenciar</button></div>
+                <div class="audio-row">
+                    <span class="audio-icon">&#127908;</span>
+                    <input type="range" class="audio-slider" id="micSlider" min="0" max="100" value="50" oninput="updateMicVolume(this.value)">
+                    <span class="audio-value" id="micLevel">50%</span>
+                </div>
+                <div class="audio-row">
+                    <span class="audio-icon">&#128266;</span>
+                    <input type="range" class="audio-slider" id="speakerSlider" min="0" max="100" value="75" oninput="updateSpeakerVolume(this.value)">
+                    <span class="audio-value" id="speakerLevel">75%</span>
+                </div>
+                <div class="audio-row">
+                    <span class="audio-icon">&#128276;</span>
+                    <input type="range" class="audio-slider" id="ringtoneSlider" min="0" max="100" value="80" oninput="updateRingtoneVolume(this.value)">
+                    <span class="audio-value" id="ringtoneLevel">80%</span>
+                </div>
+                <div class="mute-row">
+                    <button class="mute-btn" id="muteBtn" onclick="toggleMute()">&#127908; Silenciar Mic</button>
+                </div>
             </div>
+
             <!-- TABS -->
             <div class="nav-tabs">
-                <button class="nav-tab active" onclick="switchTab('dialpad')"><span class="nav-tab-icon">📱</span><span>Teclado</span></button>
-                <button class="nav-tab" onclick="switchTab('history')"><span class="nav-tab-icon">📋</span><span>Historial</span></button>
-                <button class="nav-tab" onclick="switchTab('contacts')"><span class="nav-tab-icon">👥</span><span>Contactos</span></button>
+                <button class="nav-tab active" onclick="switchTab('dialpad')"><span class="nav-tab-icon">&#128241;</span><span>Teclado</span></button>
+                <button class="nav-tab" onclick="switchTab('history')"><span class="nav-tab-icon">&#128203;</span><span>Historial</span></button>
+                <button class="nav-tab" onclick="switchTab('contacts')"><span class="nav-tab-icon">&#128101;</span><span>Contactos</span></button>
             </div>
-            <!-- DIALPAD -->
-            <div id="dialpadTab" class="tab-content active">
-                <div class="dialpad">
-                    <button class="dial-btn" onclick="addDigit('1')">1</button>
-                    <button class="dial-btn" onclick="addDigit('2')">2<div class="letters">ABC</div></button>
-                    <button class="dial-btn" onclick="addDigit('3')">3<div class="letters">DEF</div></button>
-                    <button class="dial-btn" onclick="addDigit('4')">4<div class="letters">GHI</div></button>
-                    <button class="dial-btn" onclick="addDigit('5')">5<div class="letters">JKL</div></button>
-                    <button class="dial-btn" onclick="addDigit('6')">6<div class="letters">MNO</div></button>
-                    <button class="dial-btn" onclick="addDigit('7')">7<div class="letters">PQRS</div></button>
-                    <button class="dial-btn" onclick="addDigit('8')">8<div class="letters">TUV</div></button>
-                    <button class="dial-btn" onclick="addDigit('9')">9<div class="letters">WXYZ</div></button>
-                    <button class="dial-btn" onclick="addDigit('*')">*</button>
-                    <button class="dial-btn" onclick="addDigit('0')">0<div class="letters">+</div></button>
-                    <button class="dial-btn" onclick="addDigit('#')">#</button>
+
+            <!-- SCROLLABLE CONTENT -->
+            <div class="scroll-area">
+                <!-- DIALPAD -->
+                <div id="dialpadTab" class="tab-content active">
+                    <div class="dialpad">
+                        <button class="dial-btn" onclick="addDigit('1')">1</button>
+                        <button class="dial-btn" onclick="addDigit('2')">2<div class="letters">ABC</div></button>
+                        <button class="dial-btn" onclick="addDigit('3')">3<div class="letters">DEF</div></button>
+                        <button class="dial-btn" onclick="addDigit('4')">4<div class="letters">GHI</div></button>
+                        <button class="dial-btn" onclick="addDigit('5')">5<div class="letters">JKL</div></button>
+                        <button class="dial-btn" onclick="addDigit('6')">6<div class="letters">MNO</div></button>
+                        <button class="dial-btn" onclick="addDigit('7')">7<div class="letters">PQRS</div></button>
+                        <button class="dial-btn" onclick="addDigit('8')">8<div class="letters">TUV</div></button>
+                        <button class="dial-btn" onclick="addDigit('9')">9<div class="letters">WXYZ</div></button>
+                        <button class="dial-btn" onclick="addDigit('*')">*</button>
+                        <button class="dial-btn" onclick="addDigit('0')">0<div class="letters">+</div></button>
+                        <button class="dial-btn" onclick="addDigit('#')">#</button>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="action-btn delete-btn" onclick="deleteDigit()">&#9003;</button>
+                        <button class="toggle-btn" id="audioToggleBtn" onclick="toggleAudioControls()" title="Audio">&#127908;</button>
+                        <button class="toggle-btn" id="videoToggleBtn" onclick="toggleVideoPanel()" title="Video (V)">&#128249;</button>
+                        <button class="toggle-btn" id="relayToggleBtn" onclick="toggleRelayPanel()" title="Relays (R)">&#128275;</button>
+                        <button class="action-btn call-btn" id="callBtn" onclick="makeCall()">&#128222;</button>
+                        <button class="action-btn hangup-btn" id="hangupBtn" onclick="hangupCall()">&#128222;</button>
+                    </div>
                 </div>
-                <div class="action-buttons">
-                    <button class="action-btn delete-btn" onclick="deleteDigit()">⌫</button>
-                    <button class="audio-toggle-btn" id="audioToggleBtn" onclick="toggleAudioControls()" title="Audio">🎙</button>
-                    <button class="video-toggle-btn" id="videoToggleBtn" onclick="toggleVideoPanel()" title="Video (V)">📹</button>
-                    <button class="relay-toggle-btn" id="relayToggleBtn" onclick="toggleRelayPanel()" title="Relays (R)">🔓</button>
-                    <button class="action-btn call-btn" id="callBtn" onclick="makeCall()">📞</button>
-                    <button class="action-btn hangup-btn" id="hangupBtn" onclick="hangupCall()">📞</button>
+                <!-- HISTORY -->
+                <div id="historyTab" class="tab-content">
+                    <div class="call-log" id="callLog"><div class="call-log-empty">No hay llamadas registradas</div></div>
                 </div>
-            </div>
-            <!-- HISTORY -->
-            <div id="historyTab" class="tab-content"><div class="call-log" id="callLog"><div class="call-log-empty">No hay llamadas registradas</div></div></div>
-            <!-- CONTACTS -->
-            <div id="contactsTab" class="tab-content">
-                <div class="contacts-content">
-                    <div class="contacts-search"><span class="search-icon">🔍</span><input type="text" class="search-input" placeholder="Buscar contacto..." onkeyup="searchContacts(this.value)"></div>
-                    <div class="contacts-list" id="contactsList"></div>
-                    <button class="add-contact-btn" onclick="showAddContact()">+ Agregar Contacto</button>
+                <!-- CONTACTS -->
+                <div id="contactsTab" class="tab-content">
+                    <div class="contacts-content">
+                        <div class="contacts-search"><span class="search-icon">&#128269;</span><input type="text" class="search-input" placeholder="Buscar contacto..." onkeyup="searchContacts(this.value)"></div>
+                        <div class="contacts-list" id="contactsList"></div>
+                        <button class="add-contact-btn" onclick="showContactModal()">+ Agregar Contacto</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
     <!-- SETTINGS MODAL -->
     <div class="modal" id="settingsModal">
         <div class="modal-content">
-            <div class="modal-header"><h2 class="modal-title">⚙️ Configuración</h2><button class="close-modal" onclick="closeSettings()">×</button></div>
+            <div class="modal-header"><h2 class="modal-title">&#9881; Configuracion</h2><button class="close-modal" onclick="closeSettings()">&#215;</button></div>
             <div class="modal-body">
-                <div class="settings-section-title">📞 Conexión SIP</div>
-                <div class="setting-group"><label>Servidor WebSocket</label><input type="text" id="wsServer" placeholder="wss://accessbotpbx.info:8089/ws"></div>
-                <div class="setting-group"><label>Extensión</label><input type="text" id="sipExtension" placeholder="103"></div>
-                <div class="setting-group"><label>Contraseña</label><input type="password" id="sipPassword" placeholder="Contraseña"></div>
-                <div class="setting-group"><label>Dominio SIP</label><input type="text" id="sipDomain" placeholder="accessbotpbx.info"></div>
-                <hr class="settings-divider">
-                <div class="settings-section-title">📹 Video</div>
-                <div class="setting-group"><label>URL Proxy Cámaras</label><input type="text" id="cameraProxyUrl" placeholder="camera_proxy.php"></div>
-                <div class="setting-group"><label>Refresh (ms)</label><input type="number" id="videoRefreshRate" placeholder="500" min="100" max="2000"></div>
-                <div class="setting-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoShowVideo" checked style="width:auto;">Video automático en llamadas</label></div>
-                <hr class="settings-divider">
-                <div class="settings-section-title">🔓 MQTT / Relays</div>
-                <div class="setting-group"><label>URL API Privada</label><input type="text" id="privadaApiUrl" placeholder="api_privada.php"></div>
-                <div class="setting-group"><label>URL MQTT Relay</label><input type="text" id="mqttRelayUrl" placeholder="mqtt_relay.php"></div>
-                <div class="setting-group"><label>Broker MQTT (host)</label><input type="text" id="mqttBrokerHost" placeholder="localhost"></div>
-                <div class="setting-group"><label>Puerto MQTT</label><input type="number" id="mqttBrokerPort" placeholder="1883"></div>
-                <div class="setting-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoLookupCaller" checked style="width:auto;">Identificar privada por CallerID</label></div>
-                <button class="save-settings-btn" onclick="saveSettings()">Guardar y Conectar</button>
+                <div class="form-section-title">&#128222; Conexion SIP</div>
+                <div class="form-group"><label>Servidor WebSocket</label><input type="text" id="wsServer" placeholder="wss://accessbotpbx.info:8089/ws"></div>
+                <div class="form-group"><label>Extension</label><input type="text" id="sipExtension" placeholder="103"></div>
+                <div class="form-group"><label>Contrasena</label><input type="password" id="sipPassword" placeholder="Contrasena SIP"></div>
+                <div class="form-group"><label>Dominio SIP</label><input type="text" id="sipDomain" placeholder="accessbotpbx.info"></div>
+                <hr class="form-divider">
+                <div class="form-section-title">&#128249; Video</div>
+                <div class="form-group"><label>URL Proxy Camaras</label><input type="text" id="cameraProxyUrl" placeholder="camera_proxy.php"></div>
+                <div class="form-group"><label>Refresh (ms)</label><input type="number" id="videoRefreshRate" placeholder="500" min="100" max="2000"></div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoShowVideo" checked style="width:auto;">Video automatico en llamadas</label></div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoSnapshot" checked style="width:auto;">Auto-snapshot al contestar</label></div>
+                <hr class="form-divider">
+                <div class="form-section-title">&#128275; MQTT / Relays</div>
+                <div class="form-group"><label>URL API Privada</label><input type="text" id="privadaApiUrl" placeholder="api_privada.php"></div>
+                <div class="form-group"><label>URL MQTT Relay</label><input type="text" id="mqttRelayUrl" placeholder="mqtt_relay.php"></div>
+                <div class="form-group"><label>Broker MQTT (host)</label><input type="text" id="mqttBrokerHost" placeholder="localhost"></div>
+                <div class="form-group"><label>Puerto MQTT</label><input type="number" id="mqttBrokerPort" placeholder="1883"></div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoLookupCaller" checked style="width:auto;">Identificar privada por CallerID</label></div>
+                <button class="save-btn" onclick="saveSettings()">Guardar y Conectar</button>
             </div>
         </div>
     </div>
+
     <!-- INCOMING CALL MODAL -->
     <div class="incoming-call-modal" id="incomingModal">
-        <div class="incoming-header"><h3>📞 Llamada Entrante</h3><div class="caller-number" id="callerNumber">Desconocido</div><div class="caller-name" id="callerName"></div></div>
-        <div class="incoming-actions"><button class="answer-btn" onclick="answerCall()">✓ Contestar</button><button class="reject-btn" onclick="rejectCall()">✗ Rechazar</button></div>
+        <div class="incoming-header">
+            <h3>&#128222; Llamada Entrante</h3>
+            <div class="caller-number" id="callerNumber">Desconocido</div>
+            <div class="caller-name" id="callerName"></div>
+            <div class="caller-privada" id="callerPrivada"></div>
+        </div>
+        <div class="incoming-actions">
+            <button class="answer-btn" onclick="answerCall()">&#10003; Contestar</button>
+            <button class="reject-btn" onclick="rejectCall()">&#10007; Rechazar</button>
+        </div>
     </div>
+
+    <!-- CONTACT ADD/EDIT MODAL -->
+    <div class="contact-modal" id="contactModal">
+        <div class="contact-modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="contactModalTitle">Agregar Contacto</h2>
+                <button class="close-modal" onclick="closeContactModal()">&#215;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="contactEditIndex" value="-1">
+                <div class="form-group"><label>Nombre</label><input type="text" id="contactNameInput" placeholder="Nombre del contacto"></div>
+                <div class="form-group"><label>Numero</label><input type="text" id="contactNumberInput" placeholder="Numero telefonico"></div>
+                <div class="form-group">
+                    <label>Tipo</label>
+                    <select id="contactTypeInput">
+                        <option value="normal">Normal</option>
+                        <option value="vip">VIP</option>
+                    </select>
+                </div>
+                <button class="save-btn" onclick="saveContact()">Guardar Contacto</button>
+            </div>
+        </div>
+    </div>
+
     <!-- AUDIO ELEMENTS -->
     <audio id="remoteAudio" autoplay></audio>
     <audio id="localAudio" autoplay muted></audio>
     <audio id="ringtone" loop><source src="ringtone.mp3" type="audio/mpeg"><source src="ringtone.ogg" type="audio/ogg"></audio>
 
-    <!-- ============================================ -->
-    <!-- JAVASCRIPT EN PARTE 2                        -->
-    <!-- ============================================ -->
-
-<!-- ============================================ -->
-    <!-- PEGAR DESPUÉS DE LA PARTE 1                  -->
-    <!-- ============================================ -->
     <script>
-        let ua=null,currentSession=null,phoneNumber='',callTimer=null,callStartTime=null;
-        let config={},contacts=[],callHistory=[],phoneOpen=false,localStream=null,isMuted=false;
-        let videoRefreshInterval=null,videoPaused=false,currentChannel='701',availableCameras=[];
-        let videoSettings={proxyUrl:'camera_proxy.php',refreshRate:500,autoShowOnCall:true};
-        let audioSettings={micVolume:50,speakerVolume:75,ringtoneVolume:80};
-        let dtmfContext=null;
-        let switchingCamera=false;
-        let consecutiveErrors=0;
-        const MAX_CONSECUTIVE_ERRORS=5;
+    // ==========================================
+    // STATE
+    // ==========================================
+    let ua = null, currentSession = null, phoneNumber = '', callTimer = null, callStartTime = null;
+    let config = {}, contacts = [], callHistory = [], phoneOpen = false, localStream = null, isMuted = false;
+    let videoRefreshInterval = null, videoPaused = false, currentChannel = '701', availableCameras = [];
+    let videoSettings = { proxyUrl: 'camera_proxy.php', refreshRate: 500, autoShowOnCall: true, autoSnapshot: true };
+    let audioSettings = { micVolume: 50, speakerVolume: 75, ringtoneVolume: 80 };
+    let dtmfContext = null;
+    let switchingCamera = false;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
+    let gridViewActive = false;
+    let gridIntervals = {};
 
-        // ==========================================
-        // DTMF TONE GENERATOR
-        // ==========================================
-        const DTMF_FREQS={
-            '1':[697,1209],'2':[697,1336],'3':[697,1477],
-            '4':[770,1209],'5':[770,1336],'6':[770,1477],
-            '7':[852,1209],'8':[852,1336],'9':[852,1477],
-            '*':[941,1209],'0':[941,1336],'#':[941,1477]
-        };
+    let privadaSettings = {
+        apiUrl: 'api_privada.php', mqttRelayUrl: 'mqtt_relay.php',
+        mqttBrokerHost: 'localhost', mqttBrokerPort: 1883, autoLookupCaller: true
+    };
+    let currentPrivada = null, privadaVideos = [], privadaRelays = [];
 
-        function playDTMF(digit) {
-            try {
-                if(!dtmfContext) dtmfContext=new (window.AudioContext||window.webkitAudioContext)();
-                const freqs=DTMF_FREQS[digit];
-                if(!freqs) return;
-                const gain=dtmfContext.createGain();
-                gain.gain.value=0.15;
-                gain.connect(dtmfContext.destination);
-                const osc1=dtmfContext.createOscillator();
-                const osc2=dtmfContext.createOscillator();
-                osc1.frequency.value=freqs[0];
-                osc2.frequency.value=freqs[1];
-                osc1.connect(gain);
-                osc2.connect(gain);
-                const now=dtmfContext.currentTime;
-                osc1.start(now);
-                osc2.start(now);
-                gain.gain.setValueAtTime(0.15,now);
-                gain.gain.exponentialRampToValueAtTime(0.001,now+0.15);
-                osc1.stop(now+0.15);
-                osc2.stop(now+0.15);
-            } catch(e) { console.log('DTMF audio error:',e); }
-        }
+    // ==========================================
+    // TOAST NOTIFICATIONS
+    // ==========================================
+    function showToast(message, type = 'info', duration = 3000) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        const icons = { success: '&#10003;', error: '&#10007;', info: '&#8505;' };
+        toast.innerHTML = '<span>' + (icons[type] || '') + '</span><span>' + message + '</span>';
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.classList.add('fadeOut');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, duration);
+    }
 
-        // ==========================================
-        // VIDEO - CAMERA SYSTEM (FIXED v3.1)
-        // ==========================================
-        async function loadCameraList() {
-            try {
-                const r=await fetch(`${videoSettings.proxyUrl}?action=list`);
-                const d=await r.json();
-                if(d.success){availableCameras=d.cameras;renderCameraSelector();}
-            } catch(e) {
-                availableCameras=[{channel:'701',name:'Entrada Principal'}];
-                renderCameraSelector();
-            }
-        }
+    // ==========================================
+    // DTMF TONE GENERATOR
+    // ==========================================
+    const DTMF_FREQS = {
+        '1':[697,1209],'2':[697,1336],'3':[697,1477],
+        '4':[770,1209],'5':[770,1336],'6':[770,1477],
+        '7':[852,1209],'8':[852,1336],'9':[852,1477],
+        '*':[941,1209],'0':[941,1336],'#':[941,1477]
+    };
 
-        function renderCameraSelector() {
-            const s=document.getElementById('videoSelector');
-            if(!availableCameras.length){s.innerHTML='';return;}
-            s.innerHTML=availableCameras.map(c=>
-                `<button class="camera-btn ${c.channel===currentChannel?'active':''}" 
-                 onclick="selectCamera('${c.channel}')" 
-                 ${switchingCamera?'disabled':''}>${c.name}</button>`
-            ).join('');
-        }
+    function playDTMF(digit) {
+        try {
+            if (!dtmfContext) dtmfContext = new (window.AudioContext || window.webkitAudioContext)();
+            var freqs = DTMF_FREQS[digit];
+            if (!freqs) return;
+            var gain = dtmfContext.createGain();
+            gain.gain.value = 0.15;
+            gain.connect(dtmfContext.destination);
+            var osc1 = dtmfContext.createOscillator();
+            var osc2 = dtmfContext.createOscillator();
+            osc1.frequency.value = freqs[0];
+            osc2.frequency.value = freqs[1];
+            osc1.connect(gain);
+            osc2.connect(gain);
+            var now = dtmfContext.currentTime;
+            osc1.start(now);
+            osc2.start(now);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            osc1.stop(now + 0.15);
+            osc2.stop(now + 0.15);
+        } catch(e) {}
+    }
 
-        // FIX PRINCIPAL: selectCamera ahora es atómico
-        function selectCamera(ch) {
-            if(ch===currentChannel || switchingCamera) return;
-            switchingCamera=true;
-            consecutiveErrors=0;
-
-            // 1. Detener ciclo de refresh completamente
-            stopVideoRefresh();
-
-            // 2. Mostrar estado de carga
-            const img=document.getElementById('cameraSnapshot');
-            const loading=document.getElementById('videoLoading');
-            const error=document.getElementById('videoError');
-            img.style.opacity='0.3';
-            loading.classList.add('show');
-            error.classList.remove('show');
-            document.getElementById('videoStatus').textContent='CAMBIANDO...';
-            document.getElementById('videoLive').style.display='none';
-
-            // 3. Actualizar canal
-            currentChannel=ch;
-            const cam=availableCameras.find(x=>x.channel===ch);
-            document.getElementById('videoChannelName').textContent=cam?cam.name:`Canal ${ch}`;
+    // ==========================================
+    // VIDEO CAMERA SYSTEM
+    // ==========================================
+    async function loadCameraList() {
+        try {
+            var r = await fetch(videoSettings.proxyUrl + '?action=list');
+            var d = await r.json();
+            if (d.success) { availableCameras = d.cameras; renderCameraSelector(); }
+        } catch(e) {
+            availableCameras = [{ channel: '701', name: 'Entrada Principal' }];
             renderCameraSelector();
+        }
+    }
 
-            // 4. Precargar primer frame de nueva cámara
-            const firstFrame=new Image();
-            const src=`${videoSettings.proxyUrl}?channel=${currentChannel}&t=${Date.now()}`;
+    function renderCameraSelector() {
+        var s = document.getElementById('videoSelector');
+        if (!availableCameras.length) { s.innerHTML = ''; return; }
+        s.innerHTML = availableCameras.map(function(c) {
+            return '<button class="cam-btn ' + (c.channel === currentChannel ? 'active' : '') + '" onclick="selectCamera(\'' + c.channel + '\')" ' + (switchingCamera ? 'disabled' : '') + '>' + escapeHtml(c.name) + '</button>';
+        }).join('');
+    }
 
-            // Timeout de seguridad 3s
-            const switchTimeout=setTimeout(()=>{
-                finishCameraSwitch(false);
-            },3000);
+    function selectCamera(ch) {
+        var cam = availableCameras.find(function(c) { return c.channel === ch; });
+        if (!cam || ch === currentChannel || switchingCamera) return;
+        switchingCamera = true;
+        consecutiveErrors = 0;
+        stopVideoRefresh();
 
-            firstFrame.onload=function(){
-                clearTimeout(switchTimeout);
-                img.src=this.src;
-                finishCameraSwitch(true);
-            };
-            firstFrame.onerror=function(){
-                clearTimeout(switchTimeout);
-                finishCameraSwitch(false);
-            };
-            firstFrame.src=src;
+        // Hide grid, show main
+        if (gridViewActive) toggleGridView();
+
+        var img = document.getElementById('cameraSnapshot');
+        var loading = document.getElementById('videoLoading');
+        var error = document.getElementById('videoError');
+        img.style.opacity = '0.3';
+        loading.classList.add('show');
+        error.classList.remove('show');
+        document.getElementById('videoStatus').textContent = 'CAMBIANDO...';
+        document.getElementById('videoLive').style.display = 'none';
+
+        currentChannel = ch;
+        document.getElementById('videoChannelName').textContent = cam.name;
+        renderCameraSelector();
+
+        var feedUrl;
+        if (cam.isPrivadaVideo) {
+            feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
+        } else {
+            feedUrl = videoSettings.proxyUrl + '?channel=' + ch;
+        }
+        var separator = feedUrl.indexOf('?') >= 0 ? '&' : '?';
+        var src = feedUrl + separator + 't=' + Date.now();
+
+        var firstFrame = new Image();
+        var switchTimeout = setTimeout(function() { finishCameraSwitch(false, cam); }, 4000);
+
+        firstFrame.onload = function() {
+            clearTimeout(switchTimeout);
+            img.src = this.src;
+            finishCameraSwitch(true, cam);
+        };
+        firstFrame.onerror = function() {
+            clearTimeout(switchTimeout);
+            finishCameraSwitch(false, cam);
+        };
+        firstFrame.src = src;
+    }
+
+    function finishCameraSwitch(success, cam) {
+        var img = document.getElementById('cameraSnapshot');
+        var loading = document.getElementById('videoLoading');
+        var error = document.getElementById('videoError');
+
+        loading.classList.remove('show');
+        switchingCamera = false;
+        renderCameraSelector();
+
+        if (success) {
+            img.style.opacity = '1';
+            error.classList.remove('show');
+            consecutiveErrors = 0;
+        } else {
+            img.style.opacity = '0.3';
+            error.classList.add('show');
         }
 
-        function finishCameraSwitch(success) {
-            const img=document.getElementById('cameraSnapshot');
-            const loading=document.getElementById('videoLoading');
-            const error=document.getElementById('videoError');
+        if (!videoPaused) {
+            if (cam && cam.isPrivadaVideo) startPrivadaVideoRefresh();
+            else startVideoRefresh();
+        } else {
+            document.getElementById('videoStatus').textContent = 'PAUSADO';
+        }
+    }
 
-            loading.classList.remove('show');
-            switchingCamera=false;
-            renderCameraSelector(); // Re-habilitar botones
+    function toggleVideoPanel() {
+        var p = document.getElementById('videoPanel');
+        if (p.classList.contains('active')) hideVideoPanel();
+        else showVideoPanel();
+    }
 
-            if(success) {
-                img.style.opacity='1';
-                error.classList.remove('show');
-                consecutiveErrors=0;
-            } else {
-                img.style.opacity='0.3';
-                error.classList.add('show');
+    function showVideoPanel(ch) {
+        if (privadaVideos.length > 0) {
+            if (ch) {
+                var cam = availableCameras.find(function(c) { return c.channel === ch; });
+                if (cam) {
+                    currentChannel = ch;
+                    document.getElementById('videoChannelName').textContent = cam.name;
+                }
             }
-
-            // Reiniciar ciclo de refresh con nuevo canal
-            if(!videoPaused) {
-                startVideoRefresh();
-            } else {
-                document.getElementById('videoStatus').textContent='PAUSADO';
-            }
-        }
-
-        function toggleVideoPanel() {
-            const p=document.getElementById('videoPanel');
-            if(p.classList.contains('active')) hideVideoPanel();
-            else showVideoPanel();
-        }
-
-        function showVideoPanel(ch=null) {
-            if(ch && ch!==currentChannel){
-                currentChannel=ch;
-                const c=availableCameras.find(x=>x.channel===ch);
-                document.getElementById('videoChannelName').textContent=c?c.name:`Canal ${ch}`;
-                consecutiveErrors=0;
+            document.getElementById('videoPanel').classList.add('active');
+            document.getElementById('videoToggleBtn').classList.add('active');
+            renderCameraSelector();
+            startPrivadaVideoRefresh();
+            updateVideoPrivadaInfo();
+        } else {
+            if (ch && ch !== currentChannel) {
+                currentChannel = ch;
+                var c = availableCameras.find(function(x) { return x.channel === ch; });
+                document.getElementById('videoChannelName').textContent = c ? c.name : 'Canal ' + ch;
+                consecutiveErrors = 0;
             }
             document.getElementById('videoPanel').classList.add('active');
             document.getElementById('videoToggleBtn').classList.add('active');
             renderCameraSelector();
             startVideoRefresh();
         }
+    }
 
-        function hideVideoPanel() {
-            document.getElementById('videoPanel').classList.remove('active');
-            document.getElementById('videoToggleBtn').classList.remove('active');
-            stopVideoRefresh();
-        }
+    function hideVideoPanel() {
+        document.getElementById('videoPanel').classList.remove('active');
+        document.getElementById('videoToggleBtn').classList.remove('active');
+        stopVideoRefresh();
+        stopGridRefresh();
+    }
 
-        // FIX: Siempre limpiar primero para evitar intervalos duplicados
-        function startVideoRefresh() {
-            stopVideoRefresh();
-            document.getElementById('videoError').classList.remove('show');
-            consecutiveErrors=0;
-            refreshSnapshot();
-            videoRefreshInterval=setInterval(refreshSnapshot,videoSettings.refreshRate);
-            document.getElementById('videoStatus').textContent=`${Math.round(1000/videoSettings.refreshRate)} FPS`;
-            document.getElementById('videoLive').style.display='inline';
-        }
+    function startVideoRefresh() {
+        stopVideoRefresh();
+        document.getElementById('videoError').classList.remove('show');
+        consecutiveErrors = 0;
+        refreshSnapshot();
+        videoRefreshInterval = setInterval(refreshSnapshot, videoSettings.refreshRate);
+        document.getElementById('videoStatus').textContent = Math.round(1000 / videoSettings.refreshRate) + ' FPS';
+        document.getElementById('videoLive').style.display = 'inline';
+    }
 
-        function stopVideoRefresh() {
-            if(videoRefreshInterval){clearInterval(videoRefreshInterval);videoRefreshInterval=null;}
-        }
+    function stopVideoRefresh() {
+        if (videoRefreshInterval) { clearInterval(videoRefreshInterval); videoRefreshInterval = null; }
+    }
 
-        // FIX: Validación de canal + manejo de errores consecutivos
-        function refreshSnapshot() {
-            if(videoPaused || switchingCamera) return;
-            const img=document.getElementById('cameraSnapshot');
-            const ch=currentChannel; // Capturar canal actual
-            const src=`${videoSettings.proxyUrl}?channel=${ch}&t=${Date.now()}`;
-            const pre=new Image();
-            pre.onload=function(){
-                // Solo aplicar si el canal no cambió durante la carga
-                if(currentChannel===ch){
-                    img.src=this.src;
-                    document.getElementById('videoError').classList.remove('show');
-                    img.style.opacity='1';
-                    consecutiveErrors=0;
-                }
-            };
-            pre.onerror=function(){
-                if(currentChannel!==ch) return; // Ignorar errores de canal anterior
-                consecutiveErrors++;
-                if(consecutiveErrors>=MAX_CONSECUTIVE_ERRORS){
-                    document.getElementById('videoError').classList.add('show');
-                    img.style.opacity='0.3';
-                    document.getElementById('videoStatus').textContent='ERROR';
-                    // Auto-reintento después de 3s
-                    stopVideoRefresh();
-                    setTimeout(()=>{
-                        if(document.getElementById('videoPanel').classList.contains('active') && !videoPaused){
-                            consecutiveErrors=0;
-                            startVideoRefresh();
-                        }
-                    },3000);
-                }
-            };
-            pre.src=src;
-        }
-
-        // FIX: Pause/Play ahora detiene/reinicia ciclo completo
-        function toggleVideoPause() {
-            videoPaused=!videoPaused;
-            const b=document.getElementById('videoPauseBtn');
-            if(videoPaused){
-                b.textContent='▶';b.classList.add('active');
-                document.getElementById('videoLive').style.display='none';
-                document.getElementById('videoStatus').textContent='PAUSADO';
-                stopVideoRefresh();
-            } else {
-                b.textContent='⏸';b.classList.remove('active');
-                document.getElementById('videoLive').style.display='inline';
-                // Reanudar con el tipo correcto de refresh
-                const cam = availableCameras.find(c => c.channel === currentChannel);
-                if (cam && cam.isPrivadaVideo) {
-                    startPrivadaVideoRefresh();
-                } else {
-                    startVideoRefresh();
-                }
+    function refreshSnapshot() {
+        if (videoPaused || switchingCamera) return;
+        var img = document.getElementById('cameraSnapshot');
+        var ch = currentChannel;
+        var src = videoSettings.proxyUrl + '?channel=' + ch + '&t=' + Date.now();
+        var pre = new Image();
+        pre.onload = function() {
+            if (currentChannel === ch) {
+                img.src = this.src;
+                document.getElementById('videoError').classList.remove('show');
+                img.style.opacity = '1';
+                consecutiveErrors = 0;
             }
-        }
-
-        function toggleFullscreen() {
-            const c=document.getElementById('videoContainer');
-            if(document.fullscreenElement) document.exitFullscreen();
-            else c.requestFullscreen().catch(e=>console.log(e));
-        }
-
-        // --- Captura de snapshot para bitácora de accesos ---
-        function captureSnapshot() {
-            const cam = availableCameras.find(c => c.channel === currentChannel);
-            if (!cam) return;
-
-            // Efecto flash
-            const flash = document.getElementById('snapshotFlash');
-            flash.classList.add('active');
-            setTimeout(() => flash.classList.remove('active'), 150);
-
-            if (cam.isPrivadaVideo && cam.needsProxy && cam.privadaId) {
-                // Guardar snapshot en servidor via proxy
-                const saveUrl = `${videoSettings.proxyUrl}?privada_id=${cam.privadaId}&cam=${cam.camIndex}&save=1&t=${Date.now()}`;
-                fetch(saveUrl).then(r => {
-                    if (r.ok) {
-                        showSnapshotNotification('Snapshot guardado en servidor');
-                    } else {
-                        showSnapshotNotification('Error al guardar snapshot', true);
-                    }
-                }).catch(() => showSnapshotNotification('Error de conexión', true));
-            }
-
-            // Descargar localmente también
-            const img = document.getElementById('cameraSnapshot');
-            if (img.src && !img.src.endsWith('.svg')) {
-                const a = document.createElement('a');
-                a.href = img.src;
-                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                a.download = `snapshot_${cam.name.replace(/\s+/g, '_')}_${ts}.jpg`;
-                a.click();
-            }
-        }
-
-        function showSnapshotNotification(msg, isError) {
-            const info = document.getElementById('videoPrivadaInfo');
-            info.innerHTML = `<span class="vpinfo-name" style="color:${isError ? '#ef4444' : '#10b981'}">${msg}</span>`;
-            info.classList.add('active');
-            setTimeout(() => {
-                updateVideoPrivadaInfo();
-            }, 2000);
-        }
-
-        function updateVideoPrivadaInfo() {
-            const info = document.getElementById('videoPrivadaInfo');
-            if (currentPrivada && privadaVideos.length > 0) {
-                const sel = document.getElementById('privadaSelect');
-                const name = sel.options[sel.selectedIndex]?.text || '';
-                info.innerHTML = `<span class="vpinfo-name">${name}</span><span class="vpinfo-source">${privadaVideos.length} cam(s) | Proxy activo</span>`;
-                info.classList.add('active');
-            } else {
-                info.classList.remove('active');
-                info.innerHTML = '';
-            }
-        }
-
-        async function getCameraForExtension(ext) {
-            try{const r=await fetch(`${videoSettings.proxyUrl}?action=mapping&extension=${ext}`);const d=await r.json();return d.channel||'701';}
-            catch(e){return '701';}
-        }
-
-        // ==========================================
-        // AUDIO CONTROLS
-        // ==========================================
-        function toggleAudioControls() { const c=document.getElementById('audioControls'); const b=document.getElementById('audioToggleBtn'); c.classList.toggle('active'); b.classList.toggle('active'); }
-        function updateMicVolume(v) { audioSettings.micVolume=v; document.getElementById('micLevel').textContent=v+'%'; saveAudioSettings(); }
-        function updateSpeakerVolume(v) { audioSettings.speakerVolume=v; document.getElementById('speakerLevel').textContent=v+'%'; document.getElementById('remoteAudio').volume=v/100; saveAudioSettings(); }
-        function updateRingtoneVolume(v) { audioSettings.ringtoneVolume=v; document.getElementById('ringtoneLevel').textContent=v+'%'; document.getElementById('ringtone').volume=v/100; saveAudioSettings(); }
-        function toggleMute() {
-            isMuted=!isMuted; const b=document.getElementById('muteBtn');
-            if(isMuted){b.classList.add('muted');b.textContent='🔇 Activar Mic';if(currentSession&&localStream) localStream.getAudioTracks().forEach(t=>{t.enabled=false;});}
-            else{b.classList.remove('muted');b.textContent='🎙 Silenciar';if(currentSession&&localStream) localStream.getAudioTracks().forEach(t=>{t.enabled=true;});}
-        }
-        function saveAudioSettings() { localStorage.setItem('webphoneAudioSettings',JSON.stringify(audioSettings)); }
-        function loadAudioSettings() {
-            const s=localStorage.getItem('webphoneAudioSettings');
-            if(s){audioSettings=JSON.parse(s);document.getElementById('micSlider').value=audioSettings.micVolume;document.getElementById('speakerSlider').value=audioSettings.speakerVolume;document.getElementById('ringtoneSlider').value=audioSettings.ringtoneVolume;document.getElementById('micLevel').textContent=audioSettings.micVolume+'%';document.getElementById('speakerLevel').textContent=audioSettings.speakerVolume+'%';document.getElementById('ringtoneLevel').textContent=audioSettings.ringtoneVolume+'%';}
-        }
-
-        // ==========================================
-        // PHONE CORE
-        // ==========================================
-        function togglePhone() { phoneOpen=!phoneOpen; document.getElementById('phoneWrapper').classList.toggle('open',phoneOpen); }
-        function switchTab(n) { document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); event.target.closest('.nav-tab').classList.add('active'); document.getElementById(n+'Tab').classList.add('active'); if(n==='history')renderCallHistory();if(n==='contacts')renderContacts(); }
-        function addDigit(d) { playDTMF(d); phoneNumber+=d; document.getElementById('phoneNumber').textContent=formatPhoneNumber(phoneNumber); if(currentSession&&currentSession.isEstablished()) currentSession.sendDTMF(d); }
-        function deleteDigit() { phoneNumber=phoneNumber.slice(0,-1); document.getElementById('phoneNumber').textContent=formatPhoneNumber(phoneNumber); }
-        function formatPhoneNumber(n) { if(!n)return'';if(n.length<=3)return n;if(n.length<=6)return n.slice(0,3)+' '+n.slice(3);if(n.length<=10)return n.slice(0,2)+' '+n.slice(2,6)+' '+n.slice(6);return n; }
-        function openSettings() { document.getElementById('settingsModal').style.display='block'; }
-        function closeSettings() { document.getElementById('settingsModal').style.display='none'; }
-
-        function saveSettings() {
-            config={wsServer:document.getElementById('wsServer').value||'wss://accessbotpbx.info:8089/ws',extension:document.getElementById('sipExtension').value,password:document.getElementById('sipPassword').value,domain:document.getElementById('sipDomain').value||'accessbotpbx.info'};
-            videoSettings.proxyUrl=document.getElementById('cameraProxyUrl').value||'camera_proxy.php';
-            videoSettings.refreshRate=parseInt(document.getElementById('videoRefreshRate').value)||500;
-            videoSettings.autoShowOnCall=document.getElementById('autoShowVideo').checked;
-            privadaSettings.apiUrl=document.getElementById('privadaApiUrl').value||'api_privada.php';
-            privadaSettings.mqttRelayUrl=document.getElementById('mqttRelayUrl').value||'mqtt_relay.php';
-            privadaSettings.mqttBrokerHost=document.getElementById('mqttBrokerHost').value||'localhost';
-            privadaSettings.mqttBrokerPort=parseInt(document.getElementById('mqttBrokerPort').value)||1883;
-            privadaSettings.autoLookupCaller=document.getElementById('autoLookupCaller').checked;
-            localStorage.setItem('webphoneConfig',JSON.stringify(config));
-            localStorage.setItem('videoSettings',JSON.stringify(videoSettings));
-            localStorage.setItem('privadaSettings',JSON.stringify(privadaSettings));
-            closeSettings(); connectToServer(); loadPrivadas();
-        }
-
-        function connectToServer() {
-            if(!config.extension||!config.password){updateStatus('Config incompleta',false);return;}
-            updateStatus('Conectando...',false);
-            try{
-                if(ua){ua.stop();ua=null;}
-                const socket=new JsSIP.WebSocketInterface(config.wsServer);
-                ua=new JsSIP.UA({sockets:[socket],uri:'sip:'+config.extension+'@'+config.domain,password:config.password,register:true,register_expires:600,session_timers:false,user_agent:'Access Phone v3.1'});
-                ua.on('connected',()=>updateStatus('Registrando...',false));
-                ua.on('disconnected',()=>updateStatus('Desconectado',false));
-                ua.on('registered',()=>updateStatus('Conectado',true));
-                ua.on('unregistered',()=>updateStatus('Desconectado',false));
-                ua.on('registrationFailed',()=>updateStatus('Error registro',false));
-                ua.on('newRTCSession',(e)=>{if(e.originator==='remote')handleIncomingCall(e.session);});
-                ua.start();
-            }catch(e){console.error('Error:',e);updateStatus('Error conexión',false);}
-        }
-
-        function updateStatus(t,c) { document.getElementById('statusText').textContent=t; document.getElementById('statusDot').classList.toggle('connected',c); }
-
-        // ==========================================
-        // CALL MANAGEMENT
-        // ==========================================
-        async function makeCall() {
-            if(!ua||!ua.isRegistered()){alert('No conectado');return;}
-            if(!phoneNumber){alert('Ingrese número');return;}
-            updateCallStatus('Llamando...');
-            if(videoSettings.autoShowOnCall){const ch=await getCameraForExtension(phoneNumber);showVideoPanel(ch);}
-            const eh={
-                'progress':()=>updateCallStatus('Llamando...'),
-                'failed':()=>{addToCallHistory('outgoing',phoneNumber,0);endCall();},
-                'ended':()=>{const d=callStartTime?Math.floor((Date.now()-callStartTime)/1000):0;addToCallHistory('outgoing',phoneNumber,d);endCall();},
-                'confirmed':()=>{updateCallStatus('En llamada');startCallTimer();}
-            };
-            let num=phoneNumber;if(phoneNumber.length===10&&phoneNumber.startsWith('5'))num='52'+phoneNumber;
-            currentSession=ua.call('sip:'+num+'@'+config.domain,{eventHandlers:eh,mediaConstraints:{audio:true,video:false},rtcOfferConstraints:{offerToReceiveAudio:true,offerToReceiveVideo:false}});
-            setupSessionEvents(currentSession);
-            document.getElementById('callBtn').style.display='none';document.getElementById('hangupBtn').style.display='flex';document.getElementById('callInfo').classList.add('active');
-        }
-
-        function hangupCall() { if(currentSession)currentSession.terminate(); endCall(); }
-
-        async function handleIncomingCall(session) {
-            currentSession=session;
-            const num=session.remote_identity.uri.user;const name=getContactName(num);
-            document.getElementById('callerNumber').textContent=formatPhoneNumber(num);
-            document.getElementById('callerName').textContent=name||'';document.getElementById('callerName').style.display=name?'block':'none';
-            document.getElementById('incomingModal').style.display='block';
-            document.getElementById('phoneWrapper').classList.add('open','ringing');phoneOpen=true;
-
-            // Buscar privada por CallerID (campo telefono de tabla privadas)
-            const privadaResult = await lookupCallerPrivada(num);
-            if (privadaResult) {
-                // Actualizar modal con info de privada
-                document.getElementById('callerName').textContent = `${privadaResult.nombre} - ${privadaResult.contacto || ''}`;
-                document.getElementById('callerName').style.display = 'block';
-            } else if(videoSettings.autoShowOnCall){
-                const ch=await getCameraForExtension(num);showVideoPanel(ch);
-            }
-
-            try{document.getElementById('ringtone').volume=audioSettings.ringtoneVolume/100;document.getElementById('ringtone').play();}catch(e){}
-            setupSessionEvents(session);
-            session.on('failed',()=>{document.getElementById('incomingModal').style.display='none';document.getElementById('phoneWrapper').classList.remove('ringing');document.getElementById('ringtone').pause();addToCallHistory('missed',num);});
-            session.on('ended',()=>{document.getElementById('incomingModal').style.display='none';document.getElementById('phoneWrapper').classList.remove('ringing');document.getElementById('ringtone').pause();const d=callStartTime?Math.floor((Date.now()-callStartTime)/1000):0;if(d>0)addToCallHistory('incoming',num,d);endCall();});
-        }
-
-        function answerCall() {
-            if(currentSession){currentSession.answer({mediaConstraints:{audio:true,video:false}});document.getElementById('incomingModal').style.display='none';document.getElementById('phoneWrapper').classList.remove('ringing');document.getElementById('ringtone').pause();updateCallStatus('En llamada');startCallTimer();document.getElementById('callBtn').style.display='none';document.getElementById('hangupBtn').style.display='flex';document.getElementById('callInfo').classList.add('active');}
-        }
-
-        function rejectCall() {
-            if(currentSession){const num=currentSession.remote_identity.uri.user;currentSession.terminate();addToCallHistory('missed',num);}
-            document.getElementById('incomingModal').style.display='none';document.getElementById('phoneWrapper').classList.remove('ringing');document.getElementById('ringtone').pause();
-        }
-
-        function setupSessionEvents(session) {
-            session.on('peerconnection',(e)=>{
-                e.peerconnection.addEventListener('track',(ev)=>{const ra=document.getElementById('remoteAudio');ra.srcObject=ev.streams[0];ra.volume=audioSettings.speakerVolume/100;});
-                e.peerconnection.addEventListener('addstream',(ev)=>{if(ev.stream&&ev.stream.getAudioTracks().length>0){localStream=ev.stream;if(isMuted)localStream.getAudioTracks().forEach(t=>{t.enabled=false;});}});
-            });
-        }
-
-        function updateCallStatus(s) { document.getElementById('callStatus').textContent=s; }
-
-        function startCallTimer() { callStartTime=Date.now(); callTimer=setInterval(()=>{const e=Math.floor((Date.now()-callStartTime)/1000);document.getElementById('callTimer').textContent=Math.floor(e/60).toString().padStart(2,'0')+':'+(e%60).toString().padStart(2,'0');},1000); }
-
-        function endCall() {
-            if(callTimer){clearInterval(callTimer);callTimer=null;}
-            phoneNumber='';document.getElementById('phoneNumber').textContent='';updateCallStatus('');
-            document.getElementById('callInfo').classList.remove('active');document.getElementById('callTimer').textContent='00:00';
-            document.getElementById('callBtn').style.display='flex';document.getElementById('hangupBtn').style.display='none';
-            document.getElementById('phoneWrapper').classList.remove('ringing');
-            isMuted=false;document.getElementById('muteBtn').classList.remove('muted');document.getElementById('muteBtn').textContent='🎙 Silenciar';
-            currentSession=null;callStartTime=null;localStream=null;
-        }
-
-        // ==========================================
-        // HISTORY & CONTACTS
-        // ==========================================
-        function loadCallHistory(){const s=localStorage.getItem('webphoneCallHistory');if(s)try{callHistory=JSON.parse(s);}catch(e){callHistory=[];}}
-        function saveCallHistory(){localStorage.setItem('webphoneCallHistory',JSON.stringify(callHistory));}
-        function addToCallHistory(type,number,duration=null){const c=contacts.find(x=>x.number===number);callHistory.unshift({id:Date.now(),type,number,name:c?c.name:null,duration,date:new Date().toISOString()});if(callHistory.length>50)callHistory=callHistory.slice(0,50);saveCallHistory();}
-
-        function renderCallHistory(){
-            const l=document.getElementById('callLog');
-            if(!callHistory.length){l.innerHTML='<div class="call-log-empty">No hay llamadas</div>';return;}
-            l.innerHTML=callHistory.map(c=>{
-                const d=new Date(c.date);
-                const t=d.toDateString()===new Date().toDateString()?d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'});
-                const ic=c.type==='incoming'?'incoming':c.type==='outgoing'?'outgoing':'missed';
-                const ico=c.type==='incoming'?'📞↓':c.type==='outgoing'?'📞→':'📞✗';
-                const dur=c.duration?`${Math.floor(c.duration/60)}:${(c.duration%60).toString().padStart(2,'0')}`:'';
-                return`<div class="call-log-item" onclick="callFromHistory('${c.number}')"><div class="call-icon ${ic}">${ico}</div><div class="call-details"><div class="call-contact">${c.name||formatPhoneNumber(c.number)}</div>${c.name?`<div class="call-number">${formatPhoneNumber(c.number)}</div>`:''}</div><div class="call-meta"><div class="call-time">${t}</div>${dur?`<div class="call-duration">${dur}</div>`:''}</div></div>`;
-            }).join('');
-        }
-
-        function callFromHistory(n){phoneNumber=n;document.getElementById('phoneNumber').textContent=formatPhoneNumber(n);document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));document.querySelector('.nav-tab').classList.add('active');document.getElementById('dialpadTab').classList.add('active');makeCall();}
-
-//
-//
-//
-//
-        function loadContacts(){
-            const s=localStorage.getItem('webphoneContacts');
-            if(s)try{contacts=JSON.parse(s);}catch(e){contacts=[];}
-            if(!contacts.length){contacts=[{name:'Soporte Técnico',number:'101',type:'normal'},{name:'Recepción',number:'100',type:'normal'}];saveContacts();}
-        }
-        function saveContacts(){localStorage.setItem('webphoneContacts',JSON.stringify(contacts));}
-
-        function renderContacts(search=''){
-            const l=document.getElementById('contactsList');
-            const f=contacts.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.number.includes(search));
-            if(!f.length){l.innerHTML='<div class="call-log-empty">Sin contactos</div>';return;}
-            l.innerHTML=f.map((c,i)=>`<div class="contact-item"><div class="contact-info" onclick="callContact('${c.number}')"><div class="contact-name">${c.name}</div><div class="contact-number">${formatPhoneNumber(c.number)}</div></div><div class="contact-actions"><span class="contact-type ${c.type}">${c.type}</span><button class="contact-btn edit" onclick="event.stopPropagation();editContact(${i})">✏️</button><button class="contact-btn delete" onclick="event.stopPropagation();deleteContact(${i})">🗑️</button></div></div>`).join('');
-        }
-
-        function editContact(i){const c=contacts[i];const n=prompt('Nombre:',c.name);if(n===null)return;const p=prompt('Número:',c.number);if(p===null)return;contacts[i]={name:n,number:p,type:confirm('¿VIP?')?'vip':'normal'};saveContacts();renderContacts();}
-        function deleteContact(i){if(confirm('¿Eliminar?')){contacts.splice(i,1);saveContacts();renderContacts();}}
-        function searchContacts(t){renderContacts(t);}
-        function callContact(n){phoneNumber=n;document.getElementById('phoneNumber').textContent=formatPhoneNumber(n);document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));document.querySelector('.nav-tab').classList.add('active');document.getElementById('dialpadTab').classList.add('active');makeCall();}
-        function showAddContact(){const n=prompt('Nombre:');if(!n)return;const p=prompt('Número:');if(!p)return;contacts.push({name:n,number:p,type:confirm('¿VIP?')?'vip':'normal'});saveContacts();renderContacts();}
-        function getContactName(n){const c=contacts.find(x=>x.number===n);return c?c.name:null;}
-
-        // ==========================================
-        // PRIVADA & MQTT INTEGRATION
-        // ==========================================
-        let privadaSettings = {
-            apiUrl: 'api_privada.php',
-            mqttRelayUrl: 'mqtt_relay.php',
-            mqttBrokerHost: 'localhost',
-            mqttBrokerPort: 1883,
-            autoLookupCaller: true
         };
-        let currentPrivada = null;
-        let privadaVideos = [];
-        let privadaRelays = [];
+        pre.onerror = function() {
+            if (currentChannel !== ch) return;
+            consecutiveErrors++;
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                document.getElementById('videoError').classList.add('show');
+                img.style.opacity = '0.3';
+                document.getElementById('videoStatus').textContent = 'ERROR';
+                stopVideoRefresh();
+                setTimeout(function() {
+                    if (document.getElementById('videoPanel').classList.contains('active') && !videoPaused) {
+                        consecutiveErrors = 0;
+                        startVideoRefresh();
+                    }
+                }, 3000);
+            }
+        };
+        pre.src = src;
+    }
 
-        // --- Cargar lista de privadas ---
-        async function loadPrivadas() {
-            try {
-                const r = await fetch(`${privadaSettings.apiUrl}?action=list_privadas`);
-                const d = await r.json();
-                if (d.success) {
-                    const sel = document.getElementById('privadaSelect');
-                    // Mantener opción por defecto
-                    sel.innerHTML = '<option value="">-- Seleccionar --</option>';
-                    d.privadas.forEach(p => {
-                        const opt = document.createElement('option');
-                        opt.value = p.id;
-                        opt.textContent = p.nombre;
-                        opt.dataset.telefono = p.telefono || '';
-                        sel.appendChild(opt);
-                    });
+    function toggleVideoPause() {
+        videoPaused = !videoPaused;
+        var b = document.getElementById('videoPauseBtn');
+        if (videoPaused) {
+            b.textContent = '\u25B6';
+            b.classList.add('active');
+            document.getElementById('videoLive').style.display = 'none';
+            document.getElementById('videoStatus').textContent = 'PAUSADO';
+            stopVideoRefresh();
+        } else {
+            b.textContent = '\u23F8';
+            b.classList.remove('active');
+            document.getElementById('videoLive').style.display = 'inline';
+            var cam = availableCameras.find(function(c) { return c.channel === currentChannel; });
+            if (cam && cam.isPrivadaVideo) startPrivadaVideoRefresh();
+            else startVideoRefresh();
+        }
+    }
+
+    function toggleFullscreen() {
+        var c = document.getElementById('videoContainer');
+        if (document.fullscreenElement) document.exitFullscreen();
+        else c.requestFullscreen().catch(function(e) { console.log(e); });
+    }
+
+    // ==========================================
+    // GRID VIEW (MULTI-CAMERA)
+    // ==========================================
+    function toggleGridView() {
+        gridViewActive = !gridViewActive;
+        var grid = document.getElementById('videoGrid');
+        var main = document.getElementById('videoContainer');
+        var btn = document.getElementById('gridToggleBtn');
+
+        if (gridViewActive && availableCameras.length > 1) {
+            main.style.display = 'none';
+            grid.classList.add('active');
+            btn.classList.add('active');
+            renderGridView();
+            startGridRefresh();
+        } else {
+            gridViewActive = false;
+            main.style.display = 'block';
+            grid.classList.remove('active');
+            btn.classList.remove('active');
+            stopGridRefresh();
+        }
+    }
+
+    function renderGridView() {
+        var grid = document.getElementById('videoGrid');
+        grid.innerHTML = availableCameras.map(function(cam) {
+            return '<div class="grid-cell ' + (cam.channel === currentChannel ? 'active' : '') + '" onclick="selectCamera(\'' + cam.channel + '\')" id="grid_' + cam.channel + '"><img id="gridImg_' + cam.channel + '" src="" alt="' + escapeHtml(cam.name) + '"><div class="grid-cell-label">' + escapeHtml(cam.name) + '</div></div>';
+        }).join('');
+    }
+
+    function startGridRefresh() {
+        stopGridRefresh();
+        availableCameras.forEach(function(cam) {
+            refreshGridCell(cam);
+            gridIntervals[cam.channel] = setInterval(function() {
+                refreshGridCell(cam);
+            }, videoSettings.refreshRate * 2); // Half rate for grid
+        });
+    }
+
+    function refreshGridCell(cam) {
+        var img = document.getElementById('gridImg_' + cam.channel);
+        if (!img) return;
+        var feedUrl;
+        if (cam.isPrivadaVideo) {
+            feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
+        } else {
+            feedUrl = videoSettings.proxyUrl + '?channel=' + cam.channel;
+        }
+        var separator = feedUrl.indexOf('?') >= 0 ? '&' : '?';
+        var pre = new Image();
+        pre.onload = function() { img.src = this.src; };
+        pre.src = feedUrl + separator + 't=' + Date.now();
+    }
+
+    function stopGridRefresh() {
+        Object.keys(gridIntervals).forEach(function(key) {
+            clearInterval(gridIntervals[key]);
+        });
+        gridIntervals = {};
+    }
+
+    // ==========================================
+    // SNAPSHOT CAPTURE
+    // ==========================================
+    function captureSnapshot() {
+        var cam = availableCameras.find(function(c) { return c.channel === currentChannel; });
+        if (!cam) return;
+
+        // Flash effect
+        var flash = document.getElementById('snapshotFlash');
+        flash.classList.add('active');
+        setTimeout(function() { flash.classList.remove('active'); }, 150);
+
+        if (cam.isPrivadaVideo && cam.needsProxy && cam.privadaId) {
+            var saveUrl = videoSettings.proxyUrl + '?privada_id=' + cam.privadaId + '&cam=' + cam.camIndex + '&save=1&t=' + Date.now();
+            fetch(saveUrl).then(function(r) {
+                if (r.ok) showToast('Snapshot guardado - ' + cam.name, 'success');
+                else showToast('Error al guardar snapshot', 'error');
+            }).catch(function() { showToast('Error de conexion', 'error'); });
+        }
+
+        // Download locally
+        var img = document.getElementById('cameraSnapshot');
+        if (img.src && !img.src.endsWith('.svg')) {
+            var a = document.createElement('a');
+            a.href = img.src;
+            var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.download = 'snapshot_' + cam.name.replace(/\s+/g, '_') + '_' + ts + '.jpg';
+            a.click();
+            showToast('Descargando snapshot: ' + cam.name, 'info');
+        }
+    }
+
+    function autoSnapshotOnAnswer() {
+        if (!videoSettings.autoSnapshot) return;
+        availableCameras.forEach(function(cam) {
+            if (cam.isPrivadaVideo && cam.needsProxy && cam.privadaId) {
+                var saveUrl = videoSettings.proxyUrl + '?privada_id=' + cam.privadaId + '&cam=' + cam.camIndex + '&save=1&t=' + Date.now();
+                fetch(saveUrl).then(function(r) {
+                    if (r.ok) showToast('Auto-snapshot: ' + cam.name, 'success', 2000);
+                }).catch(function() {});
+            }
+        });
+    }
+
+    function updateVideoPrivadaInfo() {
+        var info = document.getElementById('videoPrivadaInfo');
+        if (currentPrivada && privadaVideos.length > 0) {
+            var sel = document.getElementById('privadaSelect');
+            var name = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+            info.innerHTML = '<span class="vpinfo-name">' + escapeHtml(name) + '</span><span class="vpinfo-source">' + privadaVideos.length + ' cam(s) | Proxy activo</span>';
+            info.classList.add('active');
+        } else {
+            info.classList.remove('active');
+            info.innerHTML = '';
+        }
+    }
+
+    async function getCameraForExtension(ext) {
+        try {
+            var r = await fetch(videoSettings.proxyUrl + '?action=mapping&extension=' + ext);
+            var d = await r.json();
+            return d.channel || '701';
+        } catch(e) { return '701'; }
+    }
+
+    // ==========================================
+    // AUDIO CONTROLS
+    // ==========================================
+    function toggleAudioControls() {
+        document.getElementById('audioControls').classList.toggle('active');
+        document.getElementById('audioToggleBtn').classList.toggle('active');
+    }
+    function updateMicVolume(v) { audioSettings.micVolume = v; document.getElementById('micLevel').textContent = v + '%'; saveAudioSettings(); }
+    function updateSpeakerVolume(v) { audioSettings.speakerVolume = v; document.getElementById('speakerLevel').textContent = v + '%'; document.getElementById('remoteAudio').volume = v / 100; saveAudioSettings(); }
+    function updateRingtoneVolume(v) { audioSettings.ringtoneVolume = v; document.getElementById('ringtoneLevel').textContent = v + '%'; document.getElementById('ringtone').volume = v / 100; saveAudioSettings(); }
+    function toggleMute() {
+        isMuted = !isMuted;
+        var b = document.getElementById('muteBtn');
+        if (isMuted) {
+            b.classList.add('muted');
+            b.textContent = '\uD83D\uDD07 Activar Mic';
+            if (currentSession && localStream) localStream.getAudioTracks().forEach(function(t) { t.enabled = false; });
+        } else {
+            b.classList.remove('muted');
+            b.textContent = '\uD83C\uDFA4 Silenciar Mic';
+            if (currentSession && localStream) localStream.getAudioTracks().forEach(function(t) { t.enabled = true; });
+        }
+    }
+    function saveAudioSettings() { localStorage.setItem('webphoneAudioSettings', JSON.stringify(audioSettings)); }
+    function loadAudioSettings() {
+        var s = localStorage.getItem('webphoneAudioSettings');
+        if (s) {
+            try { audioSettings = JSON.parse(s); } catch(e) {}
+            document.getElementById('micSlider').value = audioSettings.micVolume;
+            document.getElementById('speakerSlider').value = audioSettings.speakerVolume;
+            document.getElementById('ringtoneSlider').value = audioSettings.ringtoneVolume;
+            document.getElementById('micLevel').textContent = audioSettings.micVolume + '%';
+            document.getElementById('speakerLevel').textContent = audioSettings.speakerVolume + '%';
+            document.getElementById('ringtoneLevel').textContent = audioSettings.ringtoneVolume + '%';
+        }
+    }
+
+    // ==========================================
+    // PHONE CORE
+    // ==========================================
+    function togglePhone() {
+        phoneOpen = !phoneOpen;
+        document.getElementById('phoneWrapper').classList.toggle('open', phoneOpen);
+    }
+
+    function switchTab(n) {
+        document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+        event.target.closest('.nav-tab').classList.add('active');
+        document.getElementById(n + 'Tab').classList.add('active');
+        if (n === 'history') renderCallHistory();
+        if (n === 'contacts') renderContacts();
+    }
+
+    function addDigit(d) {
+        playDTMF(d);
+        phoneNumber += d;
+        document.getElementById('phoneNumber').textContent = formatPhoneNumber(phoneNumber);
+        if (currentSession && currentSession.isEstablished()) currentSession.sendDTMF(d);
+    }
+
+    function deleteDigit() {
+        phoneNumber = phoneNumber.slice(0, -1);
+        document.getElementById('phoneNumber').textContent = formatPhoneNumber(phoneNumber);
+    }
+
+    function formatPhoneNumber(n) {
+        if (!n) return '';
+        if (n.length <= 3) return n;
+        if (n.length <= 6) return n.slice(0, 3) + ' ' + n.slice(3);
+        if (n.length <= 10) return n.slice(0, 2) + ' ' + n.slice(2, 6) + ' ' + n.slice(6);
+        return n;
+    }
+
+    function openSettings() { document.getElementById('settingsModal').style.display = 'block'; }
+    function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+
+    function saveSettings() {
+        config = {
+            wsServer: document.getElementById('wsServer').value || 'wss://accessbotpbx.info:8089/ws',
+            extension: document.getElementById('sipExtension').value,
+            password: document.getElementById('sipPassword').value,
+            domain: document.getElementById('sipDomain').value || 'accessbotpbx.info'
+        };
+        videoSettings.proxyUrl = document.getElementById('cameraProxyUrl').value || 'camera_proxy.php';
+        videoSettings.refreshRate = parseInt(document.getElementById('videoRefreshRate').value) || 500;
+        videoSettings.autoShowOnCall = document.getElementById('autoShowVideo').checked;
+        videoSettings.autoSnapshot = document.getElementById('autoSnapshot').checked;
+        privadaSettings.apiUrl = document.getElementById('privadaApiUrl').value || 'api_privada.php';
+        privadaSettings.mqttRelayUrl = document.getElementById('mqttRelayUrl').value || 'mqtt_relay.php';
+        privadaSettings.mqttBrokerHost = document.getElementById('mqttBrokerHost').value || 'localhost';
+        privadaSettings.mqttBrokerPort = parseInt(document.getElementById('mqttBrokerPort').value) || 1883;
+        privadaSettings.autoLookupCaller = document.getElementById('autoLookupCaller').checked;
+
+        localStorage.setItem('webphoneConfig', JSON.stringify(config));
+        localStorage.setItem('videoSettings', JSON.stringify(videoSettings));
+        localStorage.setItem('privadaSettings', JSON.stringify(privadaSettings));
+        closeSettings();
+        connectToServer();
+        loadPrivadas();
+        showToast('Configuracion guardada', 'success');
+    }
+
+    function connectToServer() {
+        if (!config.extension || !config.password) { updateStatus('Config incompleta', false); return; }
+        updateStatus('Conectando...', false);
+        try {
+            if (ua) { ua.stop(); ua = null; }
+            var socket = new JsSIP.WebSocketInterface(config.wsServer);
+            ua = new JsSIP.UA({
+                sockets: [socket],
+                uri: 'sip:' + config.extension + '@' + config.domain,
+                password: config.password,
+                register: true,
+                register_expires: 600,
+                session_timers: false,
+                user_agent: 'Access Phone Pro v4.0'
+            });
+            ua.on('connected', function() { updateStatus('Registrando...', false); });
+            ua.on('disconnected', function() { updateStatus('Desconectado', false); });
+            ua.on('registered', function() {
+                updateStatus('Conectado', true);
+                document.getElementById('extensionBadge').textContent = 'Ext ' + config.extension;
+                showToast('Registrado como Ext ' + config.extension, 'success');
+            });
+            ua.on('unregistered', function() { updateStatus('Desconectado', false); });
+            ua.on('registrationFailed', function() {
+                updateStatus('Error registro', false);
+                showToast('Error de registro SIP', 'error');
+            });
+            ua.on('newRTCSession', function(e) {
+                if (e.originator === 'remote') handleIncomingCall(e.session);
+            });
+            ua.start();
+        } catch(e) {
+            console.error('Error:', e);
+            updateStatus('Error conexion', false);
+            showToast('Error de conexion: ' + e.message, 'error');
+        }
+    }
+
+    function updateStatus(t, c) {
+        document.getElementById('statusText').textContent = t;
+        document.getElementById('statusDot').classList.toggle('connected', c);
+    }
+
+    // ==========================================
+    // CALL MANAGEMENT
+    // ==========================================
+    async function makeCall() {
+        if (!ua || !ua.isRegistered()) { showToast('No conectado al servidor SIP', 'error'); return; }
+        if (!phoneNumber) { showToast('Ingrese un numero', 'info'); return; }
+        updateCallStatus('Llamando...');
+        if (videoSettings.autoShowOnCall) {
+            var ch = await getCameraForExtension(phoneNumber);
+            showVideoPanel(ch);
+        }
+        var eh = {
+            'progress': function() { updateCallStatus('Llamando...'); },
+            'failed': function() { addToCallHistory('outgoing', phoneNumber, 0); endCall(); showToast('Llamada fallida', 'error'); },
+            'ended': function() {
+                var d = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+                addToCallHistory('outgoing', phoneNumber, d);
+                endCall();
+            },
+            'confirmed': function() { updateCallStatus('En llamada'); startCallTimer(); autoSnapshotOnAnswer(); }
+        };
+        var num = phoneNumber;
+        if (phoneNumber.length === 10 && phoneNumber.startsWith('5')) num = '52' + phoneNumber;
+        currentSession = ua.call('sip:' + num + '@' + config.domain, {
+            eventHandlers: eh,
+            mediaConstraints: { audio: true, video: false },
+            rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false }
+        });
+        setupSessionEvents(currentSession);
+        document.getElementById('callBtn').style.display = 'none';
+        document.getElementById('hangupBtn').style.display = 'flex';
+        document.getElementById('callInfo').classList.add('active');
+    }
+
+    function hangupCall() { if (currentSession) currentSession.terminate(); endCall(); }
+
+    async function handleIncomingCall(session) {
+        currentSession = session;
+        var num = session.remote_identity.uri.user;
+        var name = getContactName(num);
+        document.getElementById('callerNumber').textContent = formatPhoneNumber(num);
+        document.getElementById('callerName').textContent = name || '';
+        document.getElementById('callerName').style.display = name ? 'block' : 'none';
+        document.getElementById('callerPrivada').classList.remove('active');
+        document.getElementById('incomingModal').style.display = 'block';
+        document.getElementById('phoneWrapper').classList.add('open', 'ringing');
+        phoneOpen = true;
+
+        showToast('Llamada entrante: ' + formatPhoneNumber(num), 'info', 5000);
+
+        // Lookup privada by CallerID
+        var privadaResult = await lookupCallerPrivada(num);
+        if (privadaResult) {
+            document.getElementById('callerName').textContent = privadaResult.nombre + ' - ' + (privadaResult.contacto || '');
+            document.getElementById('callerName').style.display = 'block';
+            document.getElementById('callerPrivada').textContent = 'Privada: ' + privadaResult.nombre;
+            document.getElementById('callerPrivada').classList.add('active');
+            showToast('Privada identificada: ' + privadaResult.nombre, 'success');
+        } else if (videoSettings.autoShowOnCall) {
+            var ch = await getCameraForExtension(num);
+            showVideoPanel(ch);
+        }
+
+        try {
+            document.getElementById('ringtone').volume = audioSettings.ringtoneVolume / 100;
+            document.getElementById('ringtone').play();
+        } catch(e) {}
+
+        setupSessionEvents(session);
+        session.on('failed', function() {
+            document.getElementById('incomingModal').style.display = 'none';
+            document.getElementById('phoneWrapper').classList.remove('ringing');
+            document.getElementById('ringtone').pause();
+            addToCallHistory('missed', num);
+        });
+        session.on('ended', function() {
+            document.getElementById('incomingModal').style.display = 'none';
+            document.getElementById('phoneWrapper').classList.remove('ringing');
+            document.getElementById('ringtone').pause();
+            var d = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+            if (d > 0) addToCallHistory('incoming', num, d);
+            endCall();
+        });
+    }
+
+    function answerCall() {
+        if (currentSession) {
+            currentSession.answer({ mediaConstraints: { audio: true, video: false } });
+            document.getElementById('incomingModal').style.display = 'none';
+            document.getElementById('phoneWrapper').classList.remove('ringing');
+            document.getElementById('ringtone').pause();
+            updateCallStatus('En llamada');
+            startCallTimer();
+            document.getElementById('callBtn').style.display = 'none';
+            document.getElementById('hangupBtn').style.display = 'flex';
+            document.getElementById('callInfo').classList.add('active');
+            showToast('Llamada contestada', 'success', 2000);
+            // Auto-snapshot on answer for access log
+            autoSnapshotOnAnswer();
+        }
+    }
+
+    function rejectCall() {
+        if (currentSession) {
+            var num = currentSession.remote_identity.uri.user;
+            currentSession.terminate();
+            addToCallHistory('missed', num);
+        }
+        document.getElementById('incomingModal').style.display = 'none';
+        document.getElementById('phoneWrapper').classList.remove('ringing');
+        document.getElementById('ringtone').pause();
+    }
+
+    function setupSessionEvents(session) {
+        session.on('peerconnection', function(e) {
+            e.peerconnection.addEventListener('track', function(ev) {
+                var ra = document.getElementById('remoteAudio');
+                ra.srcObject = ev.streams[0];
+                ra.volume = audioSettings.speakerVolume / 100;
+            });
+            e.peerconnection.addEventListener('addstream', function(ev) {
+                if (ev.stream && ev.stream.getAudioTracks().length > 0) {
+                    localStream = ev.stream;
+                    if (isMuted) localStream.getAudioTracks().forEach(function(t) { t.enabled = false; });
                 }
-            } catch(e) {
-                console.log('Error cargando privadas:', e);
-            }
+            });
+        });
+    }
+
+    function updateCallStatus(s) { document.getElementById('callStatus').textContent = s; }
+
+    function startCallTimer() {
+        callStartTime = Date.now();
+        callTimer = setInterval(function() {
+            var e = Math.floor((Date.now() - callStartTime) / 1000);
+            document.getElementById('callTimer').textContent =
+                Math.floor(e / 60).toString().padStart(2, '0') + ':' + (e % 60).toString().padStart(2, '0');
+        }, 1000);
+    }
+
+    function endCall() {
+        if (callTimer) { clearInterval(callTimer); callTimer = null; }
+        phoneNumber = '';
+        document.getElementById('phoneNumber').textContent = '';
+        updateCallStatus('');
+        document.getElementById('callInfo').classList.remove('active');
+        document.getElementById('callTimer').textContent = '00:00';
+        document.getElementById('callBtn').style.display = 'flex';
+        document.getElementById('hangupBtn').style.display = 'none';
+        document.getElementById('phoneWrapper').classList.remove('ringing');
+        isMuted = false;
+        document.getElementById('muteBtn').classList.remove('muted');
+        document.getElementById('muteBtn').textContent = '\uD83C\uDFA4 Silenciar Mic';
+        currentSession = null;
+        callStartTime = null;
+        localStream = null;
+    }
+
+    // ==========================================
+    // HISTORY & CONTACTS
+    // ==========================================
+    function loadCallHistory() {
+        var s = localStorage.getItem('webphoneCallHistory');
+        if (s) try { callHistory = JSON.parse(s); } catch(e) { callHistory = []; }
+    }
+    function saveCallHistory() { localStorage.setItem('webphoneCallHistory', JSON.stringify(callHistory)); }
+    function addToCallHistory(type, number, duration) {
+        var c = contacts.find(function(x) { return x.number === number; });
+        callHistory.unshift({ id: Date.now(), type: type, number: number, name: c ? c.name : null, duration: duration || null, date: new Date().toISOString() });
+        if (callHistory.length > 50) callHistory = callHistory.slice(0, 50);
+        saveCallHistory();
+    }
+
+    function renderCallHistory() {
+        var l = document.getElementById('callLog');
+        if (!callHistory.length) { l.innerHTML = '<div class="call-log-empty">No hay llamadas registradas</div>'; return; }
+        l.innerHTML = callHistory.map(function(c) {
+            var d = new Date(c.date);
+            var t = d.toDateString() === new Date().toDateString() ?
+                d.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}) :
+                d.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit'});
+            var ic = c.type === 'incoming' ? 'incoming' : c.type === 'outgoing' ? 'outgoing' : 'missed';
+            var ico = c.type === 'incoming' ? '&#128222;&#8595;' : c.type === 'outgoing' ? '&#128222;&#8594;' : '&#128222;&#10007;';
+            var dur = c.duration ? Math.floor(c.duration / 60) + ':' + (c.duration % 60).toString().padStart(2, '0') : '';
+            return '<div class="call-log-item" onclick="callFromHistory(\'' + c.number + '\')"><div class="call-icon ' + ic + '">' + ico + '</div><div class="call-details"><div class="call-contact">' + (c.name || formatPhoneNumber(c.number)) + '</div>' + (c.name ? '<div class="call-number">' + formatPhoneNumber(c.number) + '</div>' : '') + '</div><div class="call-meta"><div class="call-time">' + t + '</div>' + (dur ? '<div class="call-duration">' + dur + '</div>' : '') + '</div></div>';
+        }).join('');
+    }
+
+    function callFromHistory(n) {
+        phoneNumber = n;
+        document.getElementById('phoneNumber').textContent = formatPhoneNumber(n);
+        document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+        document.querySelector('.nav-tab').classList.add('active');
+        document.getElementById('dialpadTab').classList.add('active');
+        makeCall();
+    }
+
+    function loadContacts() {
+        var s = localStorage.getItem('webphoneContacts');
+        if (s) try { contacts = JSON.parse(s); } catch(e) { contacts = []; }
+        if (!contacts.length) {
+            contacts = [
+                { name: 'Soporte Tecnico', number: '101', type: 'normal' },
+                { name: 'Recepcion', number: '100', type: 'normal' }
+            ];
+            saveContacts();
         }
+    }
+    function saveContacts() { localStorage.setItem('webphoneContacts', JSON.stringify(contacts)); }
 
-        // --- Seleccionar privada ---
-        async function onPrivadaSelected(privadaId) {
-            if (!privadaId) {
-                clearPrivadaData();
-                return;
-            }
+    function renderContacts(search) {
+        search = search || '';
+        var l = document.getElementById('contactsList');
+        var f = contacts.filter(function(c) {
+            return c.name.toLowerCase().indexOf(search.toLowerCase()) >= 0 || c.number.indexOf(search) >= 0;
+        });
+        if (!f.length) { l.innerHTML = '<div class="call-log-empty">Sin contactos</div>'; return; }
+        l.innerHTML = f.map(function(c, i) {
+            return '<div class="contact-item"><div class="contact-info" onclick="callContact(\'' + c.number + '\')"><div class="contact-name">' + escapeHtml(c.name) + '</div><div class="contact-number">' + formatPhoneNumber(c.number) + '</div></div><div class="contact-actions"><span class="contact-type ' + c.type + '">' + c.type + '</span><button class="contact-btn edit" onclick="event.stopPropagation();editContact(' + i + ')">&#9998;</button><button class="contact-btn delete" onclick="event.stopPropagation();deleteContact(' + i + ')">&#128465;</button></div></div>';
+        }).join('');
+    }
 
-            // Cargar videos y relays en paralelo
-            const [videosRes, relaysRes] = await Promise.all([
-                fetch(`${privadaSettings.apiUrl}?action=get_videos&privada_id=${privadaId}`).then(r=>r.json()).catch(()=>({success:false})),
-                fetch(`${privadaSettings.apiUrl}?action=get_relays&privada_id=${privadaId}`).then(r=>r.json()).catch(()=>({success:false}))
-            ]);
+    function searchContacts(t) { renderContacts(t); }
+    function callContact(n) {
+        phoneNumber = n;
+        document.getElementById('phoneNumber').textContent = formatPhoneNumber(n);
+        document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+        document.querySelector('.nav-tab').classList.add('active');
+        document.getElementById('dialpadTab').classList.add('active');
+        makeCall();
+    }
+    function getContactName(n) { var c = contacts.find(function(x) { return x.number === n; }); return c ? c.name : null; }
 
-            currentPrivada = { id: parseInt(privadaId) };
+    // --- Contact Modal (replaces prompt()) ---
+    function showContactModal(index) {
+        var modal = document.getElementById('contactModal');
+        var title = document.getElementById('contactModalTitle');
+        var nameInput = document.getElementById('contactNameInput');
+        var numberInput = document.getElementById('contactNumberInput');
+        var typeInput = document.getElementById('contactTypeInput');
+        var editIndex = document.getElementById('contactEditIndex');
 
-            // Procesar videos de la BD
-            if (videosRes.success && videosRes.videos.length > 0) {
-                privadaVideos = videosRes.videos;
-                loadPrivadaCameras(privadaVideos);
-                const info = document.getElementById('privadaInfo');
-                const infoText = document.getElementById('privadaInfoText');
-                infoText.textContent = `📹 ${privadaVideos.length} cámara(s) disponible(s)`;
-                info.classList.add('active');
-            } else {
-                privadaVideos = [];
-                document.getElementById('privadaInfo').classList.remove('active');
-            }
-
-            // Procesar relays desde tabla privadas (dns_1/2/3 configurados manualmente)
-            if (relaysRes.success && relaysRes.relays.length > 0) {
-                privadaRelays = relaysRes.relays;
-                renderRelayButtons(privadaRelays);
-            } else {
-                privadaRelays = [];
-                renderRelayButtons([]);
-            }
+        if (typeof index === 'number' && contacts[index]) {
+            title.textContent = 'Editar Contacto';
+            nameInput.value = contacts[index].name;
+            numberInput.value = contacts[index].number;
+            typeInput.value = contacts[index].type;
+            editIndex.value = index;
+        } else {
+            title.textContent = 'Agregar Contacto';
+            nameInput.value = '';
+            numberInput.value = '';
+            typeInput.value = 'normal';
+            editIndex.value = -1;
         }
+        modal.style.display = 'block';
+        setTimeout(function() { nameInput.focus(); }, 100);
+    }
 
-        function clearPrivadaData() {
-            currentPrivada = null;
+    function closeContactModal() { document.getElementById('contactModal').style.display = 'none'; }
+
+    function saveContact() {
+        var name = document.getElementById('contactNameInput').value.trim();
+        var number = document.getElementById('contactNumberInput').value.trim();
+        var type = document.getElementById('contactTypeInput').value;
+        var index = parseInt(document.getElementById('contactEditIndex').value);
+
+        if (!name || !number) { showToast('Nombre y numero son requeridos', 'error'); return; }
+
+        if (index >= 0) {
+            contacts[index] = { name: name, number: number, type: type };
+            showToast('Contacto actualizado', 'success');
+        } else {
+            contacts.push({ name: name, number: number, type: type });
+            showToast('Contacto agregado', 'success');
+        }
+        saveContacts();
+        renderContacts();
+        closeContactModal();
+    }
+
+    function editContact(i) { showContactModal(i); }
+    function deleteContact(i) {
+        if (confirm('Eliminar contacto "' + contacts[i].name + '"?')) {
+            contacts.splice(i, 1);
+            saveContacts();
+            renderContacts();
+            showToast('Contacto eliminado', 'info');
+        }
+    }
+
+    // ==========================================
+    // PRIVADA & MQTT INTEGRATION
+    // ==========================================
+    async function loadPrivadas() {
+        try {
+            var r = await fetch(privadaSettings.apiUrl + '?action=list_privadas');
+            var d = await r.json();
+            if (d.success) {
+                var sel = document.getElementById('privadaSelect');
+                sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+                d.privadas.forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.nombre;
+                    opt.dataset.telefono = p.telefono || '';
+                    sel.appendChild(opt);
+                });
+            }
+        } catch(e) {
+            console.log('Error cargando privadas:', e);
+        }
+    }
+
+    async function onPrivadaSelected(privadaId) {
+        if (!privadaId) { clearPrivadaData(); return; }
+
+        var results = await Promise.all([
+            fetch(privadaSettings.apiUrl + '?action=get_videos&privada_id=' + privadaId).then(function(r) { return r.json(); }).catch(function() { return { success: false }; }),
+            fetch(privadaSettings.apiUrl + '?action=get_relays&privada_id=' + privadaId).then(function(r) { return r.json(); }).catch(function() { return { success: false }; })
+        ]);
+        var videosRes = results[0];
+        var relaysRes = results[1];
+
+        currentPrivada = { id: parseInt(privadaId) };
+
+        // Process videos
+        if (videosRes.success && videosRes.videos && videosRes.videos.length > 0) {
+            privadaVideos = videosRes.videos;
+            loadPrivadaCameras(privadaVideos);
+            var strip = document.getElementById('privadaInfoStrip');
+            document.getElementById('privadaInfoText').textContent = privadaVideos.length + ' camara(s) disponible(s)';
+            document.getElementById('privadaInfoDetail').textContent = 'Video activo';
+            strip.classList.add('active');
+            showToast('Camaras cargadas: ' + privadaVideos.length, 'success', 2000);
+        } else {
             privadaVideos = [];
-            privadaRelays = [];
-            document.getElementById('privadaInfo').classList.remove('active');
-            document.getElementById('videoPrivadaInfo').classList.remove('active');
-            document.getElementById('videoPrivadaInfo').innerHTML = '';
-            renderRelayButtons([]);
-            // Restaurar cámaras del proxy
-            loadCameraList();
+            document.getElementById('privadaInfoStrip').classList.remove('active');
         }
 
-        // --- Cargar cámaras desde video_1/2/3 de la privada ---
-        function loadPrivadaCameras(videos) {
-            // Reemplazar la lista de cámaras con las de la BD
-            availableCameras = videos.map(v => ({
+        // Process relays
+        if (relaysRes.success && relaysRes.relays && relaysRes.relays.length > 0) {
+            privadaRelays = relaysRes.relays;
+            renderRelayButtons(privadaRelays);
+            showToast('Relays cargados: ' + privadaRelays.length, 'success', 2000);
+        } else {
+            privadaRelays = [];
+            renderRelayButtons([]);
+        }
+    }
+
+    function clearPrivadaData() {
+        currentPrivada = null;
+        privadaVideos = [];
+        privadaRelays = [];
+        document.getElementById('privadaInfoStrip').classList.remove('active');
+        document.getElementById('videoPrivadaInfo').classList.remove('active');
+        document.getElementById('videoPrivadaInfo').innerHTML = '';
+        renderRelayButtons([]);
+        loadCameraList();
+    }
+
+    function loadPrivadaCameras(videos) {
+        availableCameras = videos.map(function(v) {
+            return {
                 channel: 'privada_video_' + v.id,
                 name: v.alias,
                 url: v.url,
@@ -952,363 +1718,263 @@
                 needsProxy: v.needs_proxy || false,
                 proxyUrl: v.proxy_url || v.url,
                 isPrivadaVideo: true
-            }));
-
-            if (availableCameras.length > 0) {
-                currentChannel = availableCameras[0].channel;
-                renderCameraSelector();
-
-                // Si el panel de video está activo, cambiar al feed de la privada
-                if (document.getElementById('videoPanel').classList.contains('active')) {
-                    startPrivadaVideoRefresh();
-                }
-            }
-        }
-
-        // --- Refresh de video desde URLs de privada (via proxy para Hikvision) ---
-        function startPrivadaVideoRefresh() {
-            stopVideoRefresh();
-            consecutiveErrors = 0;
-
-            const cam = availableCameras.find(c => c.channel === currentChannel);
-            if (!cam) return;
-
-            document.getElementById('videoChannelName').textContent = cam.name;
-            document.getElementById('videoError').classList.remove('show');
-            document.getElementById('videoLive').style.display = 'inline';
-
-            if (cam.isPrivadaVideo) {
-                // Usar proxy_url si necesita autenticación Digest (Hikvision)
-                const feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
-                refreshPrivadaSnapshot(feedUrl);
-                videoRefreshInterval = setInterval(() => {
-                    if (!videoPaused && !switchingCamera) {
-                        refreshPrivadaSnapshot(feedUrl);
-                    }
-                }, videoSettings.refreshRate);
-                document.getElementById('videoStatus').textContent = `${Math.round(1000/videoSettings.refreshRate)} FPS`;
-            } else {
-                startVideoRefresh();
-            }
-        }
-
-        function refreshPrivadaSnapshot(feedUrl) {
-            const img = document.getElementById('cameraSnapshot');
-            const ch = currentChannel;
-            const separator = feedUrl.includes('?') ? '&' : '?';
-            const src = `${feedUrl}${separator}t=${Date.now()}`;
-            const pre = new Image();
-            pre.onload = function() {
-                if (currentChannel === ch) {
-                    img.src = this.src;
-                    document.getElementById('videoError').classList.remove('show');
-                    img.style.opacity = '1';
-                    consecutiveErrors = 0;
-                }
             };
-            pre.onerror = function() {
-                if (currentChannel !== ch) return;
-                consecutiveErrors++;
-                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                    document.getElementById('videoError').classList.add('show');
-                    img.style.opacity = '0.3';
-                    document.getElementById('videoStatus').textContent = 'ERROR';
-                    stopVideoRefresh();
-                    setTimeout(() => {
-                        if (document.getElementById('videoPanel').classList.contains('active') && !videoPaused) {
-                            consecutiveErrors = 0;
-                            startPrivadaVideoRefresh();
-                        }
-                    }, 3000);
-                }
-            };
-            pre.src = src;
-        }
-
-        // Override selectCamera para manejar cámaras de privada
-        const _originalSelectCamera = selectCamera;
-        selectCamera = function(ch) {
-            const cam = availableCameras.find(c => c.channel === ch);
-            if (!cam) return;
-
-            if (ch === currentChannel || switchingCamera) return;
-            switchingCamera = true;
-            consecutiveErrors = 0;
-            stopVideoRefresh();
-
-            const img = document.getElementById('cameraSnapshot');
-            const loading = document.getElementById('videoLoading');
-            const error = document.getElementById('videoError');
-            img.style.opacity = '0.3';
-            loading.classList.add('show');
-            error.classList.remove('show');
-            document.getElementById('videoStatus').textContent = 'CAMBIANDO...';
-            document.getElementById('videoLive').style.display = 'none';
-
-            currentChannel = ch;
-            document.getElementById('videoChannelName').textContent = cam.name;
-            renderCameraSelector();
-
-            if (cam.isPrivadaVideo) {
-                // Precargar primer frame - usar proxy si necesita auth Hikvision
-                const feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
-                const separator = feedUrl.includes('?') ? '&' : '?';
-                const src = `${feedUrl}${separator}t=${Date.now()}`;
-                const firstFrame = new Image();
-                const switchTimeout = setTimeout(() => { finishPrivadaCameraSwitch(false, cam); }, 3000);
-
-                firstFrame.onload = function() {
-                    clearTimeout(switchTimeout);
-                    img.src = this.src;
-                    finishPrivadaCameraSwitch(true, cam);
-                };
-                firstFrame.onerror = function() {
-                    clearTimeout(switchTimeout);
-                    finishPrivadaCameraSwitch(false, cam);
-                };
-                firstFrame.src = src;
-            } else {
-                // Usar el proxy original
-                const src = `${videoSettings.proxyUrl}?channel=${ch}&t=${Date.now()}`;
-                const firstFrame = new Image();
-                const switchTimeout = setTimeout(() => { finishCameraSwitch(false); }, 3000);
-
-                firstFrame.onload = function() {
-                    clearTimeout(switchTimeout);
-                    img.src = this.src;
-                    finishCameraSwitch(true);
-                };
-                firstFrame.onerror = function() {
-                    clearTimeout(switchTimeout);
-                    finishCameraSwitch(false);
-                };
-                firstFrame.src = src;
-            }
-        };
-
-        function finishPrivadaCameraSwitch(success, cam) {
-            const img = document.getElementById('cameraSnapshot');
-            const loading = document.getElementById('videoLoading');
-            const error = document.getElementById('videoError');
-
-            loading.classList.remove('show');
-            switchingCamera = false;
-            renderCameraSelector();
-
-            if (success) {
-                img.style.opacity = '1';
-                error.classList.remove('show');
-                consecutiveErrors = 0;
-            } else {
-                img.style.opacity = '0.3';
-                error.classList.add('show');
-            }
-
-            if (!videoPaused) {
-                startPrivadaVideoRefresh();
-            } else {
-                document.getElementById('videoStatus').textContent = 'PAUSADO';
-            }
-        }
-
-        // Override showVideoPanel para usar cámaras de privada
-        const _originalShowVideoPanel = showVideoPanel;
-        showVideoPanel = function(ch) {
-            if (privadaVideos.length > 0) {
-                // Usar cámaras de privada via proxy
-                if (ch) {
-                    const cam = availableCameras.find(c => c.channel === ch);
-                    if (cam) {
-                        currentChannel = ch;
-                        document.getElementById('videoChannelName').textContent = cam.name;
-                    }
-                }
-                document.getElementById('videoPanel').classList.add('active');
-                document.getElementById('videoToggleBtn').classList.add('active');
-                renderCameraSelector();
-                startPrivadaVideoRefresh();
-                updateVideoPrivadaInfo();
-            } else {
-                // Sin cámaras de privada, usar proxy original
-                _originalShowVideoPanel(ch);
-                document.getElementById('videoPrivadaInfo').classList.remove('active');
-            }
-        };
-
-        // --- RELAY PANEL ---
-        function toggleRelayPanel() {
-            const p = document.getElementById('relayPanel');
-            const b = document.getElementById('relayToggleBtn');
-            if (p.classList.contains('active')) {
-                p.classList.remove('active');
-                b.classList.remove('active');
-            } else {
-                p.classList.add('active');
-                b.classList.add('active');
-            }
-        }
-
-        function renderRelayButtons(relays) {
-            const container = document.getElementById('relayButtons');
-            if (!relays || relays.length === 0) {
-                container.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:10px;">Sin relays configurados</div>';
-                return;
-            }
-
-            // Relays configurados en tabla privadas (dns_1/2/3)
-            // dns puede ser un topic MQTT completo o un device name
-            container.innerHTML = relays.map(r =>
-                `<div class="relay-btn" id="relayBtn_${r.id}" onclick="activateRelayLegacy(${r.id}, '${escapeHtml(r.dns)}', '${r.puerto}', '${escapeHtml(r.alias)}')">
-                    <div class="relay-btn-info">
-                        <span class="relay-btn-name">${escapeHtml(r.alias)}</span>
-                        <span class="relay-btn-dns">${escapeHtml(r.dns)}:${r.puerto || '1883'}</span>
-                    </div>
-                    <div class="relay-btn-icon">🔓</div>
-                </div>`
-            ).join('');
-        }
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-        }
-
-        // --- Activar relay via MQTT directo (dns_1/2/3 de privadas) ---
-        // dns = MQTT topic o device name configurado en la privada
-        // puerto = puerto MQTT (default 1883)
-        async function activateRelayLegacy(relayId, dns, puerto, alias) {
-            const btn = document.getElementById(`relayBtn_${relayId}`);
-            if (!btn || btn.classList.contains('activating')) return;
-
-            btn.classList.add('activating');
-            const icon = btn.querySelector('.relay-btn-icon');
-            if (icon) icon.textContent = '⏳';
-
-            // Si dns contiene '/' se trata como topic completo, si no se construye
-            const topic = dns.includes('/') ? dns : `home/relays/${dns}/${relayId}/set`;
-
-            try {
-                const response = await fetch(privadaSettings.mqttRelayUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'mqtt_direct',
-                        topic: topic,
-                        payload: 'PULSE',
-                        puerto: parseInt(puerto) || 1883
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    if (icon) icon.textContent = '✅';
-                    setTimeout(() => { btn.classList.remove('activating'); if (icon) icon.textContent = '🔓'; }, 2000);
-                } else {
-                    btn.classList.remove('activating'); btn.classList.add('error');
-                    if (icon) icon.textContent = '❌';
-                    console.error('Error relay:', result.error);
-                    setTimeout(() => { btn.classList.remove('error'); if (icon) icon.textContent = '🔓'; }, 3000);
-                }
-            } catch(e) {
-                btn.classList.remove('activating'); btn.classList.add('error');
-                if (icon) icon.textContent = '❌';
-                console.error('Error activando relay:', e);
-                setTimeout(() => { btn.classList.remove('error'); if (icon) icon.textContent = '🔓'; }, 3000);
-            }
-        }
-
-        // --- Caller ID: Identificar privada por teléfono entrante ---
-        async function lookupCallerPrivada(callerNumber) {
-            if (!privadaSettings.autoLookupCaller || !callerNumber) return;
-
-            try {
-                const r = await fetch(`${privadaSettings.apiUrl}?action=lookup_caller&telefono=${encodeURIComponent(callerNumber)}`);
-                const d = await r.json();
-
-                if (d.success) {
-                    // Seleccionar automáticamente la privada
-                    const sel = document.getElementById('privadaSelect');
-                    sel.value = d.privada_id;
-                    await onPrivadaSelected(d.privada_id);
-
-                    // Mostrar info de la privada identificada
-                    const info = document.getElementById('privadaInfo');
-                    const infoText = document.getElementById('privadaInfoText');
-                    infoText.textContent = `📞 ${d.nombre} - ${d.contacto || ''}`;
-                    info.classList.add('active');
-
-                    // Auto-abrir video si hay cámaras disponibles
-                    if (privadaVideos.length > 0 && videoSettings.autoShowOnCall) {
-                        showVideoPanel();
-                    }
-
-                    // Auto-abrir relays si hay configurados
-                    if (privadaRelays.length > 0) {
-                        const rp = document.getElementById('relayPanel');
-                        if (!rp.classList.contains('active')) {
-                            toggleRelayPanel();
-                        }
-                    }
-
-                    return d;
-                }
-            } catch(e) {
-                console.log('Error buscando caller ID:', e);
-            }
-            return null;
-        }
-
-        // ==========================================
-        // INIT
-        // ==========================================
-        window.onload=function(){
-            const sc=localStorage.getItem('webphoneConfig');
-            if(sc){
-                try{
-                    config=JSON.parse(sc);
-                    document.getElementById('wsServer').value=config.wsServer||'';
-                    document.getElementById('sipExtension').value=config.extension||'';
-                    document.getElementById('sipPassword').value=config.password||'';
-                    document.getElementById('sipDomain').value=config.domain||'';
-                    if(config.extension&&config.password)setTimeout(connectToServer,1000);
-                }catch(e){}
-            }
-            const sv=localStorage.getItem('videoSettings');
-            if(sv){try{Object.assign(videoSettings,JSON.parse(sv));}catch(e){}}
-            document.getElementById('cameraProxyUrl').value=videoSettings.proxyUrl;
-            document.getElementById('videoRefreshRate').value=videoSettings.refreshRate;
-            document.getElementById('autoShowVideo').checked=videoSettings.autoShowOnCall;
-            // Cargar configuración de privadas/MQTT
-            const sp=localStorage.getItem('privadaSettings');
-            if(sp){try{Object.assign(privadaSettings,JSON.parse(sp));}catch(e){}}
-            document.getElementById('privadaApiUrl').value=privadaSettings.apiUrl;
-            document.getElementById('mqttRelayUrl').value=privadaSettings.mqttRelayUrl;
-            document.getElementById('mqttBrokerHost').value=privadaSettings.mqttBrokerHost;
-            document.getElementById('mqttBrokerPort').value=privadaSettings.mqttBrokerPort;
-            document.getElementById('autoLookupCaller').checked=privadaSettings.autoLookupCaller;
-            loadContacts();loadCallHistory();loadAudioSettings();loadCameraList();loadPrivadas();
-            setTimeout(()=>{document.getElementById('phoneWrapper').classList.add('open');phoneOpen=true;},500);
-        };
-
-        // ==========================================
-        // KEYBOARD SHORTCUTS
-        // ==========================================
-        document.addEventListener('keydown',function(e){
-            if(!phoneOpen||e.target.tagName==='INPUT')return;
-            if(e.key>='0'&&e.key<='9')addDigit(e.key);
-            else if(e.key==='*'||e.key==='#')addDigit(e.key);
-            else if(e.key==='Backspace'){e.preventDefault();deleteDigit();}
-            else if(e.key==='Enter'&&phoneNumber)makeCall();
-            else if(e.key==='Escape'&&currentSession)hangupCall();
-            else if(e.key==='v'||e.key==='V')toggleVideoPanel();
-            else if(e.key==='r'||e.key==='R')toggleRelayPanel();
-            else if(e.key==='m'||e.key==='M'){if(currentSession)toggleMute();}
         });
 
-        window.onclick=function(e){if(e.target.classList.contains('modal'))e.target.style.display='none';};
+        if (availableCameras.length > 0) {
+            currentChannel = availableCameras[0].channel;
+            renderCameraSelector();
+            if (document.getElementById('videoPanel').classList.contains('active')) {
+                startPrivadaVideoRefresh();
+            }
+        }
+    }
+
+    function startPrivadaVideoRefresh() {
+        stopVideoRefresh();
+        consecutiveErrors = 0;
+        var cam = availableCameras.find(function(c) { return c.channel === currentChannel; });
+        if (!cam) return;
+
+        document.getElementById('videoChannelName').textContent = cam.name;
+        document.getElementById('videoError').classList.remove('show');
+        document.getElementById('videoLive').style.display = 'inline';
+
+        if (cam.isPrivadaVideo) {
+            var feedUrl = cam.needsProxy ? cam.proxyUrl : cam.url;
+            refreshPrivadaSnapshot(feedUrl);
+            videoRefreshInterval = setInterval(function() {
+                if (!videoPaused && !switchingCamera) refreshPrivadaSnapshot(feedUrl);
+            }, videoSettings.refreshRate);
+            document.getElementById('videoStatus').textContent = Math.round(1000 / videoSettings.refreshRate) + ' FPS';
+        } else {
+            startVideoRefresh();
+        }
+    }
+
+    function refreshPrivadaSnapshot(feedUrl) {
+        var img = document.getElementById('cameraSnapshot');
+        var ch = currentChannel;
+        var separator = feedUrl.indexOf('?') >= 0 ? '&' : '?';
+        var src = feedUrl + separator + 't=' + Date.now();
+        var pre = new Image();
+        pre.onload = function() {
+            if (currentChannel === ch) {
+                img.src = this.src;
+                document.getElementById('videoError').classList.remove('show');
+                img.style.opacity = '1';
+                consecutiveErrors = 0;
+            }
+        };
+        pre.onerror = function() {
+            if (currentChannel !== ch) return;
+            consecutiveErrors++;
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                document.getElementById('videoError').classList.add('show');
+                img.style.opacity = '0.3';
+                document.getElementById('videoStatus').textContent = 'ERROR';
+                stopVideoRefresh();
+                setTimeout(function() {
+                    if (document.getElementById('videoPanel').classList.contains('active') && !videoPaused) {
+                        consecutiveErrors = 0;
+                        startPrivadaVideoRefresh();
+                    }
+                }, 3000);
+            }
+        };
+        pre.src = src;
+    }
+
+    // --- RELAY PANEL ---
+    function toggleRelayPanel() {
+        var p = document.getElementById('relayPanel');
+        var b = document.getElementById('relayToggleBtn');
+        p.classList.toggle('active');
+        b.classList.toggle('active');
+    }
+
+    function renderRelayButtons(relays) {
+        var container = document.getElementById('relayButtons');
+        if (!relays || relays.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;padding:12px;">Sin relays configurados para esta privada</div>';
+            return;
+        }
+
+        container.innerHTML = relays.map(function(r) {
+            return '<div class="relay-btn" id="relayBtn_' + r.id + '" onclick="activateRelayLegacy(' + r.id + ', \'' + escapeHtml(r.dns) + '\', \'' + r.puerto + '\', \'' + escapeHtml(r.alias) + '\')">' +
+                '<div class="relay-info"><span class="relay-name">' + escapeHtml(r.alias) + '</span><span class="relay-dns">' + escapeHtml(r.dns) + ':' + (r.puerto || '1883') + '</span></div>' +
+                '<div class="relay-icon" id="relayIcon_' + r.id + '">&#128275;</div></div>';
+        }).join('');
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    async function activateRelayLegacy(relayId, dns, puerto, alias) {
+        var btn = document.getElementById('relayBtn_' + relayId);
+        if (!btn || btn.classList.contains('activating')) return;
+
+        btn.classList.add('activating');
+        var icon = document.getElementById('relayIcon_' + relayId);
+        if (icon) icon.innerHTML = '&#9203;';
+
+        var topic = dns.indexOf('/') >= 0 ? dns : 'home/relays/' + dns + '/' + relayId + '/set';
+
+        try {
+            var response = await fetch(privadaSettings.mqttRelayUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'mqtt_direct',
+                    topic: topic,
+                    payload: 'PULSE',
+                    puerto: parseInt(puerto) || 1883
+                })
+            });
+
+            var result = await response.json();
+
+            if (result.success) {
+                if (icon) icon.innerHTML = '&#9989;';
+                showToast('Relay activado: ' + alias, 'success');
+                setTimeout(function() {
+                    btn.classList.remove('activating');
+                    if (icon) icon.innerHTML = '&#128275;';
+                }, 2500);
+            } else {
+                btn.classList.remove('activating');
+                btn.classList.add('error');
+                if (icon) icon.innerHTML = '&#10060;';
+                showToast('Error relay: ' + (result.error || 'desconocido'), 'error');
+                setTimeout(function() {
+                    btn.classList.remove('error');
+                    if (icon) icon.innerHTML = '&#128275;';
+                }, 3000);
+            }
+        } catch(e) {
+            btn.classList.remove('activating');
+            btn.classList.add('error');
+            if (icon) icon.innerHTML = '&#10060;';
+            showToast('Error de conexion con relay', 'error');
+            setTimeout(function() {
+                btn.classList.remove('error');
+                if (icon) icon.innerHTML = '&#128275;';
+            }, 3000);
+        }
+    }
+
+    // --- Caller ID lookup ---
+    async function lookupCallerPrivada(callerNumber) {
+        if (!privadaSettings.autoLookupCaller || !callerNumber) return null;
+        try {
+            var r = await fetch(privadaSettings.apiUrl + '?action=lookup_caller&telefono=' + encodeURIComponent(callerNumber));
+            var d = await r.json();
+
+            if (d.success) {
+                // Auto-select privada
+                var sel = document.getElementById('privadaSelect');
+                sel.value = d.privada_id;
+                await onPrivadaSelected(d.privada_id);
+
+                // Show info strip
+                var strip = document.getElementById('privadaInfoStrip');
+                document.getElementById('privadaInfoText').textContent = d.nombre + ' - ' + (d.contacto || '');
+                document.getElementById('privadaInfoDetail').textContent = 'Identificada por CallerID';
+                strip.classList.add('active');
+
+                // Auto-open video
+                if (privadaVideos.length > 0 && videoSettings.autoShowOnCall) {
+                    showVideoPanel();
+                }
+
+                // Auto-open relays
+                if (privadaRelays.length > 0) {
+                    var rp = document.getElementById('relayPanel');
+                    if (!rp.classList.contains('active')) toggleRelayPanel();
+                }
+
+                return d;
+            }
+        } catch(e) {
+            console.log('Error buscando caller ID:', e);
+        }
+        return null;
+    }
+
+    // ==========================================
+    // INIT
+    // ==========================================
+    window.onload = function() {
+        // Load SIP config
+        var sc = localStorage.getItem('webphoneConfig');
+        if (sc) {
+            try {
+                config = JSON.parse(sc);
+                document.getElementById('wsServer').value = config.wsServer || '';
+                document.getElementById('sipExtension').value = config.extension || '';
+                document.getElementById('sipPassword').value = config.password || '';
+                document.getElementById('sipDomain').value = config.domain || '';
+                if (config.extension) document.getElementById('extensionBadge').textContent = 'Ext ' + config.extension;
+                if (config.extension && config.password) setTimeout(connectToServer, 1000);
+            } catch(e) {}
+        }
+
+        // Load video settings
+        var sv = localStorage.getItem('videoSettings');
+        if (sv) { try { Object.assign(videoSettings, JSON.parse(sv)); } catch(e) {} }
+        document.getElementById('cameraProxyUrl').value = videoSettings.proxyUrl;
+        document.getElementById('videoRefreshRate').value = videoSettings.refreshRate;
+        document.getElementById('autoShowVideo').checked = videoSettings.autoShowOnCall;
+        document.getElementById('autoSnapshot').checked = videoSettings.autoSnapshot !== false;
+
+        // Load privada settings
+        var sp = localStorage.getItem('privadaSettings');
+        if (sp) { try { Object.assign(privadaSettings, JSON.parse(sp)); } catch(e) {} }
+        document.getElementById('privadaApiUrl').value = privadaSettings.apiUrl;
+        document.getElementById('mqttRelayUrl').value = privadaSettings.mqttRelayUrl;
+        document.getElementById('mqttBrokerHost').value = privadaSettings.mqttBrokerHost;
+        document.getElementById('mqttBrokerPort').value = privadaSettings.mqttBrokerPort;
+        document.getElementById('autoLookupCaller').checked = privadaSettings.autoLookupCaller;
+
+        // Load data
+        loadContacts();
+        loadCallHistory();
+        loadAudioSettings();
+        loadCameraList();
+        loadPrivadas();
+
+        // Open phone
+        setTimeout(function() {
+            document.getElementById('phoneWrapper').classList.add('open');
+            phoneOpen = true;
+        }, 500);
+    };
+
+    // ==========================================
+    // KEYBOARD SHORTCUTS
+    // ==========================================
+    document.addEventListener('keydown', function(e) {
+        if (!phoneOpen || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        if (e.key >= '0' && e.key <= '9') addDigit(e.key);
+        else if (e.key === '*' || e.key === '#') addDigit(e.key);
+        else if (e.key === 'Backspace') { e.preventDefault(); deleteDigit(); }
+        else if (e.key === 'Enter' && phoneNumber) makeCall();
+        else if (e.key === 'Escape' && currentSession) hangupCall();
+        else if (e.key === 'v' || e.key === 'V') toggleVideoPanel();
+        else if (e.key === 'r' || e.key === 'R') toggleRelayPanel();
+        else if ((e.key === 'm' || e.key === 'M') && currentSession) toggleMute();
+        else if (e.key === 'g' || e.key === 'G') toggleGridView();
+    });
+
+    // Close modals on background click
+    window.onclick = function(e) {
+        if (e.target.classList.contains('modal')) e.target.style.display = 'none';
+        if (e.target.classList.contains('contact-modal')) e.target.style.display = 'none';
+    };
     </script>
 </body>
 </html>
-
-
