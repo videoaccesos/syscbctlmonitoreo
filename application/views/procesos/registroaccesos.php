@@ -2406,3 +2406,101 @@ myWindow.close();
 
 }
 </script>
+
+<!-- ============================================ -->
+<!-- ACCESS PHONE - SOFTPHONE WIDGET INTEGRADO    -->
+<!-- ============================================ -->
+<style>
+#softphoneFrame {
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: 70px;
+    height: 100vh;
+    border: none;
+    z-index: 9998;
+    background: transparent;
+    transition: width 0.4s ease;
+    pointer-events: none;
+}
+#softphoneFrame.expanded {
+    width: 480px;
+    pointer-events: auto;
+}
+#softphoneFrame.incoming {
+    width: 480px;
+    pointer-events: auto;
+}
+/* Clickable overlay for the softphone tab when collapsed */
+#softphoneOverlay {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 60px;
+    height: 140px;
+    z-index: 9999;
+    cursor: pointer;
+}
+#softphoneOverlay.hidden {
+    display: none;
+}
+</style>
+<iframe id="softphoneFrame" src="<?= base_url() ?>softphone/index.html" allowtransparency="true"></iframe>
+<div id="softphoneOverlay" onclick="expandSoftphone()"></div>
+<script type="text/javascript">
+(function() {
+    var frame = document.getElementById('softphoneFrame');
+    var overlay = document.getElementById('softphoneOverlay');
+    var expanded = false;
+
+    window.expandSoftphone = function() {
+        frame.classList.add('expanded');
+        frame.style.pointerEvents = 'auto';
+        overlay.classList.add('hidden');
+        expanded = true;
+        try { frame.contentWindow.postMessage({ type: 'parent', action: 'open' }, '*'); } catch(e) {}
+    };
+
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'softphone') return;
+
+        switch(e.data.action) {
+            case 'open':
+                frame.classList.add('expanded');
+                frame.style.pointerEvents = 'auto';
+                overlay.classList.add('hidden');
+                expanded = true;
+                break;
+            case 'close':
+                frame.classList.remove('expanded');
+                frame.style.pointerEvents = 'none';
+                overlay.classList.remove('hidden');
+                expanded = false;
+                break;
+            case 'incoming':
+                frame.classList.add('expanded', 'incoming');
+                frame.style.pointerEvents = 'auto';
+                overlay.classList.add('hidden');
+                expanded = true;
+                break;
+            case 'callEnded':
+                frame.classList.remove('incoming');
+                break;
+        }
+    });
+
+    frame.addEventListener('load', function() {
+        try {
+            frame.contentWindow.addEventListener('click', function() {
+                if (!expanded) {
+                    frame.classList.add('expanded');
+                    frame.style.pointerEvents = 'auto';
+                    overlay.classList.add('hidden');
+                    expanded = true;
+                }
+            });
+        } catch(e) {}
+    });
+})();
+</script>

@@ -27,7 +27,7 @@
             --radius-lg: 16px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: transparent; }
 
         /* PHONE WRAPPER */
         .phone-wrapper {
@@ -1240,6 +1240,10 @@
     function togglePhone() {
         phoneOpen = !phoneOpen;
         document.getElementById('phoneWrapper').classList.toggle('open', phoneOpen);
+        // Notify parent frame for iframe integration
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'softphone', action: phoneOpen ? 'open' : 'close' }, '*');
+        }
     }
 
     function switchTab(n) {
@@ -1393,6 +1397,11 @@
 
         showToast('Llamada entrante: ' + formatPhoneNumber(num), 'info', 5000);
 
+        // Notify parent frame about incoming call
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'softphone', action: 'incoming', caller: num }, '*');
+        }
+
         // Lookup privada by CallerID
         var privadaResult = await lookupCallerPrivada(num);
         if (privadaResult) {
@@ -1499,6 +1508,10 @@
         currentSession = null;
         callStartTime = null;
         localStream = null;
+        // Notify parent frame call ended
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'softphone', action: 'callEnded' }, '*');
+        }
     }
 
     // ==========================================
@@ -1947,11 +1960,13 @@
         loadCameraList();
         loadPrivadas();
 
-        // Open phone
-        setTimeout(function() {
-            document.getElementById('phoneWrapper').classList.add('open');
-            phoneOpen = true;
-        }, 500);
+        // Open phone (only auto-open when NOT in iframe)
+        if (window.parent === window) {
+            setTimeout(function() {
+                document.getElementById('phoneWrapper').classList.add('open');
+                phoneOpen = true;
+            }, 500);
+        }
     };
 
     // ==========================================
@@ -1975,6 +1990,14 @@
         if (e.target.classList.contains('modal')) e.target.style.display = 'none';
         if (e.target.classList.contains('contact-modal')) e.target.style.display = 'none';
     };
+
+    // Listen for messages from parent frame (iframe integration)
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'parent') return;
+        if (e.data.action === 'open' && !phoneOpen) {
+            togglePhone();
+        }
+    });
     </script>
 </body>
 </html>
