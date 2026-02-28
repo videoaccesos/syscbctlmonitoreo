@@ -263,11 +263,34 @@ switch ($action) {
         }
         break;
 
+    // =========================================
+    // MQTT_DIRECT: Publicar directo al Mosquitto local
+    // Sin pasar por el Bot Orquestador
+    // =========================================
+    case 'mqtt_direct':
+        $topic   = $input['topic']   ?? $_GET['topic']   ?? '';
+        $payload = $input['payload'] ?? $_GET['payload'] ?? 'PULSE';
+        $port    = (int)($input['puerto'] ?? $_GET['puerto'] ?? 1883);
+
+        if (empty($topic)) {
+            echo json_encode(['success' => false, 'error' => 'topic requerido']);
+            break;
+        }
+
+        // Publicar directo a Mosquitto local
+        $result = mqtt_publish_raw('127.0.0.1', $port, $topic, $payload);
+
+        // Log
+        log_relay_activation(0, "MQTT_DIRECT:{$topic}:{$payload}", $result['success'] ?? false);
+
+        echo json_encode($result);
+        break;
+
     default:
         echo json_encode([
             'success' => false,
             'error'   => 'Acción no válida',
-            'actions' => ['activate', 'status', 'relays', 'health']
+            'actions' => ['activate', 'mqtt_direct', 'status', 'relays', 'health']
         ]);
         break;
 }
@@ -348,7 +371,7 @@ function bot_api_call($url, $method = 'GET', $data = null, $cookie_file = null) 
 // Usa la implementación MQTT raw como respaldo
 // =========================================
 function fallback_mqtt_activate($input) {
-    $host    = $input['dns']    ?? $input['host']    ?? '50.62.182.131';
+    $host    = $input['dns']    ?? $input['host']    ?? '127.0.0.1';
     $port    = (int)($input['puerto'] ?? $input['port'] ?? 1883);
     $topic   = $input['topic']  ?? '';
     $payload = $input['payload'] ?? 'PULSE';
