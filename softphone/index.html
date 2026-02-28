@@ -843,13 +843,27 @@
                 document.getElementById('privadaInfo').classList.remove('active');
             }
 
-            // Procesar relays/DNS
-            if (relaysRes.success && relaysRes.relays.length > 0) {
-                privadaRelays = relaysRes.relays;
-                renderRelayButtons(privadaRelays);
-            } else {
-                privadaRelays = [];
-                renderRelayButtons([]);
+            // Procesar relays: primero intentar Bot Orquestador (device_relays real),
+            // luego fallback a dns_1/2/3 de la tabla privadas
+            let botRelaysLoaded = false;
+            try {
+                const botRelaysRes = await fetch(`${privadaSettings.apiUrl}?action=get_bot_relays`).then(r=>r.json()).catch(()=>({success:false}));
+                if (botRelaysRes.success && botRelaysRes.relays && botRelaysRes.relays.length > 0) {
+                    privadaRelays = botRelaysRes.relays;
+                    renderRelayButtons(privadaRelays);
+                    botRelaysLoaded = true;
+                }
+            } catch(e) {}
+
+            if (!botRelaysLoaded) {
+                // Fallback a DNS legacy de tabla privadas
+                if (relaysRes.success && relaysRes.relays.length > 0) {
+                    privadaRelays = relaysRes.relays;
+                    renderRelayButtons(privadaRelays);
+                } else {
+                    privadaRelays = [];
+                    renderRelayButtons([]);
+                }
             }
         }
 
@@ -1073,15 +1087,34 @@
                 return;
             }
 
-            container.innerHTML = relays.map(r =>
-                `<div class="relay-btn" id="relayBtn_${r.id}" onclick="activateRelay(${r.id}, '${escapeHtml(r.dns)}', '${r.puerto}', '${escapeHtml(r.alias)}')">
-                    <div class="relay-btn-info">
-                        <span class="relay-btn-name">${escapeHtml(r.alias)}</span>
-                        <span class="relay-btn-dns">${escapeHtml(r.dns)}:${r.puerto || '1883'}</span>
-                    </div>
-                    <div class="relay-btn-icon">🔓</div>
-                </div>`
-            ).join('');
+            // Detectar si son relays del Bot Orquestador (tienen campo 'funcion') o legacy (dns_1/2/3)
+            const isBotRelay = relays.length > 0 && relays[0].funcion !== undefined;
+
+            if (isBotRelay) {
+                // Relays reales del Bot Orquestador con acciones completas
+                container.innerHTML = relays.map(r => {
+                    const tipoIcon = {'pluma':'🚧','porton':'🚪','alimentacion':'⚡','reinicio':'🔄','otro':'⚙️'}[r.tipo] || '🔓';
+                    const dtBadge = r.device_type === 'dingtian' ? '<span style="background:#6366f1;color:white;font-size:7px;padding:1px 3px;border-radius:3px;margin-left:4px;">DT</span>' : '';
+                    return `<div class="relay-btn" id="relayBtn_${r.id}" onclick="activateRelay(${r.id}, 'PULSE', ${r.pulse_ms || 500})">
+                        <div class="relay-btn-info">
+                            <span class="relay-btn-name">${tipoIcon} ${escapeHtml(r.nombre)}${dtBadge}</span>
+                            <span class="relay-btn-dns">${escapeHtml(r.mqtt_device || r.dns || '')}/${r.relay_number ?? ''} · ${escapeHtml(r.grupo || '')}</span>
+                        </div>
+                        <div class="relay-btn-icon">🔓</div>
+                    </div>`;
+                }).join('');
+            } else {
+                // Relays legacy (dns_1/2/3 de tabla privadas) - fallback
+                container.innerHTML = relays.map(r =>
+                    `<div class="relay-btn" id="relayBtn_${r.id}" onclick="activateRelayLegacy(${r.id}, '${escapeHtml(r.dns)}', '${r.puerto}', '${escapeHtml(r.alias)}')">
+                        <div class="relay-btn-info">
+                            <span class="relay-btn-name">${escapeHtml(r.alias)}</span>
+                            <span class="relay-btn-dns">${escapeHtml(r.dns)}:${r.puerto || '1883'}</span>
+                        </div>
+                        <div class="relay-btn-icon">🔓</div>
+                    </div>`
+                ).join('');
+            }
         }
 
         function escapeHtml(str) {
@@ -1089,8 +1122,10 @@
             return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
         }
 
-        // --- Activar relay vía MQTT ---
-        async function activateRelay(relayId, dns, puerto, alias) {
+        // --- Activar relay via Bot Orquestador ---
+        async function activateRelay(relayId, relayAction, durationMs) {
+            relayAction = relayAction || 'PULSE';
+            durationMs = durationMs || 500;
             const btn = document.getElementById(`relayBtn_${relayId}`);
             if (!btn || btn.classList.contains('activating')) return;
 
@@ -1104,12 +1139,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         action: 'activate',
-                        privada_id: currentPrivada ? currentPrivada.id : 0,
                         relay_id: relayId,
-                        dns: dns || privadaSettings.mqttBrokerHost,
-                        puerto: parseInt(puerto) || privadaSettings.mqttBrokerPort,
-                        alias: alias,
-                        duration: 3
+                        relay_action: relayAction,
+                        duration_ms: durationMs
                     })
                 });
 
@@ -1140,6 +1172,48 @@
                     btn.classList.remove('error');
                     if (icon) icon.textContent = '🔓';
                 }, 3000);
+            }
+        }
+
+        // --- Activar relay legacy (dns_1/2/3 de privadas) ---
+        async function activateRelayLegacy(relayId, dns, puerto, alias) {
+            const btn = document.getElementById(`relayBtn_${relayId}`);
+            if (!btn || btn.classList.contains('activating')) return;
+
+            btn.classList.add('activating');
+            const icon = btn.querySelector('.relay-btn-icon');
+            if (icon) icon.textContent = '⏳';
+
+            try {
+                const response = await fetch(privadaSettings.mqttRelayUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'activate',
+                        relay_id: 0,
+                        relay_action: 'PULSE',
+                        // Fallback fields for legacy MQTT direct
+                        dns: dns || privadaSettings.mqttBrokerHost,
+                        puerto: parseInt(puerto) || privadaSettings.mqttBrokerPort,
+                        topic: `home/relays/${dns}/0/set`,
+                        payload: 'PULSE'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (icon) icon.textContent = '✅';
+                    setTimeout(() => { btn.classList.remove('activating'); if (icon) icon.textContent = '🔓'; }, 2000);
+                } else {
+                    btn.classList.remove('activating'); btn.classList.add('error');
+                    if (icon) icon.textContent = '❌';
+                    setTimeout(() => { btn.classList.remove('error'); if (icon) icon.textContent = '🔓'; }, 3000);
+                }
+            } catch(e) {
+                btn.classList.remove('activating'); btn.classList.add('error');
+                if (icon) icon.textContent = '❌';
+                setTimeout(() => { btn.classList.remove('error'); if (icon) icon.textContent = '🔓'; }, 3000);
             }
         }
 

@@ -1,24 +1,44 @@
 <?php
 /**
  * MQTT Relay Proxy para Access Phone
- * Publica mensajes MQTT en el broker Mosquitto para activar relays
+ * Actúa como bridge entre el AccessPhone (frontend) y el Bot Orquestador (backend)
  *
- * Uso: POST mqtt_relay.php
- *   Body JSON: { "topic": "relay/privada/1/dns1", "payload": "ON", "dns": "192.168.1.100", "puerto": "1883" }
+ * El Bot Orquestador ya tiene toda la lógica MQTT implementada:
+ * - Manejo de device_types (esp32, esp32_legacy, dingtian)
+ * - Topics correctos por tipo de dispositivo
+ * - Protección de race conditions en estados
+ * - Logging en escenario_log
  *
- * O con GET para pruebas:
- *   mqtt_relay.php?action=publish&topic=relay/open&payload=ON&host=localhost&port=1883
- *   mqtt_relay.php?action=status  -> Verifica conexión con el broker
+ * Endpoints:
+ *   POST ?action=activate   -> Activa relay via Bot Orquestador API
+ *   GET  ?action=status     -> Estado de relays desde Bot Orquestador
+ *   GET  ?action=relays     -> Lista relays de una residencial
+ *   GET  ?action=health     -> Health check del Bot Orquestador
  */
 
-// Configuración por defecto del broker MQTT
-$mqtt_config = [
-    'host'     => 'localhost',
-    'port'     => 1883,
-    'username' => '',
-    'password' => '',
-    'client_id' => 'accessphone_relay_' . getmypid()
+// Configuración del Bot Orquestador
+$bot_config = [
+    'base_url' => 'https://accesoswhatsapp.info',  // Dominio del Bot Orquestador
+    'admin_user' => '',
+    'admin_pass' => '',
+    'timeout' => 10
 ];
+
+// Intentar leer config del .env del bot si existe
+$env_path = '/opt/bot-multitarea/.env';
+if (file_exists($env_path)) {
+    $lines = file($env_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $env = [];
+    foreach ($lines as $line) {
+        if (strpos($line, '#') === 0) continue;
+        if (strpos($line, '=') === false) continue;
+        list($key, $val) = explode('=', $line, 2);
+        $env[trim($key)] = trim($val);
+    }
+    if (isset($env['DOMAIN'])) $bot_config['base_url'] = $env['DOMAIN'];
+    if (isset($env['ADMIN_USER'])) $bot_config['admin_user'] = $env['ADMIN_USER'];
+    if (isset($env['ADMIN_PASS'])) $bot_config['admin_pass'] = $env['ADMIN_PASS'];
+}
 
 // Headers CORS
 header('Access-Control-Allow-Origin: *');
@@ -38,196 +58,338 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode($raw, true) ?: [];
 }
 
-$action  = $_GET['action'] ?? $input['action'] ?? 'publish';
-$topic   = $_GET['topic']   ?? $input['topic']   ?? '';
-$payload = $_GET['payload'] ?? $input['payload'] ?? 'ON';
-$host    = $_GET['host']    ?? $input['host']    ?? $input['dns'] ?? $mqtt_config['host'];
-$port    = (int)($_GET['port'] ?? $input['port'] ?? $input['puerto'] ?? $mqtt_config['port']);
-$username = $_GET['username'] ?? $input['username'] ?? $mqtt_config['username'];
-$password = $_GET['password'] ?? $input['password'] ?? $mqtt_config['password'];
+$action = $_GET['action'] ?? $input['action'] ?? 'activate';
+
+// Sesión de admin para las APIs del bot (cookie-based)
+$session_cookie = null;
 
 switch ($action) {
 
     // =========================================
-    // PUBLISH: Publicar mensaje MQTT
-    // =========================================
-    case 'publish':
-        if (empty($topic)) {
-            echo json_encode(['success' => false, 'error' => 'Topic MQTT requerido']);
-            break;
-        }
-
-        $result = mqtt_publish($host, $port, $topic, $payload, $username, $password);
-        echo json_encode($result);
-        break;
-
-    // =========================================
-    // STATUS: Verificar conectividad con broker
-    // =========================================
-    case 'status':
-        $result = mqtt_check_connection($host, $port);
-        echo json_encode($result);
-        break;
-
-    // =========================================
-    // ACTIVATE: Activar relay específico
-    // Simplifica la llamada desde el frontend
+    // ACTIVATE: Activar relay via Bot Orquestador
+    // Usa POST /api/admin/relay/activate
     // =========================================
     case 'activate':
-        $privada_id = (int)($_GET['privada_id'] ?? $input['privada_id'] ?? 0);
-        $relay_id   = (int)($_GET['relay_id']   ?? $input['relay_id']   ?? 0);
-        $dns        = $_GET['dns']    ?? $input['dns']    ?? '';
-        $alias      = $_GET['alias']  ?? $input['alias']  ?? "relay_{$relay_id}";
-        $duration   = (int)($_GET['duration'] ?? $input['duration'] ?? 3);
+        $relay_id    = (int)($_GET['relay_id']    ?? $input['relay_id']    ?? 0);
+        $relay_action = $_GET['relay_action'] ?? $input['relay_action'] ?? 'PULSE';
+        $duration_ms  = (int)($_GET['duration_ms'] ?? $input['duration_ms'] ?? 500);
 
-        if (empty($dns)) {
-            echo json_encode(['success' => false, 'error' => 'DNS/host del relay requerido']);
+        if ($relay_id <= 0) {
+            echo json_encode(['success' => false, 'error' => 'relay_id requerido']);
             break;
         }
 
-        // Construir topic basado en la estructura: accesos/privada/{id}/relay/{n}
-        $mqtt_topic = "accesos/privada/{$privada_id}/relay/{$relay_id}";
-        $mqtt_payload = json_encode([
-            'action'   => 'open',
-            'relay'    => $relay_id,
-            'alias'    => $alias,
-            'duration' => $duration,
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
+        // Validar acción permitida
+        $valid_actions = ['PULSE', 'ON', 'OFF', 'TOGGLE', 'PULSE_LONG'];
+        $relay_action = strtoupper($relay_action);
+        if (!in_array($relay_action, $valid_actions)) {
+            echo json_encode(['success' => false, 'error' => "Acción no válida: {$relay_action}"]);
+            break;
+        }
 
-        // El DNS de la privada se usa como host del broker MQTT
-        // Si el DNS tiene formato de dominio/IP, usarlo directamente
-        // Si no, usar el broker por defecto
-        $mqtt_host = $dns;
-        $mqtt_port = $port ?: 1883;
+        // Autenticar con el Bot Orquestador
+        $session = bot_login($bot_config);
+        if (!$session) {
+            // Fallback: intentar MQTT directo si el bot no está disponible
+            $result = fallback_mqtt_activate($input);
+            echo json_encode($result);
+            break;
+        }
 
-        $result = mqtt_publish($mqtt_host, $mqtt_port, $mqtt_topic, $mqtt_payload, $username, $password);
-        $result['topic'] = $mqtt_topic;
-        $result['relay_alias'] = $alias;
+        // Llamar API del Bot Orquestador
+        $api_data = [
+            'relay_id'    => $relay_id,
+            'action'      => $relay_action,
+            'duration_ms' => $duration_ms
+        ];
 
-        // Registrar activación en log
-        log_relay_activation($privada_id, $relay_id, $alias, $result['success']);
+        $result = bot_api_call(
+            $bot_config['base_url'] . '/api/admin/relay/activate',
+            'POST',
+            $api_data,
+            $session
+        );
 
-        echo json_encode($result);
+        if ($result !== null && isset($result['ok']) && $result['ok']) {
+            echo json_encode([
+                'success'      => true,
+                'relay'        => $result['relay'] ?? '',
+                'device'       => $result['device'] ?? '',
+                'relay_number' => $result['relay_number'] ?? 0,
+                'action'       => $result['action'] ?? $relay_action,
+                'topic'        => $result['topic'] ?? '',
+                'message'      => "{$relay_action} enviado a " . ($result['relay'] ?? "relay {$relay_id}"),
+                'timestamp'    => date('Y-m-d H:i:s')
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error'   => $result['error'] ?? 'Error activando relay via Bot Orquestador'
+            ]);
+        }
+
+        // Log local
+        log_relay_activation($relay_id, $relay_action, $result['ok'] ?? false);
+        break;
+
+    // =========================================
+    // STATUS: Estado de todos los relays
+    // Usa GET /api/admin/relay/status
+    // =========================================
+    case 'status':
+        $session = bot_login($bot_config);
+        if (!$session) {
+            echo json_encode(['success' => false, 'error' => 'No se pudo conectar al Bot Orquestador']);
+            break;
+        }
+
+        $result = bot_api_call(
+            $bot_config['base_url'] . '/api/admin/relay/status',
+            'GET',
+            null,
+            $session
+        );
+
+        if ($result !== null) {
+            echo json_encode([
+                'success'        => true,
+                'mqtt_connected' => $result['mqtt_connected'] ?? false,
+                'grupos'         => $result['grupos'] ?? []
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Error obteniendo estado de relays']);
+        }
+        break;
+
+    // =========================================
+    // RELAYS: Listar relays de una residencial
+    // =========================================
+    case 'relays':
+        $residencial_id = $_GET['residencial_id'] ?? $input['residencial_id'] ?? '';
+
+        $session = bot_login($bot_config);
+        if (!$session) {
+            echo json_encode(['success' => false, 'error' => 'No se pudo conectar al Bot Orquestador']);
+            break;
+        }
+
+        $result = bot_api_call(
+            $bot_config['base_url'] . '/api/admin/relay/status',
+            'GET',
+            null,
+            $session
+        );
+
+        if ($result !== null && isset($result['grupos'])) {
+            $relays = [];
+            foreach ($result['grupos'] as $grupo_name => $grupo_relays) {
+                foreach ($grupo_relays as $r) {
+                    // Si se filtró por residencial, solo incluir esa
+                    if ($residencial_id && isset($r['residencial_id']) && $r['residencial_id'] !== $residencial_id) {
+                        continue;
+                    }
+                    $relays[] = [
+                        'id'            => $r['id'],
+                        'mqtt_device'   => $r['mqtt_device'],
+                        'relay_number'  => $r['relay_number'],
+                        'funcion'       => $r['funcion_relay'] ?? '',
+                        'tipo'          => $r['tipo_funcion'] ?? '',
+                        'device_type'   => $r['device_type'] ?? 'esp32',
+                        'nombre'        => $r['relay_nombre'] ?? $r['funcion_relay'] ?? "Relay {$r['relay_number']}",
+                        'pulse_ms'      => $r['pulse_duration_ms'] ?? 500,
+                        'state'         => $r['state'] ?? 'unknown',
+                        'grupo'         => $grupo_name,
+                        'notas'         => $r['notas'] ?? ''
+                    ];
+                }
+            }
+
+            echo json_encode([
+                'success'        => true,
+                'mqtt_connected' => $result['mqtt_connected'] ?? false,
+                'relays'         => $relays
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Error obteniendo relays']);
+        }
+        break;
+
+    // =========================================
+    // HEALTH: Health check del Bot Orquestador
+    // =========================================
+    case 'health':
+        $result = bot_api_call($bot_config['base_url'] . '/health', 'GET');
+
+        if ($result !== null) {
+            echo json_encode([
+                'success'      => true,
+                'bot_status'   => $result['status'] ?? 'unknown',
+                'mqtt_status'  => $result['relay']['status'] ?? 'unknown',
+                'bot_url'      => $bot_config['base_url']
+            ]);
+        } else {
+            echo json_encode([
+                'success'    => false,
+                'error'      => 'Bot Orquestador no accesible',
+                'bot_url'    => $bot_config['base_url']
+            ]);
+        }
         break;
 
     default:
         echo json_encode([
             'success' => false,
             'error'   => 'Acción no válida',
-            'actions' => ['publish', 'status', 'activate']
+            'actions' => ['activate', 'status', 'relays', 'health']
         ]);
         break;
 }
 
 // =========================================
-// MQTT Functions (usando sockets TCP raw)
-// Implementación mínima del protocolo MQTT 3.1.1
+// Bot Orquestador HTTP Client
 // =========================================
 
-function mqtt_publish($host, $port, $topic, $payload, $username = '', $password = '') {
+function bot_login($config) {
+    if (empty($config['admin_user']) || empty($config['admin_pass'])) {
+        return null;
+    }
+
+    $cookie_file = sys_get_temp_dir() . '/accessphone_bot_session_' . md5($config['base_url']);
+
+    // Si ya tenemos cookie reciente (< 30 min), reusar
+    if (file_exists($cookie_file) && (time() - filemtime($cookie_file)) < 1800) {
+        return $cookie_file;
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL            => $config['base_url'] . '/admin/login',
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'username' => $config['admin_user'],
+            'password' => $config['admin_pass']
+        ]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_COOKIEJAR      => $cookie_file,
+        CURLOPT_COOKIEFILE     => $cookie_file,
+        CURLOPT_TIMEOUT        => $config['timeout'],
+        CURLOPT_SSL_VERIFYPEER => false
+    ]);
+
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return ($code >= 200 && $code < 400) ? $cookie_file : null;
+}
+
+function bot_api_call($url, $method = 'GET', $data = null, $cookie_file = null) {
+    $ch = curl_init();
+
+    $opts = [
+        CURLOPT_URL            => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json']
+    ];
+
+    if ($cookie_file) {
+        $opts[CURLOPT_COOKIEFILE] = $cookie_file;
+    }
+
+    if ($method === 'POST' && $data !== null) {
+        $opts[CURLOPT_POST] = true;
+        $opts[CURLOPT_POSTFIELDS] = json_encode($data);
+    }
+
+    curl_setopt_array($ch, $opts);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code >= 200 && $code < 300 && $response) {
+        return json_decode($response, true);
+    }
+
+    return null;
+}
+
+// =========================================
+// Fallback: MQTT directo si el Bot no responde
+// Usa la implementación MQTT raw como respaldo
+// =========================================
+function fallback_mqtt_activate($input) {
+    $host    = $input['dns']    ?? $input['host']    ?? '50.62.182.131';
+    $port    = (int)($input['puerto'] ?? $input['port'] ?? 1883);
+    $topic   = $input['topic']  ?? '';
+    $payload = $input['payload'] ?? 'PULSE';
+
+    if (empty($topic)) {
+        // Construir topic genérico si no se proporcionó
+        $device = $input['mqtt_device'] ?? '';
+        $relay  = $input['relay_number'] ?? 0;
+        if ($device) {
+            $topic = "home/relays/{$device}/{$relay}/set";
+        } else {
+            return ['success' => false, 'error' => 'No se pudo conectar al Bot Orquestador y no hay topic MQTT configurado'];
+        }
+    }
+
+    return mqtt_publish_raw($host, $port, $topic, $payload);
+}
+
+function mqtt_publish_raw($host, $port, $topic, $payload) {
     $client_id = 'accesphone_' . substr(md5(uniqid()), 0, 8);
 
-    // Abrir conexión TCP
     $socket = @fsockopen($host, $port, $errno, $errstr, 5);
     if (!$socket) {
         return [
             'success' => false,
-            'error'   => "No se pudo conectar al broker MQTT ({$host}:{$port}): {$errstr}",
-            'errno'   => $errno
+            'error'   => "Fallback MQTT: No se pudo conectar a {$host}:{$port}: {$errstr}",
+            'mode'    => 'fallback_mqtt'
         ];
     }
 
     stream_set_timeout($socket, 5);
 
-    // 1. Enviar CONNECT
-    $connect_packet = mqtt_build_connect($client_id, $username, $password);
-    fwrite($socket, $connect_packet);
+    // CONNECT
+    $var_header = chr(0x00) . chr(0x04) . 'MQTT' . chr(0x04) . chr(0x02) . chr(0x00) . chr(0x3C);
+    $connect_payload = mqtt_encode_str($client_id);
+    $connect_packet = $var_header . $connect_payload;
+    fwrite($socket, chr(0x10) . mqtt_encode_remaining(strlen($connect_packet)) . $connect_packet);
 
-    // 2. Leer CONNACK
     $response = fread($socket, 4);
-    if (strlen($response) < 4 || ord($response[0]) !== 0x20) {
+    if (strlen($response) < 4 || ord($response[0]) !== 0x20 || ord($response[3]) !== 0) {
         fclose($socket);
-        return [
-            'success' => false,
-            'error'   => 'Respuesta CONNACK inválida del broker'
-        ];
+        return ['success' => false, 'error' => 'Fallback MQTT: CONNACK falló', 'mode' => 'fallback_mqtt'];
     }
 
-    $return_code = ord($response[3]);
-    if ($return_code !== 0) {
-        fclose($socket);
-        $errors = [
-            1 => 'Protocolo no aceptado',
-            2 => 'Client ID rechazado',
-            3 => 'Servidor no disponible',
-            4 => 'Usuario/contraseña incorrectos',
-            5 => 'No autorizado'
-        ];
-        return [
-            'success' => false,
-            'error'   => 'Conexión rechazada: ' . ($errors[$return_code] ?? "código {$return_code}")
-        ];
-    }
+    // PUBLISH
+    $pub_header = mqtt_encode_str($topic);
+    $pub_packet = $pub_header . $payload;
+    fwrite($socket, chr(0x30) . mqtt_encode_remaining(strlen($pub_packet)) . $pub_packet);
 
-    // 3. Enviar PUBLISH (QoS 0)
-    $publish_packet = mqtt_build_publish($topic, $payload);
-    fwrite($socket, $publish_packet);
-
-    // 4. Enviar DISCONNECT
+    // DISCONNECT
     fwrite($socket, chr(0xE0) . chr(0x00));
     fclose($socket);
 
     return [
         'success'   => true,
-        'message'   => "Mensaje publicado en {$topic}",
-        'host'      => $host,
-        'port'      => $port,
+        'message'   => "Fallback MQTT: Publicado en {$topic}",
         'topic'     => $topic,
-        'payload'   => $payload,
+        'mode'      => 'fallback_mqtt',
         'timestamp' => date('Y-m-d H:i:s')
     ];
 }
 
-function mqtt_build_connect($client_id, $username = '', $password = '') {
-    // Variable header
-    $var_header = '';
-    // Protocol Name "MQTT"
-    $var_header .= chr(0x00) . chr(0x04) . 'MQTT';
-    // Protocol Level (4 = MQTT 3.1.1)
-    $var_header .= chr(0x04);
-
-    // Connect Flags
-    $flags = 0x02; // Clean Session
-    if (!empty($username)) $flags |= 0x80; // Username flag
-    if (!empty($password)) $flags |= 0x40; // Password flag
-    $var_header .= chr($flags);
-
-    // Keep Alive (60 seconds)
-    $var_header .= chr(0x00) . chr(0x3C);
-
-    // Payload
-    $payload = mqtt_encode_string($client_id);
-    if (!empty($username)) $payload .= mqtt_encode_string($username);
-    if (!empty($password)) $payload .= mqtt_encode_string($password);
-
-    $packet = $var_header . $payload;
-    return chr(0x10) . mqtt_encode_remaining_length(strlen($packet)) . $packet;
-}
-
-function mqtt_build_publish($topic, $payload, $qos = 0) {
-    $var_header = mqtt_encode_string($topic);
-    $packet = $var_header . $payload;
-    $cmd = 0x30 | ($qos << 1);
-    return chr($cmd) . mqtt_encode_remaining_length(strlen($packet)) . $packet;
-}
-
-function mqtt_encode_string($str) {
+function mqtt_encode_str($str) {
     $len = strlen($str);
     return chr(($len >> 8) & 0xFF) . chr($len & 0xFF) . $str;
 }
 
-function mqtt_encode_remaining_length($length) {
+function mqtt_encode_remaining($length) {
     $encoded = '';
     do {
         $digit = $length % 128;
@@ -238,32 +400,13 @@ function mqtt_encode_remaining_length($length) {
     return $encoded;
 }
 
-function mqtt_check_connection($host, $port) {
-    $socket = @fsockopen($host, $port, $errno, $errstr, 3);
-    if (!$socket) {
-        return [
-            'success'   => false,
-            'connected' => false,
-            'error'     => "No se pudo conectar a {$host}:{$port}: {$errstr}"
-        ];
-    }
-    fclose($socket);
-    return [
-        'success'   => true,
-        'connected' => true,
-        'host'      => $host,
-        'port'      => $port,
-        'message'   => "Broker MQTT accesible en {$host}:{$port}"
-    ];
-}
-
-function log_relay_activation($privada_id, $relay_id, $alias, $success) {
+function log_relay_activation($relay_id, $action, $success) {
     $log_dir = __DIR__ . '/logs';
     if (!is_dir($log_dir)) {
         @mkdir($log_dir, 0755, true);
     }
     $log_file = $log_dir . '/relay_activations.log';
-    $entry = date('Y-m-d H:i:s') . " | Privada: {$privada_id} | Relay: {$relay_id} | Alias: {$alias} | " .
+    $entry = date('Y-m-d H:i:s') . " | RelayID: {$relay_id} | Action: {$action} | " .
              ($success ? 'OK' : 'FAIL') . "\n";
     @file_put_contents($log_file, $entry, FILE_APPEND | LOCK_EX);
 }
