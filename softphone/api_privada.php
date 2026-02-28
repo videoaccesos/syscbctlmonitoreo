@@ -10,6 +10,34 @@
  *   ?action=list_privadas                   -> Lista privadas activas
  */
 
+// Capturar errores fatales y devolver JSON válido
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error'   => "PHP Error: {$errstr}",
+        'file'    => basename($errfile),
+        'line'    => $errline
+    ]);
+    exit;
+});
+
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        // Limpiar output previo si hay alguno
+        if (ob_get_level()) ob_end_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error'   => "Fatal: {$error['message']}",
+            'file'    => basename($error['file']),
+            'line'    => $error['line']
+        ]);
+    }
+});
+
 // Configuración de base de datos
 $db_config = [
     'host'    => 'localhost',
@@ -20,10 +48,14 @@ $db_config = [
 ];
 
 // Intentar leer config de CodeIgniter si existe
+// Definir BASEPATH para evitar que el security check de CI haga exit
+if (!defined('BASEPATH')) {
+    define('BASEPATH', __DIR__ . '/../system/');
+}
 $ci_config_path = __DIR__ . '/../application/config/database.php';
 if (file_exists($ci_config_path)) {
     $db = [];
-    include($ci_config_path);
+    @include($ci_config_path);
     if (isset($db['default'])) {
         $db_config['host']   = $db['default']['hostname'] ?? $db_config['host'];
         $db_config['user']   = $db['default']['username'] ?? $db_config['user'];

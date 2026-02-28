@@ -16,6 +16,33 @@
  *   GET  ?action=health     -> Health check del Bot Orquestador
  */
 
+// Capturar errores fatales y devolver JSON válido
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error'   => "PHP Error: {$errstr}",
+        'file'    => basename($errfile),
+        'line'    => $errline
+    ]);
+    exit;
+});
+
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (ob_get_level()) ob_end_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error'   => "Fatal: {$error['message']}",
+            'file'    => basename($error['file']),
+            'line'    => $error['line']
+        ]);
+    }
+});
+
 // Configuración del Bot Orquestador
 $bot_config = [
     'base_url' => 'https://accesoswhatsapp.info',  // Dominio del Bot Orquestador
