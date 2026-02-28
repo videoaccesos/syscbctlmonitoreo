@@ -2409,6 +2409,7 @@ myWindow.close();
 
 <!-- ============================================ -->
 <!-- ACCESS PHONE - SOFTPHONE WIDGET INTEGRADO    -->
+<!-- Incluye: Camaras, Controles Audio, Relays    -->
 <!-- ============================================ -->
 <style>
 #softphoneFrame {
@@ -2420,46 +2421,107 @@ myWindow.close();
     border: none;
     z-index: 9998;
     background: transparent;
-    transition: width 0.4s ease;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
 }
 #softphoneFrame.expanded {
-    width: 480px;
+    width: 420px;
     pointer-events: auto;
 }
 #softphoneFrame.incoming {
-    width: 480px;
+    width: 420px;
     pointer-events: auto;
 }
-/* Clickable overlay for the softphone tab when collapsed */
-#softphoneOverlay {
+/* Tab flotante visible - siempre visible cuando colapsado */
+#softphoneTab {
     position: fixed;
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 60px;
-    height: 140px;
+    width: 52px;
+    height: 130px;
     z-index: 9999;
     cursor: pointer;
+    background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%);
+    border-radius: 14px 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: -4px 0 20px rgba(255, 107, 53, 0.3);
+    transition: all 0.3s ease;
+    border: none;
+    outline: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
-#softphoneOverlay.hidden {
-    display: none;
+#softphoneTab:hover {
+    width: 58px;
+    box-shadow: -6px 0 25px rgba(255, 107, 53, 0.45);
+}
+#softphoneTab.hidden { display: none; }
+#softphoneTab.ringing {
+    animation: softphoneTabPulse 0.8s ease-in-out infinite;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: -4px 0 20px rgba(239, 68, 68, 0.5);
+}
+@keyframes softphoneTabPulse {
+    0%, 100% { transform: translateY(-50%) scale(1); }
+    50% { transform: translateY(-50%) scale(1.06); }
+}
+#softphoneTab svg { width: 28px; height: 28px; fill: white; }
+.sp-tab-label {
+    color: white;
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
+    letter-spacing: 2px;
+}
+.sp-tab-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid rgba(255,255,255,0.6);
+}
+.sp-tab-status.connected {
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16,185,129,0.7);
+    border-color: #10b981;
 }
 </style>
-<iframe id="softphoneFrame" src="<?= base_url() ?>softphone/index.html" allowtransparency="true"></iframe>
-<div id="softphoneOverlay" onclick="expandSoftphone()"></div>
+<!-- Tab visible del softphone (fuera del iframe) -->
+<div id="softphoneTab" onclick="expandSoftphone()">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+    <span class="sp-tab-status" id="softphoneTabStatus"></span>
+    <span class="sp-tab-label">ACCESS</span>
+</div>
+<!-- Softphone iframe con permisos de microfono y camara -->
+<iframe id="softphoneFrame"
+    src="<?= base_url() ?>softphone/index.html"
+    allow="microphone; camera; autoplay; display-capture"
+    allowtransparency="true"></iframe>
 <script type="text/javascript">
 (function() {
     var frame = document.getElementById('softphoneFrame');
-    var overlay = document.getElementById('softphoneOverlay');
+    var tab = document.getElementById('softphoneTab');
+    var tabStatus = document.getElementById('softphoneTabStatus');
     var expanded = false;
 
     window.expandSoftphone = function() {
         frame.classList.add('expanded');
         frame.style.pointerEvents = 'auto';
-        overlay.classList.add('hidden');
+        tab.classList.add('hidden');
         expanded = true;
         try { frame.contentWindow.postMessage({ type: 'parent', action: 'open' }, '*'); } catch(e) {}
+    };
+
+    window.collapseSoftphone = function() {
+        frame.classList.remove('expanded', 'incoming');
+        frame.style.pointerEvents = 'none';
+        tab.classList.remove('hidden');
+        expanded = false;
     };
 
     window.addEventListener('message', function(e) {
@@ -2469,38 +2531,30 @@ myWindow.close();
             case 'open':
                 frame.classList.add('expanded');
                 frame.style.pointerEvents = 'auto';
-                overlay.classList.add('hidden');
+                tab.classList.add('hidden');
                 expanded = true;
                 break;
             case 'close':
-                frame.classList.remove('expanded');
-                frame.style.pointerEvents = 'none';
-                overlay.classList.remove('hidden');
-                expanded = false;
+                collapseSoftphone();
                 break;
             case 'incoming':
                 frame.classList.add('expanded', 'incoming');
                 frame.style.pointerEvents = 'auto';
-                overlay.classList.add('hidden');
+                tab.classList.add('hidden');
+                tab.classList.add('ringing');
                 expanded = true;
                 break;
             case 'callEnded':
                 frame.classList.remove('incoming');
+                tab.classList.remove('ringing');
+                break;
+            case 'registered':
+                tabStatus.classList.add('connected');
+                break;
+            case 'unregistered':
+                tabStatus.classList.remove('connected');
                 break;
         }
-    });
-
-    frame.addEventListener('load', function() {
-        try {
-            frame.contentWindow.addEventListener('click', function() {
-                if (!expanded) {
-                    frame.classList.add('expanded');
-                    frame.style.pointerEvents = 'auto';
-                    overlay.classList.add('hidden');
-                    expanded = true;
-                }
-            });
-        } catch(e) {}
     });
 })();
 </script>

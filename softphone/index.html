@@ -1325,8 +1325,12 @@
                 updateStatus('Conectado', true);
                 document.getElementById('extensionBadge').textContent = 'Ext ' + config.extension;
                 showToast('Registrado como Ext ' + config.extension, 'success');
+                if (window.parent !== window) window.parent.postMessage({ type: 'softphone', action: 'registered' }, '*');
             });
-            ua.on('unregistered', function() { updateStatus('Desconectado', false); });
+            ua.on('unregistered', function() {
+                updateStatus('Desconectado', false);
+                if (window.parent !== window) window.parent.postMessage({ type: 'softphone', action: 'unregistered' }, '*');
+            });
             ua.on('registrationFailed', function() {
                 updateStatus('Error registro', false);
                 showToast('Error de registro SIP', 'error');
