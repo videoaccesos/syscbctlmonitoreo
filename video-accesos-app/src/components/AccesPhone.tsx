@@ -799,8 +799,8 @@ export default function AccesPhone({ onIncomingCall, onCallAnswered, onCallEnded
       {/* Hidden audio elements */}
       <audio ref={remoteAudioRef} autoPlay />
       <audio ref={ringtoneRef} loop preload="auto">
-        <source src="/syscbctlmonitoreo/softphone/ringtone.mp3" type="audio/mpeg" />
-        <source src="/syscbctlmonitoreo/softphone/ringtone.ogg" type="audio/ogg" />
+        <source src="/ringtone.mp3" type="audio/mpeg" />
+        <source src="/ringtone.ogg" type="audio/ogg" />
       </audio>
 
       {/* ====== FAB BUTTON (bottom-right) ====== */}
