@@ -1900,6 +1900,97 @@ requestMethod.call(element);
 
   }
 
+  // ============================================
+  // BOT ORQUESTADOR - Activación de Relays MQTT
+  // Integración con el Bot Orquestador para
+  // activación de relays via MQTT
+  // ============================================
+
+  // Cargar relays del Bot Orquestador
+  function fnLoadBotRelays() {
+      $.ajax({
+          url: 'softphone/api_privada.php?action=get_bot_relays',
+          type: 'GET',
+          dataType: 'json',
+          success: function(data) {
+              if (data.success && data.relays && data.relays.length > 0) {
+                  fnRenderBotRelays(data.relays);
+              }
+          },
+          error: function() {
+              // Falla silenciosa - Bot relays son opcionales
+          }
+      });
+  }
+
+  // Renderizar botones de relays del Bot Orquestador
+  function fnRenderBotRelays(relays) {
+      var contenedor = document.getElementById("divContenedorCampos");
+      if (!contenedor) return;
+
+      // Agregar separador
+      var separador = document.createElement("div");
+      separador.id = "divBotRelaysSeparator";
+      separador.innerHTML = '<hr style="margin:8px 0;"><h5 style="margin:5px 0;color:#0066cc;">Relays Bot Orquestador (MQTT)</h5>';
+      contenedor.appendChild(separador);
+
+      // Crear botones por cada relay
+      for (var i = 0; i < relays.length; i++) {
+          var relay = relays[i];
+          var strTipo = relay.tipo === 'dingtian' ? '[DT]' : '[ESP]';
+          var strClase = relay.tipo === 'dingtian' ? 'btn btn-warning' : 'btn btn-info';
+          var NvoCampo = document.createElement("div");
+          NvoCampo.id = "divBotRelay_" + relay.id;
+          NvoCampo.innerHTML =
+              '<table><tr><td>' +
+              '<input type="button" class="' + strClase + '" style="width:380px;height:30px;margin-bottom:5px;" ' +
+              'value="' + strTipo + ' ' + relay.nombre + ' (' + relay.grupo + ')" ' +
+              'onclick="fnActivarRelayBot(' + relay.id + ',\'PULSE\',' + relay.pulse_ms + ')">' +
+              '</td></tr></table>';
+          contenedor.appendChild(NvoCampo);
+      }
+  }
+
+  // Activar relay via Bot Orquestador (MQTT)
+  function fnActivarRelayBot(relayId, action, durationMs) {
+      $("#divMensajes").html('<div class="alert alert-info">Activando relay via Bot Orquestador...</div>');
+      $.ajax({
+          url: 'softphone/mqtt_relay.php?action=activate',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+              relay_id: relayId,
+              relay_action: action,
+              duration_ms: durationMs || 500
+          }),
+          dataType: 'json',
+          success: function(data) {
+              if (data.success) {
+                  $("#divMensajes").html('<div class="alert alert-success"><a class="close" data-dismiss="alert">&times;</a>Relay activado: ' + (data.message || 'OK') + '</div>');
+              } else {
+                  $("#divMensajes").html('<div class="alert alert-error"><a class="close" data-dismiss="alert">&times;</a>Error: ' + (data.error || 'Desconocido') + '</div>');
+              }
+          },
+          error: function() {
+              $("#divMensajes").html('<div class="alert alert-error"><a class="close" data-dismiss="alert">&times;</a>Error de conexi&oacute;n con Bot Orquestador</div>');
+          }
+      });
+  }
+
+  // Verificar salud del Bot Orquestador
+  function fnCheckBotHealth() {
+      $.ajax({
+          url: 'softphone/mqtt_relay.php?action=health',
+          type: 'GET',
+          dataType: 'json',
+          success: function(data) {
+              if (data.success) {
+                  console.log('Bot Orquestador: ' + data.bot_status + ', MQTT: ' + data.mqtt_status);
+              }
+          }
+      });
+  }
+
   $( document ).ready(function() {
 setInterval(function(){
 paginacionPrivadasMonitoristas();
@@ -2014,7 +2105,7 @@ paginacionTotalLlamadas();
                                  },
                         beforeSend: function () {},
                         success: function(data){
-                          //Si el resultado es undefined Div con los relays para su activación 
+                          //Si el resultado es undefined Div con los relays para su activación
                           if(data.resultado=='1'){
                              //Borrar contenido del div al cambiar de DNS
                               document.getElementById("divContenedorCampos").innerHTML="";
@@ -2024,6 +2115,8 @@ paginacionTotalLlamadas();
                               fnAgregarRelaysDNS(data.row.detalles_renglones,data.row.detalles_relays, data.row.detalles_conceptos,data.row.detalles_estados, data.row.detalles_tiempos);
                            }
                            $("#divMensajes").html(data.mensajes);
+                           // Cargar también los relays del Bot Orquestador (MQTT)
+                           fnLoadBotRelays();
                         },
                         "async": true,
                  });
@@ -2031,8 +2124,10 @@ paginacionTotalLlamadas();
               }
               else
               {
-                 $('#divMensajes').html( '<div class="alert alert-error"><a class="close" data-dismiss="alert">×</a>Es necesario seleccionar un DNS!</div>');
-
+                 // Sin DNS configurado, pero intentar cargar relays del Bot Orquestador
+                 document.getElementById("divContenedorCampos").innerHTML="";
+                 $("#divActivacionRelays").css({'visibility': 'visible'});
+                 fnLoadBotRelays();
               }
              
         }
