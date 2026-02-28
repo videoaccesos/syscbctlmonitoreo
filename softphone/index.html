@@ -170,6 +170,32 @@
         .answer-btn { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
         .reject-btn { background: #e5e7eb; color: #64748b; }
 
+        /* RELAY PANEL */
+        .relay-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s ease; background: #0f172a; }
+        .relay-panel.active { max-height: 200px; padding: 8px; }
+        .relay-panel-title { color: #94a3b8; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+        .relay-buttons { display: flex; flex-direction: column; gap: 4px; }
+        .relay-btn { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: all 0.2s; color: white; }
+        .relay-btn:hover { background: rgba(255,107,53,0.2); border-color: #FF6B35; }
+        .relay-btn.activating { background: rgba(16,185,129,0.3); border-color: #10b981; animation: relayPulse 0.5s ease; }
+        .relay-btn.error { background: rgba(239,68,68,0.3); border-color: #ef4444; }
+        @keyframes relayPulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        .relay-btn-info { display: flex; flex-direction: column; }
+        .relay-btn-name { font-size: 11px; font-weight: 600; }
+        .relay-btn-dns { font-size: 9px; color: #94a3b8; }
+        .relay-btn-icon { width: 28px; height: 28px; background: linear-gradient(135deg, #FF6B35, #FFA500); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .relay-toggle-btn { width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 14px; transition: all 0.2s ease; background: linear-gradient(135deg, #1e1b4b 0%, #2B2D6E 100%); }
+        .relay-toggle-btn.active { background: linear-gradient(135deg, #FF6B35 0%, #FFA500 100%); }
+
+        /* PRIVADA SELECTOR */
+        .privada-bar { background: linear-gradient(to right, #0f172a, #1e293b); padding: 6px 10px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .privada-bar label { color: #94a3b8; font-size: 9px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
+        .privada-select { flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 4px 6px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+        .privada-select option { background: #1e293b; color: white; }
+        .privada-info { display: none; background: linear-gradient(to right, #0f172a, #1e293b); padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .privada-info.active { display: block; }
+        .privada-info-text { color: #10b981; font-size: 10px; font-weight: 500; }
+
         @media (max-width: 480px) { .phone-wrapper { right: -100%; top: auto; bottom: 0; transform: none; width: 100%; } .phone-wrapper.open { right: 0; } .phone-tab { display: none; } .phone-container { width: 100%; border-radius: 16px 16px 0 0; } }
     </style>
 </head>
@@ -210,6 +236,23 @@
                 </div>
                 <div class="video-selector" id="videoSelector"></div>
             </div>
+            <!-- PRIVADA SELECTOR -->
+            <div class="privada-bar">
+                <label>Privada:</label>
+                <select class="privada-select" id="privadaSelect" onchange="onPrivadaSelected(this.value)">
+                    <option value="">-- Seleccionar --</option>
+                </select>
+            </div>
+            <div class="privada-info" id="privadaInfo">
+                <span class="privada-info-text" id="privadaInfoText"></span>
+            </div>
+            <!-- RELAY PANEL -->
+            <div class="relay-panel" id="relayPanel">
+                <div class="relay-panel-title">🔓 Relays / Apertura</div>
+                <div class="relay-buttons" id="relayButtons">
+                    <div style="color:#64748b;font-size:11px;text-align:center;padding:10px;">Seleccione una privada</div>
+                </div>
+            </div>
             <!-- DISPLAY -->
             <div class="phone-display"><div class="phone-number" id="phoneNumber"></div><div class="call-info" id="callInfo"><div class="call-timer" id="callTimer">00:00</div><div class="call-status" id="callStatus"></div></div></div>
             <!-- AUDIO -->
@@ -245,6 +288,7 @@
                     <button class="action-btn delete-btn" onclick="deleteDigit()">⌫</button>
                     <button class="audio-toggle-btn" id="audioToggleBtn" onclick="toggleAudioControls()" title="Audio">🎙</button>
                     <button class="video-toggle-btn" id="videoToggleBtn" onclick="toggleVideoPanel()" title="Video (V)">📹</button>
+                    <button class="relay-toggle-btn" id="relayToggleBtn" onclick="toggleRelayPanel()" title="Relays (R)">🔓</button>
                     <button class="action-btn call-btn" id="callBtn" onclick="makeCall()">📞</button>
                     <button class="action-btn hangup-btn" id="hangupBtn" onclick="hangupCall()">📞</button>
                 </div>
@@ -276,6 +320,13 @@
                 <div class="setting-group"><label>URL Proxy Cámaras</label><input type="text" id="cameraProxyUrl" placeholder="camera_proxy.php"></div>
                 <div class="setting-group"><label>Refresh (ms)</label><input type="number" id="videoRefreshRate" placeholder="500" min="100" max="2000"></div>
                 <div class="setting-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoShowVideo" checked style="width:auto;">Video automático en llamadas</label></div>
+                <hr class="settings-divider">
+                <div class="settings-section-title">🔓 MQTT / Relays</div>
+                <div class="setting-group"><label>URL API Privada</label><input type="text" id="privadaApiUrl" placeholder="api_privada.php"></div>
+                <div class="setting-group"><label>URL MQTT Relay</label><input type="text" id="mqttRelayUrl" placeholder="mqtt_relay.php"></div>
+                <div class="setting-group"><label>Broker MQTT (host)</label><input type="text" id="mqttBrokerHost" placeholder="localhost"></div>
+                <div class="setting-group"><label>Puerto MQTT</label><input type="number" id="mqttBrokerPort" placeholder="1883"></div>
+                <div class="setting-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoLookupCaller" checked style="width:auto;">Identificar privada por CallerID</label></div>
                 <button class="save-settings-btn" onclick="saveSettings()">Guardar y Conectar</button>
             </div>
         </div>
@@ -575,9 +626,15 @@
             videoSettings.proxyUrl=document.getElementById('cameraProxyUrl').value||'camera_proxy.php';
             videoSettings.refreshRate=parseInt(document.getElementById('videoRefreshRate').value)||500;
             videoSettings.autoShowOnCall=document.getElementById('autoShowVideo').checked;
+            privadaSettings.apiUrl=document.getElementById('privadaApiUrl').value||'api_privada.php';
+            privadaSettings.mqttRelayUrl=document.getElementById('mqttRelayUrl').value||'mqtt_relay.php';
+            privadaSettings.mqttBrokerHost=document.getElementById('mqttBrokerHost').value||'localhost';
+            privadaSettings.mqttBrokerPort=parseInt(document.getElementById('mqttBrokerPort').value)||1883;
+            privadaSettings.autoLookupCaller=document.getElementById('autoLookupCaller').checked;
             localStorage.setItem('webphoneConfig',JSON.stringify(config));
             localStorage.setItem('videoSettings',JSON.stringify(videoSettings));
-            closeSettings(); connectToServer();
+            localStorage.setItem('privadaSettings',JSON.stringify(privadaSettings));
+            closeSettings(); connectToServer(); loadPrivadas();
         }
 
         function connectToServer() {
@@ -628,7 +685,17 @@
             document.getElementById('callerName').textContent=name||'';document.getElementById('callerName').style.display=name?'block':'none';
             document.getElementById('incomingModal').style.display='block';
             document.getElementById('phoneWrapper').classList.add('open','ringing');phoneOpen=true;
-            if(videoSettings.autoShowOnCall){const ch=await getCameraForExtension(num);showVideoPanel(ch);}
+
+            // Buscar privada por CallerID (campo telefono de tabla privadas)
+            const privadaResult = await lookupCallerPrivada(num);
+            if (privadaResult) {
+                // Actualizar modal con info de privada
+                document.getElementById('callerName').textContent = `${privadaResult.nombre} - ${privadaResult.contacto || ''}`;
+                document.getElementById('callerName').style.display = 'block';
+            } else if(videoSettings.autoShowOnCall){
+                const ch=await getCameraForExtension(num);showVideoPanel(ch);
+            }
+
             try{document.getElementById('ringtone').volume=audioSettings.ringtoneVolume/100;document.getElementById('ringtone').play();}catch(e){}
             setupSessionEvents(session);
             session.on('failed',()=>{document.getElementById('incomingModal').style.display='none';document.getElementById('phoneWrapper').classList.remove('ringing');document.getElementById('ringtone').pause();addToCallHistory('missed',num);});
@@ -713,6 +780,411 @@
         function getContactName(n){const c=contacts.find(x=>x.number===n);return c?c.name:null;}
 
         // ==========================================
+        // PRIVADA & MQTT INTEGRATION
+        // ==========================================
+        let privadaSettings = {
+            apiUrl: 'api_privada.php',
+            mqttRelayUrl: 'mqtt_relay.php',
+            mqttBrokerHost: 'localhost',
+            mqttBrokerPort: 1883,
+            autoLookupCaller: true
+        };
+        let currentPrivada = null;
+        let privadaVideos = [];
+        let privadaRelays = [];
+
+        // --- Cargar lista de privadas ---
+        async function loadPrivadas() {
+            try {
+                const r = await fetch(`${privadaSettings.apiUrl}?action=list_privadas`);
+                const d = await r.json();
+                if (d.success) {
+                    const sel = document.getElementById('privadaSelect');
+                    // Mantener opción por defecto
+                    sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+                    d.privadas.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.textContent = p.nombre;
+                        opt.dataset.telefono = p.telefono || '';
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch(e) {
+                console.log('Error cargando privadas:', e);
+            }
+        }
+
+        // --- Seleccionar privada ---
+        async function onPrivadaSelected(privadaId) {
+            if (!privadaId) {
+                clearPrivadaData();
+                return;
+            }
+
+            // Cargar videos y relays en paralelo
+            const [videosRes, relaysRes] = await Promise.all([
+                fetch(`${privadaSettings.apiUrl}?action=get_videos&privada_id=${privadaId}`).then(r=>r.json()).catch(()=>({success:false})),
+                fetch(`${privadaSettings.apiUrl}?action=get_relays&privada_id=${privadaId}`).then(r=>r.json()).catch(()=>({success:false}))
+            ]);
+
+            currentPrivada = { id: parseInt(privadaId) };
+
+            // Procesar videos de la BD
+            if (videosRes.success && videosRes.videos.length > 0) {
+                privadaVideos = videosRes.videos;
+                loadPrivadaCameras(privadaVideos);
+                const info = document.getElementById('privadaInfo');
+                const infoText = document.getElementById('privadaInfoText');
+                infoText.textContent = `📹 ${privadaVideos.length} cámara(s) disponible(s)`;
+                info.classList.add('active');
+            } else {
+                privadaVideos = [];
+                document.getElementById('privadaInfo').classList.remove('active');
+            }
+
+            // Procesar relays/DNS
+            if (relaysRes.success && relaysRes.relays.length > 0) {
+                privadaRelays = relaysRes.relays;
+                renderRelayButtons(privadaRelays);
+            } else {
+                privadaRelays = [];
+                renderRelayButtons([]);
+            }
+        }
+
+        function clearPrivadaData() {
+            currentPrivada = null;
+            privadaVideos = [];
+            privadaRelays = [];
+            document.getElementById('privadaInfo').classList.remove('active');
+            renderRelayButtons([]);
+            // Restaurar cámaras del proxy
+            loadCameraList();
+        }
+
+        // --- Cargar cámaras desde video_1/2/3 de la privada ---
+        function loadPrivadaCameras(videos) {
+            // Reemplazar la lista de cámaras con las de la BD
+            availableCameras = videos.map(v => ({
+                channel: 'privada_video_' + v.id,
+                name: v.alias,
+                url: v.url,
+                isPrivadaVideo: true
+            }));
+
+            if (availableCameras.length > 0) {
+                currentChannel = availableCameras[0].channel;
+                renderCameraSelector();
+
+                // Si el panel de video está activo, cambiar al feed de la privada
+                if (document.getElementById('videoPanel').classList.contains('active')) {
+                    startPrivadaVideoRefresh();
+                }
+            }
+        }
+
+        // --- Refresh de video MJPEG desde URLs de privada ---
+        function startPrivadaVideoRefresh() {
+            stopVideoRefresh();
+            consecutiveErrors = 0;
+
+            const cam = availableCameras.find(c => c.channel === currentChannel);
+            if (!cam) return;
+
+            document.getElementById('videoChannelName').textContent = cam.name;
+            document.getElementById('videoError').classList.remove('show');
+            document.getElementById('videoLive').style.display = 'inline';
+
+            if (cam.isPrivadaVideo) {
+                // Las URLs de video de la BD pueden ser:
+                // 1. MJPEG stream directo (video_1 contiene URL completa)
+                // 2. URL de snapshot que se refresca
+                refreshPrivadaSnapshot(cam.url);
+                videoRefreshInterval = setInterval(() => {
+                    if (!videoPaused && !switchingCamera) {
+                        refreshPrivadaSnapshot(cam.url);
+                    }
+                }, videoSettings.refreshRate);
+                document.getElementById('videoStatus').textContent = `${Math.round(1000/videoSettings.refreshRate)} FPS`;
+            } else {
+                startVideoRefresh();
+            }
+        }
+
+        function refreshPrivadaSnapshot(videoUrl) {
+            const img = document.getElementById('cameraSnapshot');
+            const ch = currentChannel;
+            // Agregar timestamp para evitar cache
+            const separator = videoUrl.includes('?') ? '&' : '?';
+            const src = `${videoUrl}${separator}t=${Date.now()}`;
+            const pre = new Image();
+            pre.onload = function() {
+                if (currentChannel === ch) {
+                    img.src = this.src;
+                    document.getElementById('videoError').classList.remove('show');
+                    img.style.opacity = '1';
+                    consecutiveErrors = 0;
+                }
+            };
+            pre.onerror = function() {
+                if (currentChannel !== ch) return;
+                consecutiveErrors++;
+                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                    document.getElementById('videoError').classList.add('show');
+                    img.style.opacity = '0.3';
+                    document.getElementById('videoStatus').textContent = 'ERROR';
+                    stopVideoRefresh();
+                    setTimeout(() => {
+                        if (document.getElementById('videoPanel').classList.contains('active') && !videoPaused) {
+                            consecutiveErrors = 0;
+                            startPrivadaVideoRefresh();
+                        }
+                    }, 3000);
+                }
+            };
+            pre.src = src;
+        }
+
+        // Override selectCamera para manejar cámaras de privada
+        const _originalSelectCamera = selectCamera;
+        selectCamera = function(ch) {
+            const cam = availableCameras.find(c => c.channel === ch);
+            if (!cam) return;
+
+            if (ch === currentChannel || switchingCamera) return;
+            switchingCamera = true;
+            consecutiveErrors = 0;
+            stopVideoRefresh();
+
+            const img = document.getElementById('cameraSnapshot');
+            const loading = document.getElementById('videoLoading');
+            const error = document.getElementById('videoError');
+            img.style.opacity = '0.3';
+            loading.classList.add('show');
+            error.classList.remove('show');
+            document.getElementById('videoStatus').textContent = 'CAMBIANDO...';
+            document.getElementById('videoLive').style.display = 'none';
+
+            currentChannel = ch;
+            document.getElementById('videoChannelName').textContent = cam.name;
+            renderCameraSelector();
+
+            if (cam.isPrivadaVideo) {
+                // Precargar primer frame desde URL de privada
+                const separator = cam.url.includes('?') ? '&' : '?';
+                const src = `${cam.url}${separator}t=${Date.now()}`;
+                const firstFrame = new Image();
+                const switchTimeout = setTimeout(() => { finishPrivadaCameraSwitch(false, cam); }, 3000);
+
+                firstFrame.onload = function() {
+                    clearTimeout(switchTimeout);
+                    img.src = this.src;
+                    finishPrivadaCameraSwitch(true, cam);
+                };
+                firstFrame.onerror = function() {
+                    clearTimeout(switchTimeout);
+                    finishPrivadaCameraSwitch(false, cam);
+                };
+                firstFrame.src = src;
+            } else {
+                // Usar el proxy original
+                const src = `${videoSettings.proxyUrl}?channel=${ch}&t=${Date.now()}`;
+                const firstFrame = new Image();
+                const switchTimeout = setTimeout(() => { finishCameraSwitch(false); }, 3000);
+
+                firstFrame.onload = function() {
+                    clearTimeout(switchTimeout);
+                    img.src = this.src;
+                    finishCameraSwitch(true);
+                };
+                firstFrame.onerror = function() {
+                    clearTimeout(switchTimeout);
+                    finishCameraSwitch(false);
+                };
+                firstFrame.src = src;
+            }
+        };
+
+        function finishPrivadaCameraSwitch(success, cam) {
+            const img = document.getElementById('cameraSnapshot');
+            const loading = document.getElementById('videoLoading');
+            const error = document.getElementById('videoError');
+
+            loading.classList.remove('show');
+            switchingCamera = false;
+            renderCameraSelector();
+
+            if (success) {
+                img.style.opacity = '1';
+                error.classList.remove('show');
+                consecutiveErrors = 0;
+            } else {
+                img.style.opacity = '0.3';
+                error.classList.add('show');
+            }
+
+            if (!videoPaused) {
+                startPrivadaVideoRefresh();
+            } else {
+                document.getElementById('videoStatus').textContent = 'PAUSADO';
+            }
+        }
+
+        // Override showVideoPanel para usar cámaras de privada
+        const _originalShowVideoPanel = showVideoPanel;
+        showVideoPanel = function(ch) {
+            if (privadaVideos.length > 0) {
+                // Usar cámaras de privada
+                if (ch) {
+                    const cam = availableCameras.find(c => c.channel === ch);
+                    if (cam) {
+                        currentChannel = ch;
+                        document.getElementById('videoChannelName').textContent = cam.name;
+                    }
+                }
+                document.getElementById('videoPanel').classList.add('active');
+                document.getElementById('videoToggleBtn').classList.add('active');
+                renderCameraSelector();
+                startPrivadaVideoRefresh();
+            } else {
+                // Sin cámaras de privada, usar proxy original
+                _originalShowVideoPanel(ch);
+            }
+        };
+
+        // --- RELAY PANEL ---
+        function toggleRelayPanel() {
+            const p = document.getElementById('relayPanel');
+            const b = document.getElementById('relayToggleBtn');
+            if (p.classList.contains('active')) {
+                p.classList.remove('active');
+                b.classList.remove('active');
+            } else {
+                p.classList.add('active');
+                b.classList.add('active');
+            }
+        }
+
+        function renderRelayButtons(relays) {
+            const container = document.getElementById('relayButtons');
+            if (!relays || relays.length === 0) {
+                container.innerHTML = '<div style="color:#64748b;font-size:11px;text-align:center;padding:10px;">Sin relays configurados</div>';
+                return;
+            }
+
+            container.innerHTML = relays.map(r =>
+                `<div class="relay-btn" id="relayBtn_${r.id}" onclick="activateRelay(${r.id}, '${escapeHtml(r.dns)}', '${r.puerto}', '${escapeHtml(r.alias)}')">
+                    <div class="relay-btn-info">
+                        <span class="relay-btn-name">${escapeHtml(r.alias)}</span>
+                        <span class="relay-btn-dns">${escapeHtml(r.dns)}:${r.puerto || '1883'}</span>
+                    </div>
+                    <div class="relay-btn-icon">🔓</div>
+                </div>`
+            ).join('');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        }
+
+        // --- Activar relay vía MQTT ---
+        async function activateRelay(relayId, dns, puerto, alias) {
+            const btn = document.getElementById(`relayBtn_${relayId}`);
+            if (!btn || btn.classList.contains('activating')) return;
+
+            btn.classList.add('activating');
+            const icon = btn.querySelector('.relay-btn-icon');
+            if (icon) icon.textContent = '⏳';
+
+            try {
+                const response = await fetch(privadaSettings.mqttRelayUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'activate',
+                        privada_id: currentPrivada ? currentPrivada.id : 0,
+                        relay_id: relayId,
+                        dns: dns || privadaSettings.mqttBrokerHost,
+                        puerto: parseInt(puerto) || privadaSettings.mqttBrokerPort,
+                        alias: alias,
+                        duration: 3
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (icon) icon.textContent = '✅';
+                    setTimeout(() => {
+                        btn.classList.remove('activating');
+                        if (icon) icon.textContent = '🔓';
+                    }, 2000);
+                } else {
+                    btn.classList.remove('activating');
+                    btn.classList.add('error');
+                    if (icon) icon.textContent = '❌';
+                    console.error('Error relay:', result.error);
+                    setTimeout(() => {
+                        btn.classList.remove('error');
+                        if (icon) icon.textContent = '🔓';
+                    }, 3000);
+                }
+            } catch(e) {
+                btn.classList.remove('activating');
+                btn.classList.add('error');
+                if (icon) icon.textContent = '❌';
+                console.error('Error activando relay:', e);
+                setTimeout(() => {
+                    btn.classList.remove('error');
+                    if (icon) icon.textContent = '🔓';
+                }, 3000);
+            }
+        }
+
+        // --- Caller ID: Identificar privada por teléfono entrante ---
+        async function lookupCallerPrivada(callerNumber) {
+            if (!privadaSettings.autoLookupCaller || !callerNumber) return;
+
+            try {
+                const r = await fetch(`${privadaSettings.apiUrl}?action=lookup_caller&telefono=${encodeURIComponent(callerNumber)}`);
+                const d = await r.json();
+
+                if (d.success) {
+                    // Seleccionar automáticamente la privada
+                    const sel = document.getElementById('privadaSelect');
+                    sel.value = d.privada_id;
+                    await onPrivadaSelected(d.privada_id);
+
+                    // Mostrar info de la privada identificada
+                    const info = document.getElementById('privadaInfo');
+                    const infoText = document.getElementById('privadaInfoText');
+                    infoText.textContent = `📞 ${d.nombre} - ${d.contacto || ''}`;
+                    info.classList.add('active');
+
+                    // Auto-abrir video si hay cámaras disponibles
+                    if (privadaVideos.length > 0 && videoSettings.autoShowOnCall) {
+                        showVideoPanel();
+                    }
+
+                    // Auto-abrir relays si hay configurados
+                    if (privadaRelays.length > 0) {
+                        const rp = document.getElementById('relayPanel');
+                        if (!rp.classList.contains('active')) {
+                            toggleRelayPanel();
+                        }
+                    }
+
+                    return d;
+                }
+            } catch(e) {
+                console.log('Error buscando caller ID:', e);
+            }
+            return null;
+        }
+
+        // ==========================================
         // INIT
         // ==========================================
         window.onload=function(){
@@ -732,7 +1204,15 @@
             document.getElementById('cameraProxyUrl').value=videoSettings.proxyUrl;
             document.getElementById('videoRefreshRate').value=videoSettings.refreshRate;
             document.getElementById('autoShowVideo').checked=videoSettings.autoShowOnCall;
-            loadContacts();loadCallHistory();loadAudioSettings();loadCameraList();
+            // Cargar configuración de privadas/MQTT
+            const sp=localStorage.getItem('privadaSettings');
+            if(sp){try{Object.assign(privadaSettings,JSON.parse(sp));}catch(e){}}
+            document.getElementById('privadaApiUrl').value=privadaSettings.apiUrl;
+            document.getElementById('mqttRelayUrl').value=privadaSettings.mqttRelayUrl;
+            document.getElementById('mqttBrokerHost').value=privadaSettings.mqttBrokerHost;
+            document.getElementById('mqttBrokerPort').value=privadaSettings.mqttBrokerPort;
+            document.getElementById('autoLookupCaller').checked=privadaSettings.autoLookupCaller;
+            loadContacts();loadCallHistory();loadAudioSettings();loadCameraList();loadPrivadas();
             setTimeout(()=>{document.getElementById('phoneWrapper').classList.add('open');phoneOpen=true;},500);
         };
 
@@ -747,6 +1227,7 @@
             else if(e.key==='Enter'&&phoneNumber)makeCall();
             else if(e.key==='Escape'&&currentSession)hangupCall();
             else if(e.key==='v'||e.key==='V')toggleVideoPanel();
+            else if(e.key==='r'||e.key==='R')toggleRelayPanel();
             else if(e.key==='m'||e.key==='M'){if(currentSession)toggleMute();}
         });
 
