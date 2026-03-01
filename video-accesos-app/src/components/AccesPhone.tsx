@@ -51,7 +51,7 @@ interface CallInfo {
 }
 
 interface AccesPhoneProps {
-  onIncomingCall?: (callerNumber: string) => void;
+  onIncomingCall?: (callerNumber: string, displayName?: string) => void;
   onCallAnswered?: (callerNumber: string) => void;
   onCallEnded?: () => void;
 }
@@ -476,7 +476,8 @@ export default function AccesPhone({
         if (data.originator === "remote") {
           // Incoming call
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
-          console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
+          const callerDisplayName = session.remote_identity?.display_name || "";
+          console.log("[AccesPhone] Incoming call from:", callerNumber, "display_name:", callerDisplayName, "session status:", session.status);
 
           sessionRef.current = session;
           setRinging(true);
@@ -487,8 +488,8 @@ export default function AccesPhone({
           });
           setExpanded(true);
 
-          // Notify parent about incoming call
-          onIncomingCallRef.current?.(callerNumber);
+          // Notify parent about incoming call (include display name for privada lookup)
+          onIncomingCallRef.current?.(callerNumber, callerDisplayName);
 
           // Activate cameras if videoAutoOnCall is enabled
           if (configRef.current.videoAutoOnCall) {
@@ -802,7 +803,7 @@ export default function AccesPhone({
       <div className="fixed bottom-4 right-4 z-50">
         {/* Expanded panel */}
         {expanded && (
-          <div className="mb-2 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
+          <div className="mb-2 w-[540px] bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
             {/* Header */}
             <div className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2">

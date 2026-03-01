@@ -539,14 +539,16 @@ export default function MonitoristasPage() {
   // AccesPhone - Incoming call handler
   // -----------------------------------------------------------
   const handleIncomingCall = useCallback(
-    async (callerNumber: string) => {
+    async (callerNumber: string, displayName?: string) => {
       setIncomingCallNumber(callerNumber);
       setIncomingCallResidencia(null);
       setLookingUpCaller(true);
 
       try {
+        const params = new URLSearchParams({ telefono: callerNumber });
+        if (displayName) params.set("nombre", displayName);
         const res = await fetch(
-          `/api/procesos/registro-accesos/buscar-por-telefono?telefono=${encodeURIComponent(callerNumber)}`
+          `/api/procesos/registro-accesos/buscar-por-telefono?${params.toString()}`
         );
         if (res.ok) {
           const json = await res.json();
@@ -1386,6 +1388,7 @@ export default function MonitoristasPage() {
             {showVideo && incomingCallNumber ? (
               <CameraGrid
                 telefono={incomingCallNumber}
+                privadaId={incomingCallResidencia?.privada?.id}
                 refreshMs={300}
                 active={showVideo && !!incomingCallNumber}
               />

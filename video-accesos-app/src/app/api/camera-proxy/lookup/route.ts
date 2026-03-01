@@ -3,6 +3,27 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const privadaSelect = {
+  id: true,
+  descripcion: true,
+  telefono: true,
+  video1: true,
+  aliasVideo1: true,
+  video2: true,
+  aliasVideo2: true,
+  video3: true,
+  aliasVideo3: true,
+  dns1: true,
+  puerto1: true,
+  contrasena1: true,
+  dns2: true,
+  puerto2: true,
+  contrasena2: true,
+  dns3: true,
+  puerto3: true,
+  contrasena3: true,
+};
+
 // GET /api/camera-proxy/lookup?telefono=XXX
 // Busca la privada por telefono y devuelve las camaras configuradas (video_1, video_2, video_3)
 export async function GET(request: NextRequest) {
@@ -23,45 +44,55 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Buscar la privada por telefono o por ID
-    const privada = await prisma.privada.findFirst({
-      where: privadaId
-        ? { id: parseInt(privadaId), estatusId: { in: [1, 2] } }
-        : {
-            estatusId: { in: [1, 2] },
-            OR: [
-              { telefono: telefono! },
-              { celular: telefono! },
-              // Buscar ultimos 10 digitos si viene con codigo de pais
-              ...(telefono && telefono.replace(/\D/g, "").length > 10
-                ? [
-                    { telefono: telefono.replace(/\D/g, "").slice(-10) },
-                    { celular: telefono.replace(/\D/g, "").slice(-10) },
-                  ]
-                : []),
-            ],
+    let privada;
+
+    if (privadaId) {
+      // Busqueda directa por ID
+      privada = await prisma.privada.findFirst({
+        where: { id: parseInt(privadaId), estatusId: { in: [1, 2] } },
+        select: privadaSelect,
+      });
+    } else if (telefono) {
+      const cleanNumber = telefono.replace(/\D/g, "");
+      const last10 = cleanNumber.length > 10 ? cleanNumber.slice(-10) : null;
+      const numberVariants = [cleanNumber, telefono];
+      if (last10) numberVariants.push(last10);
+
+      // 1. Buscar directamente en privada por telefono/celular
+      privada = await prisma.privada.findFirst({
+        where: {
+          estatusId: { in: [1, 2] },
+          OR: numberVariants.flatMap((num) => [
+            { telefono: num },
+            { celular: num },
+          ]),
+        },
+        select: privadaSelect,
+      });
+
+      // 2. Si no se encuentra, buscar via residencia (telefonoInterfon, interfon, telefono1, telefono2)
+      if (!privada) {
+        const residencia = await prisma.residencia.findFirst({
+          where: {
+            estatusId: { in: [1, 2, 3] },
+            OR: numberVariants.flatMap((num) => [
+              { telefonoInterfon: num },
+              { interfon: num },
+              { telefono1: num },
+              { telefono2: num },
+            ]),
           },
-      select: {
-        id: true,
-        descripcion: true,
-        telefono: true,
-        video1: true,
-        aliasVideo1: true,
-        video2: true,
-        aliasVideo2: true,
-        video3: true,
-        aliasVideo3: true,
-        dns1: true,
-        puerto1: true,
-        contrasena1: true,
-        dns2: true,
-        puerto2: true,
-        contrasena2: true,
-        dns3: true,
-        puerto3: true,
-        contrasena3: true,
-      },
-    });
+          select: { privadaId: true },
+        });
+
+        if (residencia) {
+          privada = await prisma.privada.findFirst({
+            where: { id: residencia.privadaId, estatusId: { in: [1, 2] } },
+            select: privadaSelect,
+          });
+        }
+      }
+    }
 
     if (!privada) {
       return NextResponse.json(

@@ -281,42 +281,74 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar privada
-    const privada = await prisma.privada.findFirst({
-      where: privadaId
-        ? { id: parseInt(privadaId), estatusId: { in: [1, 2] } }
-        : {
-            estatusId: { in: [1, 2] },
-            OR: [
-              { telefono: telefono! },
-              { celular: telefono! },
-              ...(telefono && telefono.replace(/\D/g, "").length > 10
-                ? [
-                    { telefono: telefono.replace(/\D/g, "").slice(-10) },
-                    { celular: telefono.replace(/\D/g, "").slice(-10) },
-                  ]
-                : []),
-            ],
+    const privadaSelect = {
+      id: true,
+      descripcion: true,
+      video1: true,
+      aliasVideo1: true,
+      video2: true,
+      aliasVideo2: true,
+      video3: true,
+      aliasVideo3: true,
+      dns1: true,
+      puerto1: true,
+      contrasena1: true,
+      dns2: true,
+      puerto2: true,
+      contrasena2: true,
+      dns3: true,
+      puerto3: true,
+      contrasena3: true,
+    };
+
+    let privada;
+
+    if (privadaId) {
+      privada = await prisma.privada.findFirst({
+        where: { id: parseInt(privadaId), estatusId: { in: [1, 2] } },
+        select: privadaSelect,
+      });
+    } else if (telefono) {
+      const cleanNum = telefono.replace(/\D/g, "");
+      const last10 = cleanNum.length > 10 ? cleanNum.slice(-10) : null;
+      const variants = [cleanNum, telefono];
+      if (last10) variants.push(last10);
+
+      // 1. Buscar directo en privada
+      privada = await prisma.privada.findFirst({
+        where: {
+          estatusId: { in: [1, 2] },
+          OR: variants.flatMap((num) => [
+            { telefono: num },
+            { celular: num },
+          ]),
+        },
+        select: privadaSelect,
+      });
+
+      // 2. Buscar via residencia si no encontro directo
+      if (!privada) {
+        const residencia = await prisma.residencia.findFirst({
+          where: {
+            estatusId: { in: [1, 2, 3] },
+            OR: variants.flatMap((num) => [
+              { telefonoInterfon: num },
+              { interfon: num },
+              { telefono1: num },
+              { telefono2: num },
+            ]),
           },
-      select: {
-        id: true,
-        descripcion: true,
-        video1: true,
-        aliasVideo1: true,
-        video2: true,
-        aliasVideo2: true,
-        video3: true,
-        aliasVideo3: true,
-        dns1: true,
-        puerto1: true,
-        contrasena1: true,
-        dns2: true,
-        puerto2: true,
-        contrasena2: true,
-        dns3: true,
-        puerto3: true,
-        contrasena3: true,
-      },
-    });
+          select: { privadaId: true },
+        });
+
+        if (residencia) {
+          privada = await prisma.privada.findFirst({
+            where: { id: residencia.privadaId, estatusId: { in: [1, 2] } },
+            select: privadaSelect,
+          });
+        }
+      }
+    }
 
     if (!privada) {
       return new NextResponse(noSignalSvg("Privada no encontrada", ""), {

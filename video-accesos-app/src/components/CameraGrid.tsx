@@ -311,6 +311,7 @@ export default function CameraGrid({
                   ref={(el) => setImgRef(cam.index, el)}
                   alt={cam.alias}
                   className="w-full object-contain bg-black"
+                  style={{ minHeight: compact ? 280 : 360 }}
                 />
               </div>
             ))}
@@ -334,6 +335,7 @@ export default function CameraGrid({
                 ref={(el) => setImgRef(cam.index, el)}
                 alt={cam.alias}
                 className="w-full object-contain bg-black"
+                style={{ minHeight: 360 }}
               />
             </div>
           ))}
