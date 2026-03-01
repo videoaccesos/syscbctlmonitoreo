@@ -335,11 +335,16 @@ log_info "═══════════════════════�
 
 START_TIME=$(date +%s)
 
-# Crear SQL wrapper con protecciones
-TEMP_SQL=$(mktemp /tmp/update_${DB_NAME}_XXXXXX.sql)
-trap "rm -f $TEMP_SQL" EXIT
+# Ejecutar importación directamente con pipe (sin copiar archivo de 667MB)
+log_info "Importando SQL (esto puede tardar varios minutos)..."
 
-cat > "$TEMP_SQL" << SQLHEADER
+# Construimos un flujo que:
+# 1. Agrega header con protecciones
+# 2. Inyecta DROP TABLE IF EXISTS antes de cada CREATE TABLE
+# 3. Filtra líneas de CREATE/DROP DATABASE y USE de otras BD
+# 4. Agrega footer restaurando configuración
+{
+    cat << SQLHEADER
 -- Actualización automática de ${DB_NAME}
 -- Generado por update_wwwvideo_video_accesos.sh
 -- Fecha: $(date '+%Y-%m-%d %H:%M:%S')
@@ -357,23 +362,24 @@ USE \`${DB_NAME}\`;
 
 SQLHEADER
 
-# Agregar el SQL del archivo (filtrando CREATE DATABASE y USE de otras BD)
-grep -v "^CREATE DATABASE" "$SQL_FILE" | \
-grep -v "^DROP DATABASE" | \
-grep -v "^USE \`" >> "$TEMP_SQL"
+    # Procesar el SQL: inyectar DROP TABLE antes de cada CREATE TABLE
+    sed -e '/^CREATE DATABASE/d' \
+        -e '/^DROP DATABASE/d' \
+        -e '/^USE `/d' \
+        -e 's/^CREATE TABLE `\([^`]*\)`/DROP TABLE IF EXISTS `\1`;\nCREATE TABLE `\1`/' \
+        "$SQL_FILE"
 
-cat >> "$TEMP_SQL" << SQLFOOTER
+    cat << SQLFOOTER
 
 -- Restaurar configuración
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET SQL_MODE=@OLD_SQL_MODE;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 SQLFOOTER
+} | mysql_exec "$DB_NAME" 2>&1
+IMPORT_RESULT=$?
 
-# Ejecutar
-log_info "Importando SQL..."
-
-if mysql_exec "$DB_NAME" < "$TEMP_SQL" 2>&1; then
+if [ $IMPORT_RESULT -eq 0 ]; then
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
 
