@@ -65,17 +65,17 @@ const emptyForm = {
   dns1: "",
   puerto1: "",
   alias1: "",
-  tipoTarjeta1: "",
+  tipoTarjeta1: "Tarjeta 1",
   contrasena1: "",
   dns2: "",
   puerto2: "",
   alias2: "",
-  tipoTarjeta2: "",
+  tipoTarjeta2: "Tarjeta 1",
   contrasena2: "",
   dns3: "",
   puerto3: "",
   alias3: "",
-  tipoTarjeta3: "",
+  tipoTarjeta3: "Tarjeta 1",
   contrasena3: "",
   video1: "",
   aliasVideo1: "",
@@ -671,7 +671,6 @@ export default function PrivadasPage() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta1} onChange={(e) => setField("tipoTarjeta1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
                       <option value="Tarjeta 2">Tarjeta 2</option>
                     </select>
@@ -704,7 +703,6 @@ export default function PrivadasPage() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta2} onChange={(e) => setField("tipoTarjeta2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
                       <option value="Tarjeta 2">Tarjeta 2</option>
                     </select>
@@ -737,7 +735,6 @@ export default function PrivadasPage() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta3} onChange={(e) => setField("tipoTarjeta3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
                       <option value="Tarjeta 2">Tarjeta 2</option>
                     </select>
