@@ -102,6 +102,7 @@ export default function EmpleadosPage() {
 
   // UI state
   const [search, setSearch] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -124,6 +125,7 @@ export default function EmpleadosPage() {
         pageSize: String(pageSize),
       });
       if (search) params.set("search", search);
+      if (filterEstatus) params.set("estatusId", filterEstatus);
 
       const res = await fetch(`/api/catalogos/empleados?${params}`);
       if (!res.ok) throw new Error("Error al obtener empleados");
@@ -136,7 +138,7 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, filterEstatus]);
 
   // -----------------------------------------------------------
   // Fetch puestos (for dropdown)
@@ -350,6 +352,18 @@ export default function EmpleadosPage() {
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
         </div>
+        <select
+          value={filterEstatus}
+          onChange={(e) => {
+            setFilterEstatus(e.target.value);
+            setPage(1);
+          }}
+          className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+        >
+          <option value="">Todos los estados</option>
+          <option value="1">Activo</option>
+          <option value="2">Baja</option>
+        </select>
       </form>
 
       {/* Table */}

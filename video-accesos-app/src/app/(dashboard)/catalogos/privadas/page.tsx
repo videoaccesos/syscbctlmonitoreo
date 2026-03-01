@@ -104,7 +104,7 @@ export default function PrivadasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [filterEstatus, setFilterEstatus] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1");
   const [loading, setLoading] = useState(false);
 
   // modal
