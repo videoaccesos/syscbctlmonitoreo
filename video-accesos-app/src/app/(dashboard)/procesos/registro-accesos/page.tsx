@@ -569,10 +569,11 @@ export default function RegistroAccesosPage() {
               estatusId: json.data.estatusId,
             });
 
-            // Auto-populate form: select privada and residencia
+            // Solo pre-seleccionar la privada para mostrar camaras.
+            // La residencia y solicitante quedan libres para el operador.
             const privId = String(json.data.privada.id);
             setFormPrivadaId(privId);
-            setSelectedResidencia(json.data);
+            setSelectedResidencia(null);
             setResidencias([]);
             setResidenciaSearch("");
             setFormSolicitanteId("");
@@ -883,13 +884,12 @@ export default function RegistroAccesosPage() {
         </div>
       )}
 
-      {/* Camera feeds: shown during incoming call OR when privada is selected manually */}
-      {(incomingCallNumber || formPrivadaId) && (
+      {/* Camera feeds: shown only when a privada is selected (manually or via incoming call) */}
+      {formPrivadaId && (
         <CameraGrid
-          telefono={incomingCallNumber || undefined}
-          privadaId={incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : undefined)}
+          privadaId={Number(formPrivadaId)}
           refreshMs={300}
-          active={!!(incomingCallNumber || formPrivadaId)}
+          active={!!formPrivadaId}
           onClose={() => {/* cameras stay while working */}}
         />
       )}
@@ -918,7 +918,7 @@ export default function RegistroAccesosPage() {
       {/* ================================================================= */}
       {/* FORMULARIO DE REGISTRO - Panel principal de trabajo              */}
       {/* ================================================================= */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm relative z-10 overflow-visible">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm relative z-20 overflow-visible">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h2 className="text-base font-semibold text-gray-900">
             Nuevo Registro
@@ -1071,12 +1071,12 @@ export default function RegistroAccesosPage() {
                   />
                   {/* Dropdown de resultados */}
                   {residenciasLoading && (
-                    <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
+                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin text-blue-500 mx-auto" />
                     </div>
                   )}
                   {!residenciasLoading && residencias.length > 0 && (
-                    <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
                       {residencias.map((r) => {
                         const estatus = getResidenciaEstatusLabel(r.estatusId);
                         return (
@@ -1172,12 +1172,12 @@ export default function RegistroAccesosPage() {
 
                   {/* Dropdown de resultados de solicitante */}
                   {solicitanteSearching && (
-                    <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
+                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin text-blue-500 mx-auto" />
                     </div>
                   )}
                   {!solicitanteSearching && solicitanteResults.length > 0 && (
-                    <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
                       {solicitanteResults.map((s) => (
                         <button
                           key={`${s.tipo}-${s.id}`}

@@ -7,13 +7,17 @@ import {
   Phone,
   PhoneOff,
   PhoneIncoming,
+  PhoneOutgoing,
   Settings,
   X,
   RefreshCw,
   Unplug,
   Wifi,
-  WifiOff,
   DoorOpen,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -83,7 +87,7 @@ function saveConfigToStorage(cfg: AccesPhoneConfig) {
 }
 
 // ---------------------------------------------------------------------------
-// Component - Softphone Minimo
+// Component - Softphone flotante esquina inferior izquierda
 // ---------------------------------------------------------------------------
 
 export default function AccesPhone({
@@ -103,6 +107,16 @@ export default function AccesPhone({
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
   const [dtmfSent, setDtmfSent] = useState(false);
+
+  // Panel expand/collapse
+  const [expanded, setExpanded] = useState(false);
+
+  // Audio controls
+  const [muted, setMuted] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(true);
+
+  // Dial input
+  const [dialNumber, setDialNumber] = useState("");
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -145,6 +159,13 @@ export default function AccesPhone({
     setConfig(loadConfig());
   }, []);
 
+  // Auto-expand on incoming call
+  useEffect(() => {
+    if (ringing) {
+      setExpanded(true);
+    }
+  }, [ringing]);
+
   // Call duration timer
   useEffect(() => {
     if (inCall) {
@@ -177,6 +198,7 @@ export default function AccesPhone({
     setRinging(false);
     setCallInfo(null);
     setDtmfSent(false);
+    setMuted(false);
     sessionRef.current = null;
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -305,6 +327,7 @@ export default function AccesPhone({
     if (!cfg.extension || !cfg.sipPassword || !cfg.wsServer || !cfg.sipDomain) {
       setStatusText("Configure SIP primero");
       setShowSettings(true);
+      setExpanded(true);
       return;
     }
 
@@ -487,9 +510,61 @@ export default function AccesPhone({
     if (!sessionRef.current || !inCall) return;
     sessionRef.current.sendDTMF(openDtmf);
     setDtmfSent(true);
-    // Reset visual feedback after 2s
     setTimeout(() => setDtmfSent(false), 2000);
   }, [inCall, openDtmf]);
+
+  /** Toggle microphone mute */
+  const toggleMute = useCallback(() => {
+    if (!sessionRef.current) return;
+    if (muted) {
+      sessionRef.current.unmute();
+    } else {
+      sessionRef.current.mute();
+    }
+    setMuted(!muted);
+  }, [muted]);
+
+  /** Toggle speaker */
+  const toggleSpeaker = useCallback(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = speakerOn;
+    }
+    setSpeakerOn(!speakerOn);
+  }, [speakerOn]);
+
+  /** Make outgoing call */
+  const makeCall = useCallback(async () => {
+    if (!dialNumber || !connected || !uaRef.current) return;
+
+    try {
+      const stream = await acquireMicOrFallback();
+      localStreamRef.current = stream;
+
+      const cfg = configRef.current;
+      const session = uaRef.current.call(`sip:${dialNumber}@${cfg.sipDomain}`, {
+        mediaConstraints: { audio: true, video: false },
+        mediaStream: stream,
+        rtcOfferConstraints: {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false,
+        },
+      });
+
+      sessionRef.current = session;
+      setCallInfo({
+        number: dialNumber,
+        direction: "outgoing",
+        startTime: new Date(),
+      });
+      setInCall(true);
+      setDialNumber("");
+
+      setupSessionEvents(session, dialNumber);
+    } catch (err) {
+      console.error("[AccesPhone] Error starting call:", err);
+      setStatusText("Error al iniciar llamada");
+    }
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback]);
 
   // -----------------------------------------------------------
   // Settings
@@ -538,13 +613,15 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
-  // Render - Softphone Minimo
+  // Render
   // -----------------------------------------------------------
   const statusColor = connected
     ? "bg-green-500"
     : connecting || reconnecting
       ? "bg-yellow-500 animate-pulse"
       : "bg-red-500";
+
+  const isActive = inCall || ringing;
 
   return (
     <>
@@ -553,146 +630,245 @@ export default function AccesPhone({
       <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
 
       {/* ============================================================= */}
-      {/* SOFTPHONE MINIMO - compact bar                                */}
+      {/* FLOATING SOFTPHONE - esquina inferior izquierda               */}
       {/* ============================================================= */}
-      <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-lg overflow-hidden">
-        {/* Top bar: status + settings */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4 text-gray-400" />
-            <span className="text-xs font-bold text-white">SIP</span>
-            <span className={`h-2 w-2 rounded-full ${statusColor}`} />
-            <span className="text-[10px] text-gray-400 truncate max-w-[120px]">
-              {statusText}
-            </span>
-            {reconnectAttempt > 0 && !connected && (
-              <span className="text-[10px] text-yellow-500">
-                ({reconnectAttempt})
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
-            title="Configuracion SIP"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {/* Call state: ringing */}
-        {ringing && callInfo && (
-          <div className="bg-green-900/50 border-t border-green-700/50 px-3 py-2">
-            <div className="flex items-center gap-2 mb-2">
-              <PhoneIncoming className="h-4 w-4 text-green-400 animate-bounce" />
-              <span className="text-sm font-bold text-green-300 font-mono">
-                {callInfo.number}
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              <button
-                onClick={answerCall}
-                className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-green-500 transition"
-              >
-                <Phone className="h-3.5 w-3.5" />
-                Contestar
-              </button>
-              <button
-                onClick={rejectCall}
-                className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
-              >
-                <PhoneOff className="h-3.5 w-3.5" />
-                Rechazar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Call state: in call */}
-        {inCall && callInfo && !ringing && (
-          <div className="bg-blue-900/40 border-t border-blue-700/50 px-3 py-2">
-            <div className="flex items-center justify-between mb-2">
+      <div className="fixed bottom-4 left-4 z-[55]">
+        {/* Panel expandido */}
+        {expanded ? (
+          <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-2xl w-72 overflow-hidden">
+            {/* Header: status + collapse + settings */}
+            <div className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-blue-400" />
-                <span className="text-sm font-bold text-blue-300 font-mono">
-                  {callInfo.number}
+                <Phone className="h-4 w-4 text-gray-400" />
+                <span className="text-xs font-bold text-white">SIP</span>
+                <span className={`h-2 w-2 rounded-full ${statusColor}`} />
+                <span className="text-[10px] text-gray-400 truncate max-w-[100px]">
+                  {statusText}
                 </span>
+                {reconnectAttempt > 0 && !connected && (
+                  <span className="text-[10px] text-yellow-500">
+                    ({reconnectAttempt})
+                  </span>
+                )}
               </div>
-              <span className="text-sm font-mono font-bold text-blue-200">
-                {formatDuration(callDuration)}
-              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
+                  title="Configuracion SIP"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
+                {/* Solo colapsar si no hay llamada activa */}
+                {!isActive && (
+                  <button
+                    onClick={() => setExpanded(false)}
+                    className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
+                    title="Minimizar"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex gap-1.5">
-              {/* Boton Abrir - envia DTMF para autorizar acceso */}
-              <button
-                onClick={sendOpenDtmf}
-                className={`flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold transition ${
-                  dtmfSent
-                    ? "bg-emerald-500 text-white"
-                    : "bg-emerald-600 text-white hover:bg-emerald-500"
-                }`}
-                title={`Enviar DTMF "${openDtmf}" para abrir acceso`}
-              >
-                <DoorOpen className="h-3.5 w-3.5" />
-                {dtmfSent ? "Enviado!" : "Abrir"}
-              </button>
-              {/* Boton Colgar */}
-              <button
-                onClick={hangupCall}
-                className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
-              >
-                <PhoneOff className="h-3.5 w-3.5" />
-                Colgar
-              </button>
+
+            {/* Call state: ringing */}
+            {ringing && callInfo && (
+              <div className="bg-green-900/50 border-t border-green-700/50 px-3 py-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <PhoneIncoming className="h-4 w-4 text-green-400 animate-bounce" />
+                  <span className="text-sm font-bold text-green-300 font-mono">
+                    {callInfo.number}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={answerCall}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-green-500 transition"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    Contestar
+                  </button>
+                  <button
+                    onClick={rejectCall}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
+                  >
+                    <PhoneOff className="h-3.5 w-3.5" />
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Call state: in call */}
+            {inCall && callInfo && !ringing && (
+              <div className="bg-blue-900/40 border-t border-blue-700/50 px-3 py-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {callInfo.direction === "incoming" ? (
+                      <PhoneIncoming className="h-3.5 w-3.5 text-blue-400" />
+                    ) : (
+                      <PhoneOutgoing className="h-3.5 w-3.5 text-blue-400" />
+                    )}
+                    <span className="text-sm font-bold text-blue-300 font-mono">
+                      {callInfo.number}
+                    </span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-blue-200">
+                    {formatDuration(callDuration)}
+                  </span>
+                </div>
+
+                {/* Audio controls + Abrir + Colgar */}
+                <div className="flex gap-1.5">
+                  {/* Mute mic */}
+                  <button
+                    onClick={toggleMute}
+                    className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                      muted
+                        ? "bg-red-700 text-red-200"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                    title={muted ? "Activar microfono" : "Silenciar microfono"}
+                  >
+                    {muted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                  </button>
+                  {/* Speaker */}
+                  <button
+                    onClick={toggleSpeaker}
+                    className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                      !speakerOn
+                        ? "bg-red-700 text-red-200"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                    title={speakerOn ? "Silenciar altavoz" : "Activar altavoz"}
+                  >
+                    {speakerOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                  </button>
+                  {/* Abrir - DTMF */}
+                  <button
+                    onClick={sendOpenDtmf}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold transition ${
+                      dtmfSent
+                        ? "bg-emerald-500 text-white"
+                        : "bg-emerald-600 text-white hover:bg-emerald-500"
+                    }`}
+                    title={`Enviar DTMF "${openDtmf}" para abrir acceso`}
+                  >
+                    <DoorOpen className="h-3.5 w-3.5" />
+                    {dtmfSent ? "Enviado!" : "Abrir"}
+                  </button>
+                  {/* Colgar */}
+                  <button
+                    onClick={hangupCall}
+                    className="flex items-center justify-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
+                  >
+                    <PhoneOff className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Dial input: visible when connected and not in call */}
+            {connected && !inCall && !ringing && (
+              <div className="border-t border-gray-700/50 px-3 py-2">
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Numero a marcar..."
+                    value={dialNumber}
+                    onChange={(e) => setDialNumber(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") makeCall();
+                    }}
+                    className="flex-1 rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm font-mono text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <button
+                    onClick={makeCall}
+                    disabled={!dialNumber}
+                    className="rounded-lg bg-green-600 px-3 py-1.5 text-white hover:bg-green-500 disabled:opacity-40 transition"
+                    title="Marcar"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Bottom: Connect / Disconnect */}
+            <div className="border-t border-gray-700/50 px-3 py-1.5 flex gap-1.5">
+              {connected ? (
+                <button
+                  onClick={disconnectSIP}
+                  className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-gray-700 px-2 py-1.5 text-[11px] font-medium text-red-400 hover:bg-gray-600 hover:text-red-300 transition"
+                >
+                  <Unplug className="h-3 w-3" />
+                  Desconectar
+                </button>
+              ) : reconnecting ? (
+                <button
+                  onClick={() => {
+                    cancelReconnect();
+                    connectSIP();
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-yellow-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-yellow-500 transition"
+                >
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Reconectando...
+                </button>
+              ) : (
+                <button
+                  onClick={connectSIP}
+                  disabled={connecting}
+                  className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-green-700 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-green-600 disabled:opacity-50 transition"
+                >
+                  {connecting ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      Conectando...
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="h-3 w-3" />
+                      Conectar
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+        ) : (
+          /* ============================================================= */
+          /* BOTON COLAPSADO - icono de telefono                            */
+          /* ============================================================= */
+          <button
+            onClick={() => setExpanded(true)}
+            className={`relative flex items-center justify-center h-14 w-14 rounded-full shadow-lg transition-all duration-200 ${
+              ringing
+                ? "bg-green-500 animate-bounce"
+                : inCall
+                  ? "bg-blue-600 animate-pulse"
+                  : connected
+                    ? "bg-gray-800 hover:bg-gray-700"
+                    : "bg-gray-900 hover:bg-gray-800 border border-gray-700"
+            }`}
+            title="Abrir telefono"
+          >
+            {ringing ? (
+              <PhoneIncoming className="h-6 w-6 text-white" />
+            ) : inCall ? (
+              <Phone className="h-6 w-6 text-white" />
+            ) : (
+              <Phone className="h-6 w-6 text-gray-300" />
+            )}
+            {/* Status indicator dot */}
+            <span className={`absolute top-1 right-1 h-3 w-3 rounded-full border-2 border-gray-900 ${statusColor}`} />
+          </button>
         )}
-
-        {/* Bottom: Connect / Disconnect */}
-        <div className="border-t border-gray-700/50 px-3 py-1.5 flex gap-1.5">
-          {connected ? (
-            <button
-              onClick={disconnectSIP}
-              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-gray-700 px-2 py-1.5 text-[11px] font-medium text-red-400 hover:bg-gray-600 hover:text-red-300 transition"
-            >
-              <Unplug className="h-3 w-3" />
-              Desconectar
-            </button>
-          ) : reconnecting ? (
-            <button
-              onClick={() => {
-                cancelReconnect();
-                connectSIP();
-              }}
-              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-yellow-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-yellow-500 transition"
-            >
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              Reconectando...
-            </button>
-          ) : (
-            <button
-              onClick={connectSIP}
-              disabled={connecting}
-              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-green-700 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-green-600 disabled:opacity-50 transition"
-            >
-              {connecting ? (
-                <>
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  Conectando...
-                </>
-              ) : (
-                <>
-                  <Wifi className="h-3 w-3" />
-                  Conectar
-                </>
-              )}
-            </button>
-          )}
-        </div>
       </div>
 
       {/* ============================================================= */}
-      {/* Settings Modal (minimal)                                      */}
+      {/* Settings Modal                                                */}
       {/* ============================================================= */}
       {showSettings && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
