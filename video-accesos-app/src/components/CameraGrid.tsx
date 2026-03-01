@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Camera, CameraOff, RefreshCw, Maximize2, Minimize2, X } from "lucide-react";
+import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -37,7 +37,7 @@ export default function CameraGrid({
   const [lookup, setLookup] = useState<CameraLookupResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [expandedCam, setExpandedCam] = useState<number | null>(null);
+  const [activeCamTab, setActiveCamTab] = useState(0); // indice de la camara activa en modo compact
   const [paused, setPaused] = useState(false);
   const imgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
   const intervalsRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
@@ -200,16 +200,14 @@ export default function CameraGrid({
   const availableCams = lookup.cameras.filter((c) => c.available);
   if (availableCams.length === 0) return null;
 
-  // Determinar grid columns segun numero de camaras
+  // Determinar grid columns segun numero de camaras (solo para modo no-compact)
   const gridCols =
     availableCams.length === 1
       ? "grid-cols-1"
-      : availableCams.length === 2
-        ? "grid-cols-2"
-        : "grid-cols-2 lg:grid-cols-3";
+      : "grid-cols-2";
 
   return (
-    <div className={`rounded-lg border border-gray-200 bg-gray-900 overflow-hidden ${compact ? "" : ""}`}>
+    <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2 text-white">
@@ -217,9 +215,11 @@ export default function CameraGrid({
           <span className="text-sm font-medium">
             {lookup.privada}
           </span>
-          <span className="text-xs text-gray-400">
-            ({availableCams.length} camara{availableCams.length !== 1 ? "s" : ""})
-          </span>
+          {!compact && (
+            <span className="text-xs text-gray-400">
+              ({availableCams.length} camara{availableCams.length !== 1 ? "s" : ""})
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -255,45 +255,90 @@ export default function CameraGrid({
         </div>
       )}
 
-      {/* Camera grid */}
-      <div className={`grid ${gridCols} gap-0.5 p-0.5`}>
-        {availableCams.map((cam) => (
-          <div key={cam.index} className="relative group bg-black">
-            {/* Camera label */}
-            <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
-              <span className="text-[10px] text-white font-medium">{cam.alias}</span>
+      {compact ? (
+        /* ============================================================
+           MODO COMPACT: una camara a la vez con tabs de navegacion
+           ============================================================ */
+        <>
+          {/* Tabs de camaras */}
+          {availableCams.length > 1 && (
+            <div className="flex items-center bg-gray-800/80 border-b border-gray-700">
+              <button
+                onClick={() => setActiveCamTab((activeCamTab - 1 + availableCams.length) % availableCams.length)}
+                className="p-1.5 text-gray-400 hover:text-white transition"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <div className="flex-1 flex justify-center gap-1">
+                {availableCams.map((cam, idx) => (
+                  <button
+                    key={cam.index}
+                    onClick={() => setActiveCamTab(idx)}
+                    className={`px-2 py-1 text-[11px] font-medium rounded transition ${
+                      activeCamTab === idx
+                        ? "bg-orange-500 text-white"
+                        : "text-gray-400 hover:text-white hover:bg-gray-700"
+                    }`}
+                  >
+                    {cam.alias}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setActiveCamTab((activeCamTab + 1) % availableCams.length)}
+                className="p-1.5 text-gray-400 hover:text-white transition"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
             </div>
+          )}
 
-            {/* Expand button */}
-            <button
-              onClick={() =>
-                setExpandedCam(expandedCam === cam.index ? null : cam.index)
-              }
-              className="absolute top-1 right-1 z-10 bg-black/60 rounded p-1 opacity-0 group-hover:opacity-100 transition"
-            >
-              {expandedCam === cam.index ? (
-                <Minimize2 className="h-3 w-3 text-white" />
-              ) : (
-                <Maximize2 className="h-3 w-3 text-white" />
-              )}
-            </button>
-
-            {/* Camera image */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={(el) => setImgRef(cam.index, el)}
-              alt={cam.alias}
-              className={`w-full object-contain bg-black ${
-                expandedCam === cam.index
-                  ? "max-h-[480px]"
-                  : compact
-                    ? "max-h-[160px]"
-                    : "max-h-[240px]"
-              }`}
-            />
+          {/* Imagen de la camara activa - ocupa todo el ancho */}
+          <div className="relative bg-black">
+            {availableCams.map((cam, idx) => (
+              <div
+                key={cam.index}
+                className={activeCamTab === idx ? "block" : "hidden"}
+              >
+                {/* Camera label (solo si hay 1 camara, si hay varias ya esta en los tabs) */}
+                {availableCams.length === 1 && (
+                  <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
+                    <span className="text-[10px] text-white font-medium">{cam.alias}</span>
+                  </div>
+                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={(el) => setImgRef(cam.index, el)}
+                  alt={cam.alias}
+                  className="w-full object-contain bg-black"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      ) : (
+        /* ============================================================
+           MODO NORMAL: grid de camaras
+           ============================================================ */
+        <div className={`grid ${gridCols} gap-0.5 p-0.5`}>
+          {availableCams.map((cam) => (
+            <div key={cam.index} className="relative group bg-black">
+              {/* Camera label */}
+              <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
+                <span className="text-[10px] text-white font-medium">{cam.alias}</span>
+              </div>
+
+              {/* Camera image */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={(el) => setImgRef(cam.index, el)}
+                alt={cam.alias}
+                className="w-full object-contain bg-black"
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Refresh rate indicator */}
       <div className="bg-gray-800 border-t border-gray-700 px-3 py-1 flex items-center justify-between">
