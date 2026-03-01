@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas - Listar privadas con busqueda y paginacion
 export async function GET(request: NextRequest) {
@@ -39,6 +39,9 @@ export async function GET(request: NextRequest) {
           }
         : {}),
     };
+
+    // Fix zero dates before querying (runs once, then no-op)
+    await fixZeroDates();
 
     const [privadas, total] = await Promise.all([
       prisma.privada.findMany({
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
         descripcion: body.descripcion.trim(),
         estatusId: 1,
       },
+      select: { id: true },
     });
 
     if (existente) {

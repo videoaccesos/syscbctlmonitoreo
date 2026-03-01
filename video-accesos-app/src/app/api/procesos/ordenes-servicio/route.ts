@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
     // Validar que la privada existe
     const privada = await prisma.privada.findFirst({
       where: { id: parseInt(privadaId, 10), estatusId: 1 },
+      select: { id: true },
     });
 
     if (!privada) {

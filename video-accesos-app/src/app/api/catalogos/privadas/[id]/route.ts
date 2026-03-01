@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas/[id] - Obtener una privada por ID
 export async function GET(
@@ -20,6 +20,9 @@ export async function GET(
     if (isNaN(privadaId)) {
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
+
+    // Fix zero dates before querying (runs once, then no-op)
+    await fixZeroDates();
 
     const privada = await prisma.privada.findFirst({
       where: { id: privadaId, estatusId: { not: 4 } },
@@ -73,6 +76,7 @@ export async function PUT(
     // Verificar que existe
     const existente = await prisma.privada.findFirst({
       where: { id: privadaId, estatusId: { not: 4 } },
+      select: { id: true },
     });
 
     if (!existente) {
@@ -89,6 +93,7 @@ export async function PUT(
         estatusId: 1,
         NOT: { id: privadaId },
       },
+      select: { id: true },
     });
 
     if (duplicado) {
@@ -173,6 +178,7 @@ export async function DELETE(
     // Verificar que existe y esta activa
     const existente = await prisma.privada.findFirst({
       where: { id: privadaId, estatusId: { not: 4 } },
+      select: { id: true },
     });
 
     if (!existente) {
