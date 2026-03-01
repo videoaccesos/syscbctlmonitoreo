@@ -55,6 +55,7 @@ const navigation: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
     children: [
       { label: "Registro de Accesos", href: "/procesos/registro-accesos" },
+      { label: "Consola Monitorista", href: "/procesos/monitoristas" },
       { label: "Asignación de Tarjetas", href: "/procesos/asignacion-tarjetas" },
       { label: "Órdenes de Servicio", href: "/procesos/ordenes-servicio" },
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
