@@ -167,7 +167,8 @@ CURRENT_TABLES=$(mysql_exec -N -e "
     WHERE TABLE_SCHEMA = '${DB_NAME}'
     ORDER BY TABLE_NAME;" 2>/dev/null || echo "")
 
-CURRENT_TABLE_COUNT=$(echo "$CURRENT_TABLES" | grep -c . 2>/dev/null || echo "0")
+CURRENT_TABLE_COUNT=0
+if [ -n "$CURRENT_TABLES" ]; then CURRENT_TABLE_COUNT=$(echo "$CURRENT_TABLES" | wc -l); fi
 log_info "Tablas en BD actual (MySQL): $CURRENT_TABLE_COUNT"
 
 if [ -n "$CURRENT_TABLES" ]; then
@@ -179,8 +180,11 @@ fi
 echo ""
 
 # Tablas en el SQL nuevo
-NEW_TABLES=$(grep -oP "CREATE TABLE.*\`\K[^\`]+" "$SQL_FILE" 2>/dev/null | sort -u || echo "")
-NEW_TABLE_COUNT=$(echo "$NEW_TABLES" | grep -c . 2>/dev/null || echo "0")
+NEW_TABLES=$(grep -oP 'CREATE TABLE\s+`\K[^`]+' "$SQL_FILE" 2>/dev/null | sort -u || echo "")
+NEW_TABLE_COUNT=0
+if [ -n "$NEW_TABLES" ]; then
+    NEW_TABLE_COUNT=$(echo "$NEW_TABLES" | wc -l)
+fi
 log_info "Tablas en SQL nuevo: $NEW_TABLE_COUNT"
 
 if [ -n "$NEW_TABLES" ]; then
@@ -200,9 +204,12 @@ if [ -n "$CURRENT_TABLES" ] && [ -n "$NEW_TABLES" ]; then
     # Tablas que se actualizarían (en ambos)
     COMMON=$(comm -12 <(echo "$CURRENT_TABLES" | sort) <(echo "$NEW_TABLES" | sort) 2>/dev/null || echo "")
 
-    ADDED_COUNT=$(echo "$ADDED" | grep -c . 2>/dev/null || echo "0")
-    REMOVED_COUNT=$(echo "$REMOVED" | grep -c . 2>/dev/null || echo "0")
-    COMMON_COUNT=$(echo "$COMMON" | grep -c . 2>/dev/null || echo "0")
+    ADDED_COUNT=0
+    REMOVED_COUNT=0
+    COMMON_COUNT=0
+    if [ -n "$ADDED" ]; then ADDED_COUNT=$(echo "$ADDED" | wc -l); fi
+    if [ -n "$REMOVED" ]; then REMOVED_COUNT=$(echo "$REMOVED" | wc -l); fi
+    if [ -n "$COMMON" ]; then COMMON_COUNT=$(echo "$COMMON" | wc -l); fi
 
     if [ "$ADDED_COUNT" -gt 0 ]; then
         echo -e "  ${GREEN}+ Tablas NUEVAS que se agregarán ($ADDED_COUNT):${NC}"
