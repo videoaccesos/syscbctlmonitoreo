@@ -21,13 +21,15 @@ import {
   Headset,
   Video,
   VideoOff,
+  Plus,
+  RotateCcw,
+  Phone,
 } from "lucide-react";
 
-// Dynamic import - JsSIP requires browser APIs (WebRTC, WebSocket)
-const AccesPhoneInline = dynamic(
-  () => import("@/components/AccesPhoneInline"),
-  { ssr: false }
-);
+// Floating softphone - requires browser APIs (WebRTC, WebSocket)
+const AccesPhone = dynamic(() => import("@/components/AccesPhone"), {
+  ssr: false,
+});
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,11 +149,11 @@ const TIPO_GESTION_OPTIONS = [
 function getEstatusColor(estatusId: number) {
   switch (estatusId) {
     case 1:
-      return "bg-green-50 text-green-700 ring-green-600/20";
+      return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
     case 2:
       return "bg-red-50 text-red-700 ring-red-600/20";
     case 3:
-      return "bg-blue-50 text-blue-700 ring-blue-600/20";
+      return "bg-sky-50 text-sky-700 ring-sky-600/20";
     default:
       return "bg-gray-50 text-gray-700 ring-gray-600/20";
   }
@@ -173,9 +175,9 @@ function getEstatusLabel(estatusId: number) {
 function getResidenciaEstatusLabel(estatusId: number) {
   switch (estatusId) {
     case 1:
-      return { label: "Activo", color: "text-green-700 bg-green-50" };
+      return { label: "Activo", color: "text-emerald-700 bg-emerald-50" };
     case 2:
-      return { label: "Inactivo", color: "text-yellow-700 bg-yellow-50" };
+      return { label: "Inactivo", color: "text-amber-700 bg-amber-50" };
     case 3:
       return { label: "Moroso", color: "text-red-700 bg-red-50" };
     default:
@@ -246,7 +248,7 @@ export default function MonitoristasPage() {
   // Video/camera state
   const [showVideo, setShowVideo] = useState(false);
 
-  // Form state - siempre visible como panel de trabajo
+  // Form state
   const [formPrivadaId, setFormPrivadaId] = useState("");
   const [residenciaSearch, setResidenciaSearch] = useState("");
   const [residencias, setResidencias] = useState<Residencia[]>([]);
@@ -555,7 +557,7 @@ export default function MonitoristasPage() {
               estatusId: json.data.estatusId,
             });
 
-            // Auto-populate form: select privada and residencia
+            // Auto-populate form
             const privId = String(json.data.privada.id);
             setFormPrivadaId(privId);
             setSelectedResidencia(json.data);
@@ -564,11 +566,11 @@ export default function MonitoristasPage() {
             setFormSolicitanteId("");
             setFormSolicitanteNombre("");
 
-            // Start timer for new registro
+            // Start timer
             setTimerRunning(true);
             setTimerSeconds(0);
 
-            // Auto-show video on incoming call
+            // Auto-show video
             setShowVideo(true);
           }
         }
@@ -583,7 +585,6 @@ export default function MonitoristasPage() {
 
   const handleCallAnswered = useCallback(
     (callerNumber: string) => {
-      // If we found a residencia, ensure timer is running
       if (incomingCallResidencia) {
         if (!timerRunning) {
           setTimerRunning(true);
@@ -597,7 +598,6 @@ export default function MonitoristasPage() {
 
   const handleCallEnded = useCallback(() => {
     setIncomingCallNumber("");
-    // Don't clear the form - let the operator finish the registro
   }, []);
 
   const selectSolicitante = (id: string, nombre: string) => {
@@ -745,7 +745,6 @@ export default function MonitoristasPage() {
       }
 
       const data = await res.json();
-      // Asignar como solicitante
       selectSolicitante(data.id, data.nombre);
 
       // Reset modal
@@ -758,7 +757,6 @@ export default function MonitoristasPage() {
       setRegEmail("");
       setRegObservaciones("");
 
-      // Recargar residencia si se agrego visitante
       if (regTipo === "visitante" && selectedResidencia) {
         buscarResidencias();
       }
@@ -793,58 +791,86 @@ export default function MonitoristasPage() {
   // Render
   // -----------------------------------------------------------
   return (
-    <div className="space-y-3">
-      {/* Header */}
+    <div className="space-y-4">
+      {/* ================================================================= */}
+      {/* FLOATING SOFTPHONE                                                 */}
+      {/* ================================================================= */}
+      <AccesPhone
+        onIncomingCall={handleIncomingCall}
+        onCallAnswered={handleCallAnswered}
+        onCallEnded={handleCallEnded}
+      />
+
+      {/* ================================================================= */}
+      {/* HEADER                                                             */}
+      {/* ================================================================= */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Headset className="h-7 w-7 text-indigo-600" />
-            Consola de Monitorista
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Softphone integrado - Registro de accesos a privadas
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25">
+            <Headset className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              Consola de Monitorista
+            </h1>
+            <p className="text-sm text-gray-500">
+              Registro y control de accesos a privadas
+            </p>
+          </div>
         </div>
+
         <div className="flex items-center gap-3">
-          {/* Timer display */}
-          <div className="flex items-center gap-2 bg-gray-900 text-white rounded-lg px-4 py-2">
-            <Clock className="h-4 w-4" />
-            <span className="font-mono text-lg font-bold">
+          {/* Softphone hint */}
+          <div className="hidden lg:flex items-center gap-1.5 bg-gray-100 text-gray-500 rounded-full px-3 py-1.5 text-xs">
+            <Phone className="h-3.5 w-3.5" />
+            <span>Softphone en esquina inferior</span>
+          </div>
+          {/* Timer */}
+          <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 font-mono transition-all ${
+            timerRunning
+              ? "bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg"
+              : "bg-gray-100 text-gray-600"
+          }`}>
+            <Clock className={`h-4 w-4 ${timerRunning ? "animate-pulse" : ""}`} />
+            <span className="text-lg font-bold tabular-nums">
               {formatTimer(timerSeconds)}
             </span>
           </div>
-          <div className="text-xs text-gray-500 text-right">
-            <div>
-              Ult: <span className="font-mono">{ultimaDuracion}</span>
-            </div>
+          <div className="text-[11px] text-gray-400 text-right leading-tight">
+            Ultima<br />
+            <span className="font-mono text-gray-500">{ultimaDuracion}</span>
           </div>
         </div>
       </div>
 
-      {/* Incoming call banner */}
+      {/* ================================================================= */}
+      {/* INCOMING CALL BANNER                                               */}
+      {/* ================================================================= */}
       {incomingCallNumber && (
-        <div className={`rounded-lg border px-4 py-3 flex items-center gap-3 ${
+        <div className={`rounded-2xl border-2 px-5 py-4 flex items-center gap-4 transition-all ${
           incomingCallResidencia
-            ? "bg-green-50 border-green-300"
+            ? "bg-emerald-50 border-emerald-300 shadow-lg shadow-emerald-100"
             : lookingUpCaller
-              ? "bg-yellow-50 border-yellow-300"
-              : "bg-orange-50 border-orange-300"
+              ? "bg-amber-50 border-amber-300 shadow-lg shadow-amber-100"
+              : "bg-orange-50 border-orange-300 shadow-lg shadow-orange-100"
         }`}>
-          <PhoneIncoming className={`h-5 w-5 ${
-            incomingCallResidencia ? "text-green-600" : "text-orange-600"
-          }`} />
+          <div className={`flex items-center justify-center h-10 w-10 rounded-full ${
+            incomingCallResidencia ? "bg-emerald-500" : "bg-orange-500"
+          }`}>
+            <PhoneIncoming className="h-5 w-5 text-white" />
+          </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold text-gray-900">
-              Llamada entrante: {incomingCallNumber}
+            <div className="text-sm font-bold text-gray-900">
+              Llamada entrante: <span className="font-mono">{incomingCallNumber}</span>
             </div>
             {lookingUpCaller && (
-              <div className="text-xs text-yellow-700 flex items-center gap-1">
+              <div className="text-xs text-amber-700 flex items-center gap-1 mt-0.5">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Buscando residencia...
               </div>
             )}
             {incomingCallResidencia && (
-              <div className="text-xs text-green-700">
+              <div className="text-xs text-emerald-700 mt-0.5">
                 Identificado: <strong>{incomingCallResidencia.privada.descripcion}</strong>
                 {" - "}#{incomingCallResidencia.nroCasa} {incomingCallResidencia.calle}
                 {incomingCallResidencia.observaciones && (
@@ -855,7 +881,7 @@ export default function MonitoristasPage() {
               </div>
             )}
             {!lookingUpCaller && !incomingCallResidencia && (
-              <div className="text-xs text-orange-700">
+              <div className="text-xs text-orange-700 mt-0.5">
                 Numero no encontrado en el sistema
               </div>
             )}
@@ -865,720 +891,717 @@ export default function MonitoristasPage() {
               setIncomingCallNumber("");
               setIncomingCallResidencia(null);
             }}
-            className="p-1 text-gray-400 hover:text-gray-600"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white/60 transition"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Messages */}
+      {/* ================================================================= */}
+      {/* MESSAGES                                                           */}
+      {/* ================================================================= */}
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center justify-between">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-sm text-red-700 flex items-center justify-between shadow-sm">
           <span>{error}</span>
-          <button onClick={() => setError("")} className="text-red-400 hover:text-red-600">
+          <button onClick={() => setError("")} className="p-0.5 text-red-400 hover:text-red-600">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
       {successMsg && (
-        <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 flex items-center justify-between">
+        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5 text-sm text-emerald-700 flex items-center justify-between shadow-sm">
           <span>{successMsg}</span>
-          <button
-            onClick={() => setSuccessMsg("")}
-            className="text-green-400 hover:text-green-600"
-          >
+          <button onClick={() => setSuccessMsg("")} className="p-0.5 text-emerald-400 hover:text-emerald-600">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
       {/* ================================================================= */}
-      {/* LAYOUT PRINCIPAL: Softphone (izq) + Formulario (der)             */}
+      {/* REGISTRATION FORM                                                  */}
       {/* ================================================================= */}
-      <div className="flex gap-3">
-        {/* ============================================================= */}
-        {/* PANEL IZQUIERDO: Softphone embebido + Video                   */}
-        {/* ============================================================= */}
-        <div className="w-[340px] flex-shrink-0 space-y-3">
-          {/* Softphone integrado */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <AccesPhoneInline
-              onIncomingCall={handleIncomingCall}
-              onCallAnswered={handleCallAnswered}
-              onCallEnded={handleCallEnded}
-            />
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Form header with action buttons */}
+        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-5 py-3">
+          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <Plus className="h-4 w-4 text-indigo-600" />
+            Nuevo Registro de Acceso
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={startNewRegistro}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Nuevo
+            </button>
+            <div className="w-px h-6 bg-gray-200" />
+            <button
+              onClick={() => guardarAcceso(1)}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-emerald-200 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 transition-all"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Acceso
+            </button>
+            <button
+              onClick={() => guardarAcceso(3)}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-amber-200 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 transition-all"
+            >
+              <Info className="h-3.5 w-3.5" />
+              Informo
+            </button>
+            <button
+              onClick={() => guardarAcceso(2)}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-red-200 hover:from-red-600 hover:to-red-700 disabled:opacity-50 transition-all"
+            >
+              <ShieldX className="h-3.5 w-3.5" />
+              Rechazo
+            </button>
           </div>
-
-          {/* Panel de video/camara */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
-              <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
-                {showVideo ? <Video className="h-3.5 w-3.5 text-green-600" /> : <VideoOff className="h-3.5 w-3.5 text-gray-400" />}
-                Camara
-              </span>
-              <button
-                onClick={() => setShowVideo(!showVideo)}
-                className={`text-xs px-2 py-0.5 rounded transition ${
-                  showVideo
-                    ? "bg-red-50 text-red-600 hover:bg-red-100"
-                    : "bg-green-50 text-green-600 hover:bg-green-100"
-                }`}
-              >
-                {showVideo ? "Ocultar" : "Mostrar"}
-              </button>
-            </div>
-            {showVideo && (
-              <div className="aspect-video bg-gray-900 flex items-center justify-center">
-                <div className="text-center text-gray-500 text-xs">
-                  <Video className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                  <p>Feed de camara</p>
-                  <p className="text-gray-600 text-[10px]">
-                    Conecte via proxy para ver video
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Residentes/Visitantes - panel compacto */}
-          {selectedResidencia && (
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              {/* Tabs */}
-              <div className="flex border-b border-gray-200">
-                <button
-                  onClick={() => setActiveTab("residentes")}
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition ${
-                    activeTab === "residentes"
-                      ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5 inline mr-1" />
-                  Residentes ({selectedResidencia.residentes.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("visitantes")}
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition ${
-                    activeTab === "visitantes"
-                      ? "text-purple-600 border-b-2 border-purple-600 bg-purple-50/50"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5 inline mr-1" />
-                  Visitantes ({selectedResidencia.visitas.length})
-                </button>
-              </div>
-
-              {/* Tab content */}
-              <div className="max-h-[250px] overflow-y-auto">
-                {activeTab === "residentes" ? (
-                  <div className="divide-y divide-gray-100">
-                    {selectedResidencia.residentes.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-gray-400">
-                        No hay residentes registrados
-                      </div>
-                    ) : (
-                      selectedResidencia.residentes.map((r) => {
-                        const nombre = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim();
-                        const isSelected = formSolicitanteId === r.id;
-                        return (
-                          <div
-                            key={r.id}
-                            className={`px-3 py-2 flex items-center justify-between transition ${
-                              isSelected ? "bg-blue-50" : "hover:bg-gray-50"
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-medium text-gray-900 truncate">
-                                {nombre}
-                              </div>
-                              {r.celular && (
-                                <div className="text-[10px] text-gray-500">{r.celular}</div>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => selectSolicitante(r.id, nombre)}
-                              className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition ml-2 ${
-                                isSelected
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700"
-                              }`}
-                            >
-                              {isSelected ? "OK" : "Asignar"}
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {selectedResidencia.visitas.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-gray-400">
-                        No hay visitantes registrados
-                      </div>
-                    ) : (
-                      selectedResidencia.visitas.map((v) => {
-                        const nombre = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim();
-                        const isSelected = formSolicitanteId === v.id;
-                        return (
-                          <div
-                            key={v.id}
-                            className={`px-3 py-2 flex items-center justify-between transition ${
-                              isSelected ? "bg-purple-50" : "hover:bg-gray-50"
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-medium text-gray-900 truncate">
-                                {nombre}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => selectSolicitante(v.id, nombre)}
-                              className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition ml-2 ${
-                                isSelected
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700"
-                              }`}
-                            >
-                              {isSelected ? "OK" : "Asignar"}
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
-                    {/* Boton para agregar visitante */}
-                    <div className="p-2">
-                      <button
-                        onClick={() => {
-                          setRegTipo("visitante");
-                          setShowRegGeneral(true);
-                        }}
-                        className="w-full inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
-                      >
-                        <UserPlus className="h-3.5 w-3.5" />
-                        Agregar Visitante
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* ============================================================= */}
-        {/* PANEL DERECHO: Formulario + Historial                         */}
-        {/* ============================================================= */}
-        <div className="flex-1 space-y-3 min-w-0">
-          {/* FORMULARIO DE REGISTRO */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2.5">
-              <h2 className="text-sm font-semibold text-gray-900">
-                Nuevo Registro
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={startNewRegistro}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition"
-                >
-                  Nuevo
-                </button>
-                <button
-                  onClick={() => guardarAcceso(1)}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 transition"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Acceso
-                </button>
-                <button
-                  onClick={() => guardarAcceso(3)}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                  Informo
-                </button>
-                <button
-                  onClick={() => guardarAcceso(2)}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition"
-                >
-                  <ShieldX className="h-3.5 w-3.5" />
-                  Rechazo
-                </button>
-              </div>
+        <div className="p-5 space-y-3">
+          {/* Row 1: Operador + Privada + Tipo Gestion */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Operador
+              </label>
+              <input
+                type="text"
+                value={session?.user?.name || ""}
+                disabled
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+              />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Privada
+              </label>
+              <select
+                value={formPrivadaId}
+                onChange={(e) => {
+                  setFormPrivadaId(e.target.value);
+                  setSelectedResidencia(null);
+                  setResidencias([]);
+                  setResidenciaSearch("");
+                  setFormSolicitanteId("");
+                  setFormSolicitanteNombre("");
+                }}
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+              >
+                <option value="">Seleccionar privada...</option>
+                {privadas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Tipo de Gestion
+              </label>
+              <select
+                value={formTipoGestionId}
+                onChange={(e) => setFormTipoGestionId(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+              >
+                {TIPO_GESTION_OPTIONS.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-            <div className="p-4 space-y-2.5">
-              {/* Fila 1: Operador + Privada */}
-              <div className="grid grid-cols-2 gap-3">
+          {/* Row 2: Residencia + Solicitante + Observaciones */}
+          <div className="grid grid-cols-3 gap-4">
+            {/* Residencia */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Residencia
+              </label>
+              {selectedResidencia ? (
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Operador
-                  </label>
+                  <div className="rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2 flex items-center justify-between">
+                    <div className="text-xs min-w-0">
+                      <span className="font-bold text-indigo-800">
+                        #{selectedResidencia.nroCasa}
+                      </span>
+                      <span className="text-indigo-700 ml-1">
+                        {selectedResidencia.calle}
+                      </span>
+                      {selectedResidencia.interfon && (
+                        <span className="text-indigo-500 ml-1">
+                          Int: {selectedResidencia.interfon}
+                        </span>
+                      )}
+                      {selectedResidencia.estatusId !== 1 && (
+                        <span
+                          className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${getResidenciaEstatusLabel(selectedResidencia.estatusId).color}`}
+                        >
+                          {getResidenciaEstatusLabel(selectedResidencia.estatusId).label}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedResidencia(null);
+                        setFormSolicitanteId("");
+                        setFormSolicitanteNombre("");
+                      }}
+                      className="text-indigo-400 hover:text-indigo-600 ml-2 flex-shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {selectedResidencia.observaciones && (
+                    <div className="mt-1 rounded-xl bg-red-50 border border-red-300 px-2.5 py-1 text-[10px] font-bold text-red-700">
+                      NOTA: {selectedResidencia.observaciones}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                   <input
                     type="text"
-                    value={session?.user?.name || ""}
-                    disabled
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-600"
+                    placeholder={
+                      formPrivadaId
+                        ? "Buscar #casa o calle..."
+                        : "Seleccione primero una privada"
+                    }
+                    value={residenciaSearch}
+                    onChange={(e) => setResidenciaSearch(e.target.value)}
+                    disabled={!formPrivadaId}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        buscarResidencias();
+                      }
+                    }}
+                    className="w-full rounded-xl border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition"
                   />
+                  {residenciasLoading && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 p-3 shadow-xl">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500 mx-auto" />
+                    </div>
+                  )}
+                  {!residenciasLoading && residencias.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 shadow-xl max-h-52 overflow-y-auto">
+                      {residencias.map((r) => {
+                        const estatus = getResidenciaEstatusLabel(r.estatusId);
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedResidencia(r);
+                              setResidencias([]);
+                              setResidenciaSearch("");
+                              setFormSolicitanteId("");
+                              setFormSolicitanteNombre("");
+                            }}
+                            className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition text-sm border-b border-gray-100 last:border-b-0"
+                          >
+                            <span className="font-semibold">#{r.nroCasa}</span>
+                            <span className="text-gray-600 ml-1">{r.calle}</span>
+                            {r.estatusId !== 1 && (
+                              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${estatus.color}`}>
+                                {estatus.label}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Privada
-                  </label>
-                  <select
-                    value={formPrivadaId}
-                    onChange={(e) => {
-                      setFormPrivadaId(e.target.value);
-                      setSelectedResidencia(null);
-                      setResidencias([]);
-                      setResidenciaSearch("");
+              )}
+            </div>
+
+            {/* Solicitante */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Solicitante
+              </label>
+              {formSolicitanteNombre ? (
+                <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-emerald-800 truncate">
+                    {formSolicitanteNombre}
+                  </span>
+                  <button
+                    onClick={() => {
                       setFormSolicitanteId("");
                       setFormSolicitanteNombre("");
                     }}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    className="text-emerald-400 hover:text-emerald-600 ml-2 flex-shrink-0"
                   >
-                    <option value="">Seleccionar privada...</option>
-                    {privadas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.descripcion}
-                      </option>
-                    ))}
-                  </select>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
-
-              {/* Fila 2: Residencia + Solicitante */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Residencia con autocomplete */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Residencia
-                  </label>
-                  {selectedResidencia ? (
-                    <div>
-                      <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 flex items-center justify-between">
-                        <div className="text-xs">
-                          <span className="font-semibold text-blue-800">
-                            #{selectedResidencia.nroCasa}
-                          </span>
-                          <span className="text-blue-700 ml-1">
-                            {selectedResidencia.calle}
-                          </span>
-                          {selectedResidencia.interfon && (
-                            <span className="text-blue-500 ml-1">
-                              Int: {selectedResidencia.interfon}
-                            </span>
-                          )}
-                          {selectedResidencia.estatusId !== 1 && (
-                            <span
-                              className={`ml-1 inline-flex items-center rounded-full px-1 py-0.5 text-[10px] font-medium ${getResidenciaEstatusLabel(selectedResidencia.estatusId).color}`}
-                            >
-                              {getResidenciaEstatusLabel(selectedResidencia.estatusId).label}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            setSelectedResidencia(null);
-                            setFormSolicitanteId("");
-                            setFormSolicitanteNombre("");
-                          }}
-                          className="text-blue-400 hover:text-blue-600"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      {selectedResidencia.observaciones && (
-                        <div className="mt-1 rounded-lg bg-red-50 border border-red-300 px-2 py-1 text-[10px] font-semibold text-red-700">
-                          NOTA: {selectedResidencia.observaciones}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="relative">
+              ) : (
+                <div className="relative">
+                  <div className="flex gap-1.5">
+                    <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <input
                         type="text"
                         placeholder={
-                          formPrivadaId
-                            ? "Buscar #casa o calle..."
-                            : "Seleccione primero una privada"
+                          selectedResidencia
+                            ? "Buscar solicitante..."
+                            : "Seleccione residencia"
                         }
-                        value={residenciaSearch}
-                        onChange={(e) => setResidenciaSearch(e.target.value)}
-                        disabled={!formPrivadaId}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            buscarResidencias();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+                        value={solicitanteSearch}
+                        onChange={(e) => setSolicitanteSearch(e.target.value)}
+                        disabled={!selectedResidencia}
+                        className="w-full rounded-xl border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition"
                       />
-                      {/* Dropdown de resultados */}
-                      {residenciasLoading && (
-                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500 mx-auto" />
-                        </div>
-                      )}
-                      {!residenciasLoading && residencias.length > 0 && (
-                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
-                          {residencias.map((r) => {
-                            const estatus = getResidenciaEstatusLabel(r.estatusId);
-                            return (
-                              <button
-                                key={r.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedResidencia(r);
-                                  setResidencias([]);
-                                  setResidenciaSearch("");
-                                  setFormSolicitanteId("");
-                                  setFormSolicitanteNombre("");
-                                }}
-                                className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
-                              >
-                                <span className="font-medium">#{r.nroCasa}</span>
-                                <span className="text-gray-600 ml-1">{r.calle}</span>
-                                {r.estatusId !== 1 && (
-                                  <span className={`ml-2 text-xs px-1 rounded ${estatus.color}`}>
-                                    {estatus.label}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!selectedResidencia}
+                      onClick={() => {
+                        setRegTipo("general");
+                        setShowRegGeneral(true);
+                      }}
+                      className="rounded-xl border border-gray-300 px-2.5 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
+                      title="Registrar nueva persona"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {solicitanteSearching && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 p-3 shadow-xl">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500 mx-auto" />
                     </div>
                   )}
-                </div>
-
-                {/* Solicitante con autocomplete */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Solicitante
-                  </label>
-                  {formSolicitanteNombre ? (
-                    <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-1.5 flex items-center justify-between">
-                      <span className="text-xs font-medium text-green-800">
-                        {formSolicitanteNombre}
-                      </span>
-                      <button
-                        onClick={() => {
-                          setFormSolicitanteId("");
-                          setFormSolicitanteNombre("");
-                        }}
-                        className="text-green-400 hover:text-green-600"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <div className="flex gap-1">
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder={
-                              selectedResidencia
-                                ? "Buscar solicitante..."
-                                : "Seleccione residencia"
-                            }
-                            value={solicitanteSearch}
-                            onChange={(e) => setSolicitanteSearch(e.target.value)}
-                            disabled={!selectedResidencia}
-                            className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                          />
-                        </div>
+                  {!solicitanteSearching && solicitanteResults.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 shadow-xl max-h-52 overflow-y-auto">
+                      {solicitanteResults.map((s) => (
                         <button
+                          key={`${s.tipo}-${s.id}`}
                           type="button"
-                          disabled={!selectedResidencia}
-                          onClick={() => {
-                            setRegTipo("general");
-                            setShowRegGeneral(true);
-                          }}
-                          className="rounded-lg border border-gray-300 px-2 py-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
-                          title="Registrar nueva persona"
+                          onClick={() => selectSolicitante(s.id, s.nombre)}
+                          className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition text-sm border-b border-gray-100 last:border-b-0"
                         >
-                          <UserPlus className="h-3.5 w-3.5" />
+                          <span
+                            className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold mr-1.5 ${
+                              s.tipo === "R"
+                                ? "bg-blue-100 text-blue-700"
+                                : s.tipo === "V"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {s.tipoLabel}
+                          </span>
+                          <span className="font-medium">{s.nombre}</span>
                         </button>
-                      </div>
-
-                      {/* Dropdown de resultados de solicitante */}
-                      {solicitanteSearching && (
-                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 p-2 shadow-lg">
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500 mx-auto" />
-                        </div>
-                      )}
-                      {!solicitanteSearching && solicitanteResults.length > 0 && (
-                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
-                          {solicitanteResults.map((s) => (
-                            <button
-                              key={`${s.tipo}-${s.id}`}
-                              type="button"
-                              onClick={() => selectSolicitante(s.id, s.nombre)}
-                              className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
-                            >
-                              <span
-                                className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium mr-1.5 ${
-                                  s.tipo === "R"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : s.tipo === "V"
-                                      ? "bg-purple-100 text-purple-700"
-                                      : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {s.tipoLabel}
-                              </span>
-                              <span className="font-medium">{s.nombre}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Fila 3: Tipo Gestion + Observaciones */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Tipo de Gestion
-                  </label>
-                  <select
-                    value={formTipoGestionId}
-                    onChange={(e) => setFormTipoGestionId(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  >
-                    {TIPO_GESTION_OPTIONS.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">
-                    Observaciones
-                  </label>
-                  <input
-                    type="text"
-                    value={formObservaciones}
-                    onChange={(e) => setFormObservaciones(e.target.value)}
-                    placeholder="Observaciones adicionales..."
-                    className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* HISTORIAL */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            {/* Filtros */}
-            <div className="border-b border-gray-200 p-2.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Filter className="h-3.5 w-3.5 text-gray-500" />
-                <span className="text-xs font-medium text-gray-600">
-                  Historial de Accesos
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={filtroPrivadaId}
-                  onChange={(e) => {
-                    setFiltroPrivadaId(e.target.value);
-                    setPage(1);
-                  }}
-                  className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  <option value="">Todas las privadas</option>
-                  {privadas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.descripcion}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={fechaDesde}
-                  onChange={(e) => {
-                    setFechaDesde(e.target.value);
-                    setPage(1);
-                  }}
-                  className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <span className="text-xs text-gray-400">a</span>
-                <input
-                  type="date"
-                  value={fechaHasta}
-                  onChange={(e) => {
-                    setFechaHasta(e.target.value);
-                    setPage(1);
-                  }}
-                  className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <button
-                  onClick={() => {
-                    setFiltroPrivadaId("");
-                    setFechaDesde(todayStr());
-                    setFechaHasta(todayStr());
-                    setPage(1);
-                  }}
-                  className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 transition"
-                >
-                  Limpiar
-                </button>
-              </div>
+              )}
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      Fecha/Hora
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      Privada
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      #Casa
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      Solicitante
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      Tipo
-                    </th>
-                    <th className="px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600">
-                      Estado
-                    </th>
-                    <th className="px-2.5 py-2 text-center text-[11px] font-semibold text-gray-600">
-                      Ver
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-6">
-                        <Loader2 className="h-5 w-5 animate-spin text-blue-500 mx-auto" />
-                        <p className="text-gray-400 text-xs mt-1">Cargando...</p>
-                      </td>
-                    </tr>
-                  ) : registros.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="text-center py-6 text-gray-400 text-xs"
-                      >
-                        No se encontraron registros para el periodo seleccionado
-                      </td>
-                    </tr>
-                  ) : (
-                    registros.map((reg) => (
-                      <tr
-                        key={reg.id}
-                        className="hover:bg-gray-50 transition"
-                      >
-                        <td className="px-2.5 py-1.5 text-gray-700 text-[11px] font-mono whitespace-nowrap">
-                          {formatFechaHora(reg.fechaModificacion)}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-gray-700 text-[11px]">
-                          {reg.privada?.descripcion || "-"}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-[11px]">
-                          <span className="font-medium text-gray-900">
-                            {reg.residencia?.nroCasa || "-"}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-1.5 text-[11px] text-gray-700 max-w-[150px] truncate">
-                          {getNombreSolicitante(reg.solicitanteId)}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-[11px] text-gray-700">
-                          {TIPO_GESTION_LABELS[reg.tipoGestionId] ||
-                            `Tipo ${reg.tipoGestionId}`}
-                        </td>
-                        <td className="px-2.5 py-1.5">
-                          <span
-                            className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${getEstatusColor(reg.estatusId)}`}
-                          >
-                            {getEstatusLabel(reg.estatusId)}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-1.5 text-center">
-                          <button
-                            onClick={() => viewDetalle(reg.id)}
-                            className="p-1 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
-                            title="Ver detalle"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            {/* Observaciones */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                Observaciones
+              </label>
+              <input
+                type="text"
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                placeholder="Notas adicionales..."
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
+              />
             </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-3 py-1.5">
-                <p className="text-[11px] text-gray-600">
-                  {(page - 1) * limit + 1}-{Math.min(page * limit, total)} de{" "}
-                  {total}
-                </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="p-0.5 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="px-2 text-[11px] text-gray-700">
-                    {page}/{totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                    className="p-0.5 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
       {/* ================================================================= */}
-      {/* Detail Modal                                                       */}
+      {/* CONTEXT PANELS: Residentes/Visitantes + Camera                     */}
+      {/* Only visible when a residencia is selected                         */}
+      {/* ================================================================= */}
+      {selectedResidencia && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Residentes / Visitantes */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100">
+              <button
+                onClick={() => setActiveTab("residentes")}
+                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                  activeTab === "residentes"
+                    ? "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/40"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Users className="h-3.5 w-3.5 inline mr-1.5" />
+                Residentes ({selectedResidencia.residentes.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("visitantes")}
+                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                  activeTab === "visitantes"
+                    ? "text-purple-600 border-b-2 border-purple-600 bg-purple-50/40"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Users className="h-3.5 w-3.5 inline mr-1.5" />
+                Visitantes ({selectedResidencia.visitas.length})
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="max-h-[280px] overflow-y-auto">
+              {activeTab === "residentes" ? (
+                <div className="divide-y divide-gray-50">
+                  {selectedResidencia.residentes.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-gray-400">
+                      No hay residentes registrados
+                    </div>
+                  ) : (
+                    selectedResidencia.residentes.map((r) => {
+                      const nombre = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim();
+                      const isSelected = formSolicitanteId === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          className={`px-4 py-2.5 flex items-center justify-between transition ${
+                            isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-gray-900 truncate">
+                              {nombre}
+                            </div>
+                            {r.celular && (
+                              <div className="text-[10px] text-gray-500 font-mono">{r.celular}</div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => selectSolicitante(r.id, nombre)}
+                            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ml-3 ${
+                              isSelected
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700"
+                            }`}
+                          >
+                            {isSelected ? "Asignado" : "Asignar"}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {selectedResidencia.visitas.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-gray-400">
+                      No hay visitantes registrados
+                    </div>
+                  ) : (
+                    selectedResidencia.visitas.map((v) => {
+                      const nombre = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim();
+                      const isSelected = formSolicitanteId === v.id;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`px-4 py-2.5 flex items-center justify-between transition ${
+                            isSelected ? "bg-purple-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-gray-900 truncate">
+                              {nombre}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => selectSolicitante(v.id, nombre)}
+                            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition ml-3 ${
+                              isSelected
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700"
+                            }`}
+                          >
+                            {isSelected ? "Asignado" : "Asignar"}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div className="p-3">
+                    <button
+                      onClick={() => {
+                        setRegTipo("visitante");
+                        setShowRegGeneral(true);
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gray-200 px-3 py-2 text-xs font-medium text-gray-400 hover:border-purple-300 hover:text-purple-600 hover:bg-purple-50/50 transition"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Agregar Visitante
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Camera panel */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+              <span className="text-xs font-semibold text-gray-600 flex items-center gap-2">
+                {showVideo ? (
+                  <Video className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <VideoOff className="h-4 w-4 text-gray-400" />
+                )}
+                Camara de Acceso
+              </span>
+              <button
+                onClick={() => setShowVideo(!showVideo)}
+                className={`text-xs font-medium px-3 py-1 rounded-lg transition ${
+                  showVideo
+                    ? "bg-red-50 text-red-600 hover:bg-red-100"
+                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                }`}
+              >
+                {showVideo ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {showVideo ? (
+              <div className="aspect-video bg-gray-950 flex items-center justify-center">
+                <div className="text-center text-gray-500 text-xs">
+                  <Video className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                  <p className="font-medium">Feed de camara</p>
+                  <p className="text-gray-600 text-[10px] mt-0.5">
+                    Conecte via proxy para ver video
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-300">
+                <VideoOff className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-xs">Video desactivado</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* ACCESS HISTORY TABLE                                               */}
+      {/* ================================================================= */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Filters */}
+        <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-bold text-gray-700">
+                Historial de Accesos
+              </span>
+              <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+                {total} registros
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={filtroPrivadaId}
+                onChange={(e) => {
+                  setFiltroPrivadaId(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              >
+                <option value="">Todas las privadas</option>
+                {privadas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.descripcion}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => {
+                  setFechaDesde(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              />
+              <span className="text-xs text-gray-400">a</span>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => {
+                  setFechaHasta(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              />
+              <button
+                onClick={() => {
+                  setFiltroPrivadaId("");
+                  setFechaDesde(todayStr());
+                  setFechaHasta(todayStr());
+                  setPage(1);
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Fecha/Hora
+                </th>
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Privada
+                </th>
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  #Casa
+                </th>
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Solicitante
+                </th>
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Tipo
+                </th>
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="px-4 py-3 text-center text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Ver
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-10">
+                    <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mx-auto" />
+                    <p className="text-gray-400 text-xs mt-2">Cargando registros...</p>
+                  </td>
+                </tr>
+              ) : registros.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-10 text-gray-400 text-xs">
+                    No se encontraron registros para el periodo seleccionado
+                  </td>
+                </tr>
+              ) : (
+                registros.map((reg, idx) => (
+                  <tr
+                    key={reg.id}
+                    className={`transition hover:bg-indigo-50/30 ${
+                      idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"
+                    }`}
+                  >
+                    <td className="px-4 py-2.5 text-gray-700 text-[11px] font-mono whitespace-nowrap">
+                      {formatFechaHora(reg.fechaModificacion)}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700 text-[11px]">
+                      {reg.privada?.descripcion || "-"}
+                    </td>
+                    <td className="px-4 py-2.5 text-[11px]">
+                      <span className="font-bold text-gray-900">
+                        {reg.residencia?.nroCasa || "-"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-[11px] text-gray-700 max-w-[180px] truncate">
+                      {getNombreSolicitante(reg.solicitanteId)}
+                    </td>
+                    <td className="px-4 py-2.5 text-[11px] text-gray-700">
+                      {TIPO_GESTION_LABELS[reg.tipoGestionId] ||
+                        `Tipo ${reg.tipoGestionId}`}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${getEstatusColor(reg.estatusId)}`}
+                      >
+                        {getEstatusLabel(reg.estatusId)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <button
+                        onClick={() => viewDetalle(reg.id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                        title="Ver detalle"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/30 px-5 py-2.5">
+            <p className="text-[11px] text-gray-500">
+              Mostrando {(page - 1) * limit + 1}-{Math.min(page * limit, total)} de{" "}
+              {total} registros
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="px-3 py-1 text-[11px] font-medium text-gray-700 bg-white rounded-lg border border-gray-200">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-1 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ================================================================= */}
+      {/* DETAIL MODAL                                                       */}
       {/* ================================================================= */}
       {showDetalle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => {
               setShowDetalle(false);
               setDetalle(null);
             }}
           />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-gray-900">
                 Detalle del Registro
               </h2>
               <button
@@ -1586,55 +1609,55 @@ export default function MonitoristasPage() {
                   setShowDetalle(false);
                   setDetalle(null);
                 }}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6">
               {detalleLoading ? (
-                <div className="text-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
+                <div className="text-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mx-auto" />
                 </div>
               ) : detalle ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-5">
+                  <div className="grid grid-cols-2 gap-5">
                     <div>
-                      <p className="text-xs font-medium text-gray-500">ID</p>
-                      <p className="text-sm font-medium">#{detalle.id}</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">ID</p>
+                      <p className="text-sm font-semibold">#{detalle.id}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Fecha/Hora</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Fecha/Hora</p>
                       <p className="text-sm">{formatFechaHora(detalle.fechaModificacion)}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Privada</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Privada</p>
                       <p className="text-sm">{detalle.privada?.descripcion || "-"}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Residencia</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Residencia</p>
                       <p className="text-sm">
                         #{detalle.residencia?.nroCasa} - {detalle.residencia?.calle}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Solicitante</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Solicitante</p>
                       <p className="text-sm">{getNombreSolicitante(detalle.solicitanteId)}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Tipo Gestion</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Tipo Gestion</p>
                       <p className="text-sm">{TIPO_GESTION_LABELS[detalle.tipoGestionId]}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Estado</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Estado</p>
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${getEstatusColor(detalle.estatusId)}`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${getEstatusColor(detalle.estatusId)}`}
                       >
                         {getEstatusLabel(detalle.estatusId)}
                       </span>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Operador</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Operador</p>
                       <p className="text-sm">
                         {detalle.empleado
                           ? `${detalle.empleado.nombre} ${detalle.empleado.apePaterno} ${detalle.empleado.apeMaterno}`
@@ -1642,32 +1665,32 @@ export default function MonitoristasPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">Duracion</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Duracion</p>
                       <p className="text-sm font-mono">{detalle.duracion || "-"}</p>
                     </div>
                   </div>
                   {detalle.observaciones && (
-                    <div className="border-t border-gray-200 pt-4">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Observaciones</p>
-                      <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Observaciones</p>
+                      <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">
                         {detalle.observaciones}
                       </p>
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-center text-gray-400 py-8">
+                <p className="text-center text-gray-400 py-10">
                   No se pudo cargar el detalle
                 </p>
               )}
             </div>
-            <div className="flex justify-end border-t border-gray-200 px-6 py-4">
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4">
               <button
                 onClick={() => {
                   setShowDetalle(false);
                   setDetalle(null);
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="rounded-xl border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
               >
                 Cerrar
               </button>
@@ -1677,39 +1700,39 @@ export default function MonitoristasPage() {
       )}
 
       {/* ================================================================= */}
-      {/* Modal Registrar nueva persona                                      */}
+      {/* REGISTER PERSON MODAL                                              */}
       {/* ================================================================= */}
       {showRegGeneral && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setShowRegGeneral(false)}
           />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-gray-900">
                 {regTipo === "visitante"
                   ? "Registrar Visitante"
                   : "Registro General"}
               </h2>
               <button
                 onClick={() => setShowRegGeneral(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-3">
-              {/* Tipo selector */}
-              <div className="flex gap-2 mb-4">
+            <div className="p-6 space-y-4">
+              {/* Type selector */}
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setRegTipo("visitante")}
                   disabled={!selectedResidencia}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                     regTipo === "visitante"
-                      ? "bg-purple-600 text-white"
+                      ? "bg-purple-600 text-white shadow-sm"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   } ${!selectedResidencia ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
@@ -1718,9 +1741,9 @@ export default function MonitoristasPage() {
                 <button
                   type="button"
                   onClick={() => setRegTipo("general")}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                     regTipo === "general"
-                      ? "bg-gray-700 text-white"
+                      ? "bg-gray-800 text-white shadow-sm"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
@@ -1728,38 +1751,38 @@ export default function MonitoristasPage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-3">
                 <input
                   type="text"
                   placeholder="Nombre *"
                   value={regNombre}
                   onChange={(e) => setRegNombre(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
                 />
                 <input
                   type="text"
                   placeholder="Ap. Paterno"
                   value={regApePaterno}
                   onChange={(e) => setRegApePaterno(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
                 />
                 <input
                   type="text"
                   placeholder="Ap. Materno"
                   value={regApeMaterno}
                   onChange={(e) => setRegApeMaterno(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
                   placeholder="Telefono"
                   value={regTelefono}
                   onChange={(e) => setRegTelefono(e.target.value)}
                   maxLength={14}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
                 />
                 <input
                   type="text"
@@ -1767,7 +1790,7 @@ export default function MonitoristasPage() {
                   value={regCelular}
                   onChange={(e) => setRegCelular(e.target.value)}
                   maxLength={14}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
                 />
               </div>
 
@@ -1776,7 +1799,7 @@ export default function MonitoristasPage() {
                 placeholder="Email"
                 value={regEmail}
                 onChange={(e) => setRegEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
               />
 
               <textarea
@@ -1784,21 +1807,21 @@ export default function MonitoristasPage() {
                 value={regObservaciones}
                 onChange={(e) => setRegObservaciones(e.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none transition"
               />
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
               <button
                 onClick={() => setShowRegGeneral(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="rounded-xl border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarNuevoRegistro}
                 disabled={regSaving}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm"
               >
                 {regSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                 Guardar y Asignar
