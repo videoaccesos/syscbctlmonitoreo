@@ -17,7 +17,10 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
+  Camera,
+  CameraOff,
 } from "lucide-react";
+import CameraGrid from "./CameraGrid";
 
 // ---------------------------------------------------------------------------
 // Auto-reconnect constants
@@ -117,6 +120,10 @@ export default function AccesPhone({
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
 
+  // Camera state
+  const [cameraTelefono, setCameraTelefono] = useState<string>("");
+  const [showCameras, setShowCameras] = useState(false);
+
   // Refs
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
@@ -187,6 +194,8 @@ export default function AccesPhone({
     setRinging(false);
     setCallInfo(null);
     setMuted(false);
+    setCameraTelefono("");
+    setShowCameras(false);
     sessionRef.current = null;
     // Stop local media stream tracks
     if (localStreamRef.current) {
@@ -480,6 +489,12 @@ export default function AccesPhone({
 
           // Notify parent about incoming call
           onIncomingCallRef.current?.(callerNumber);
+
+          // Activate cameras if videoAutoOnCall is enabled
+          if (configRef.current.videoAutoOnCall) {
+            setCameraTelefono(callerNumber);
+            setShowCameras(true);
+          }
 
           // Play ringtone
           if (ringtoneRef.current) {
@@ -921,6 +936,45 @@ export default function AccesPhone({
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Camera toggle button during call */}
+            {(inCall || ringing) && cameraTelefono && (
+              <div className="px-3 py-1 border-t border-gray-100">
+                <button
+                  onClick={() => setShowCameras(!showCameras)}
+                  className={`w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    showCameras
+                      ? "bg-orange-100 text-orange-700 border border-orange-200"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {showCameras ? (
+                    <>
+                      <CameraOff className="h-3.5 w-3.5" />
+                      Ocultar camaras
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-3.5 w-3.5" />
+                      Ver camaras
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Camera feeds during call */}
+            {showCameras && cameraTelefono && (
+              <div className="border-t border-gray-200">
+                <CameraGrid
+                  telefono={cameraTelefono}
+                  refreshMs={config.cameraRefreshMs}
+                  active={showCameras && (inCall || ringing)}
+                  compact
+                  onClose={() => setShowCameras(false)}
+                />
               </div>
             )}
 

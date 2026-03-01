@@ -21,8 +21,11 @@ import {
   PhoneIncoming,
 } from "lucide-react";
 
-// Dynamic import - JsSIP requires browser APIs (WebRTC, WebSocket)
+// Dynamic imports - JsSIP requires browser APIs (WebRTC, WebSocket)
 const AccesPhone = dynamic(() => import("@/components/AccesPhone"), {
+  ssr: false,
+});
+const CameraGrid = dynamic(() => import("@/components/CameraGrid"), {
   ssr: false,
 });
 
@@ -876,6 +879,16 @@ export default function RegistroAccesosPage() {
             <X className="h-4 w-4" />
           </button>
         </div>
+      )}
+
+      {/* Camera feeds when incoming call detected */}
+      {incomingCallNumber && (
+        <CameraGrid
+          telefono={incomingCallNumber}
+          refreshMs={300}
+          active={!!incomingCallNumber}
+          onClose={() => {/* cameras stay while call is active */}}
+        />
       )}
 
       {/* Messages */}

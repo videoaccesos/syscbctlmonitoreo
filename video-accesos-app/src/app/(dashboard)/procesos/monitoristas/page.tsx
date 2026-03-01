@@ -30,6 +30,9 @@ import {
 const AccesPhone = dynamic(() => import("@/components/AccesPhone"), {
   ssr: false,
 });
+const CameraGrid = dynamic(() => import("@/components/CameraGrid"), {
+  ssr: false,
+});
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1380,13 +1383,19 @@ export default function MonitoristasPage() {
                 {showVideo ? "Ocultar" : "Mostrar"}
               </button>
             </div>
-            {showVideo ? (
+            {showVideo && incomingCallNumber ? (
+              <CameraGrid
+                telefono={incomingCallNumber}
+                refreshMs={300}
+                active={showVideo && !!incomingCallNumber}
+              />
+            ) : showVideo ? (
               <div className="aspect-video bg-gray-950 flex items-center justify-center">
                 <div className="text-center text-gray-500 text-xs">
                   <Video className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                  <p className="font-medium">Feed de camara</p>
+                  <p className="font-medium">Esperando llamada...</p>
                   <p className="text-gray-600 text-[10px] mt-0.5">
-                    Conecte via proxy para ver video
+                    Las camaras se activaran al recibir una llamada
                   </p>
                 </div>
               </div>
