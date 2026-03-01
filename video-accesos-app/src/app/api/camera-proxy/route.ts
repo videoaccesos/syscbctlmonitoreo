@@ -50,38 +50,47 @@ function findCredentials(
     contrasena3: string;
   }
 ): { user: string; pass: string } {
+  // Parsea el campo contrasena que puede tener formato "usuario:password" o solo "password"
+  function parseCredentials(raw: string): { user: string; pass: string } {
+    const trimmed = raw.trim();
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0) {
+      return { user: trimmed.substring(0, colonIdx), pass: trimmed.substring(colonIdx + 1) };
+    }
+    return { user: "admin", pass: trimmed };
+  }
+
   let hostname = "";
   try {
     hostname = new URL(url).hostname;
   } catch {
-    return { user: "admin", pass: privada.contrasena1 };
+    return parseCredentials(privada.contrasena1);
   }
 
   // Buscar coincidencia por hostname en los 3 slots DNS
   const dnsSlots = [
-    { dns: privada.dns1, pass: privada.contrasena1 },
-    { dns: privada.dns2, pass: privada.contrasena2 },
-    { dns: privada.dns3, pass: privada.contrasena3 },
+    { dns: privada.dns1, cred: privada.contrasena1 },
+    { dns: privada.dns2, cred: privada.contrasena2 },
+    { dns: privada.dns3, cred: privada.contrasena3 },
   ];
 
   for (const slot of dnsSlots) {
     if (slot.dns && slot.dns.trim() !== "") {
-      // Comparar hostname directamente o como substring
       const slotHost = slot.dns.trim().toLowerCase();
       if (
         hostname.toLowerCase() === slotHost ||
         hostname.toLowerCase().includes(slotHost) ||
         slotHost.includes(hostname.toLowerCase())
       ) {
-        return { user: "admin", pass: slot.pass };
+        return parseCredentials(slot.cred);
       }
     }
   }
 
   // Si no hay coincidencia, usar el primer slot con credenciales
   for (const slot of dnsSlots) {
-    if (slot.pass && slot.pass.trim() !== "") {
-      return { user: "admin", pass: slot.pass };
+    if (slot.cred && slot.cred.trim() !== "") {
+      return parseCredentials(slot.cred);
     }
   }
 
