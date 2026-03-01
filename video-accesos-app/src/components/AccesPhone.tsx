@@ -627,10 +627,10 @@ export default function AccesPhone({
       <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
 
       {/* ============================================================= */}
-      {/* FLOATING SOFTPHONE - esquina inferior izquierda (despues del sidebar) */}
+      {/* FLOATING SOFTPHONE - margen izquierdo inferior (dentro del sidebar) */}
       {/* ============================================================= */}
-      <div className="fixed bottom-4 left-[17rem] z-[55]">
-        <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-2xl w-72 overflow-hidden">
+      <div className="fixed bottom-0 left-0 z-[55] w-64">
+        <div className="bg-slate-900 rounded-t-xl border-t border-x border-slate-700 shadow-2xl overflow-hidden">
           {/* Header: status + settings */}
           <div className="flex items-center justify-between px-3 py-2">
             <div className="flex items-center gap-2">
