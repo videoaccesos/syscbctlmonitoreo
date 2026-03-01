@@ -920,9 +920,9 @@ export default function MonitoristasPage() {
       {/* ================================================================= */}
       {/* REGISTRATION FORM                                                  */}
       {/* ================================================================= */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm relative z-20">
         {/* Form header with action buttons */}
-        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-5 py-3 rounded-t-2xl">
           <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
             <Plus className="h-4 w-4 text-indigo-600" />
             Nuevo Registro de Acceso
