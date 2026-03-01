@@ -23,6 +23,8 @@ import {
   VideoOff,
   Plus,
   RotateCcw,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 
 // Softphone minimo - requires browser APIs (WebRTC, WebSocket)
@@ -247,7 +249,7 @@ export default function MonitoristasPage() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Video/camera state
+  // Video/camera state - panel lateral derecho
   const [showVideo, setShowVideo] = useState(false);
 
   // Form state
@@ -407,6 +409,17 @@ export default function MonitoristasPage() {
     const s = String(seconds % 60).padStart(2, "0");
     return `${h}:${m}:${s}`;
   }
+
+  // -----------------------------------------------------------
+  // Auto-show cameras when privada is selected
+  // -----------------------------------------------------------
+  useEffect(() => {
+    if (formPrivadaId) {
+      setShowVideo(true);
+    } else {
+      setShowVideo(false);
+    }
+  }, [formPrivadaId]);
 
   // -----------------------------------------------------------
   // Search residencias
@@ -814,30 +827,20 @@ export default function MonitoristasPage() {
           </div>
         </div>
 
-        <div className="flex items-start gap-3">
-          {/* Softphone minimo - inline widget */}
-          <div className="w-[260px]">
-            <AccesPhone
-              onIncomingCall={handleIncomingCall}
-              onCallAnswered={handleCallAnswered}
-              onCallEnded={handleCallEnded}
-            />
+        {/* Timer */}
+        <div className="flex flex-col items-end gap-1">
+          <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 font-mono transition-all ${
+            timerRunning
+              ? "bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg"
+              : "bg-gray-100 text-gray-600"
+          }`}>
+            <Clock className={`h-4 w-4 ${timerRunning ? "animate-pulse" : ""}`} />
+            <span className="text-lg font-bold tabular-nums">
+              {formatTimer(timerSeconds)}
+            </span>
           </div>
-          {/* Timer */}
-          <div className="flex flex-col items-end gap-1">
-            <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 font-mono transition-all ${
-              timerRunning
-                ? "bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg"
-                : "bg-gray-100 text-gray-600"
-            }`}>
-              <Clock className={`h-4 w-4 ${timerRunning ? "animate-pulse" : ""}`} />
-              <span className="text-lg font-bold tabular-nums">
-                {formatTimer(timerSeconds)}
-              </span>
-            </div>
-            <div className="text-[11px] text-gray-400 text-right leading-tight">
-              Ultima: <span className="font-mono text-gray-500">{ultimaDuracion}</span>
-            </div>
+          <div className="text-[11px] text-gray-400 text-right leading-tight">
+            Ultima: <span className="font-mono text-gray-500">{ultimaDuracion}</span>
           </div>
         </div>
       </div>
@@ -1228,47 +1231,7 @@ export default function MonitoristasPage() {
         </div>
       </div>
 
-      {/* ================================================================= */}
-      {/* CAMARAS DE ACCESO - visibles cuando hay llamada o privada           */}
-      {/* ================================================================= */}
-      {(incomingCallNumber || (selectedResidencia && showVideo)) && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
-            <span className="text-xs font-semibold text-gray-600 flex items-center gap-2">
-              <Video className="h-4 w-4 text-emerald-600" />
-              Camaras de Acceso
-              {incomingCallResidencia && (
-                <span className="text-emerald-700 font-bold">
-                  - {incomingCallResidencia.privada.descripcion}
-                </span>
-              )}
-            </span>
-            <button
-              onClick={() => setShowVideo(!showVideo)}
-              className={`text-xs font-medium px-3 py-1 rounded-lg transition ${
-                showVideo
-                  ? "bg-red-50 text-red-600 hover:bg-red-100"
-                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-              }`}
-            >
-              {showVideo ? "Ocultar" : "Mostrar"}
-            </button>
-          </div>
-          {showVideo && (incomingCallNumber || selectedResidencia) ? (
-            <CameraGrid
-              telefono={incomingCallNumber || undefined}
-              privadaId={incomingCallResidencia?.privada?.id || (selectedResidencia ? Number(formPrivadaId) : undefined)}
-              refreshMs={300}
-              active={showVideo}
-            />
-          ) : !showVideo ? (
-            <div className="p-6 text-center text-gray-300">
-              <VideoOff className="h-6 w-6 mx-auto mb-1 opacity-40" />
-              <p className="text-xs">Video pausado</p>
-            </div>
-          ) : null}
-        </div>
-      )}
+      {/* Cameras are now in the right-side sliding panel (see below) */}
 
       {/* ================================================================= */}
       {/* CONTEXT PANELS: Residentes/Visitantes                              */}
@@ -1700,6 +1663,75 @@ export default function MonitoristasPage() {
       {/* ================================================================= */}
       {/* REGISTER PERSON MODAL                                              */}
       {/* ================================================================= */}
+      {/* ================================================================= */}
+      {/* FLOATING SOFTPHONE (bottom-left, after sidebar)                    */}
+      {/* ================================================================= */}
+      <AccesPhone
+        onIncomingCall={handleIncomingCall}
+        onCallAnswered={handleCallAnswered}
+        onCallEnded={handleCallEnded}
+      />
+
+      {/* ================================================================= */}
+      {/* CAMERA PANEL - right side sliding drawer                           */}
+      {/* ================================================================= */}
+      {(formPrivadaId || incomingCallNumber) && (
+        <>
+          {/* Toggle tab on right edge (visible when panel is collapsed) */}
+          {!showVideo && (
+            <button
+              onClick={() => setShowVideo(true)}
+              className="fixed right-0 top-1/2 -translate-y-1/2 z-[40] bg-gray-900 text-white rounded-l-xl px-2 py-4 shadow-lg hover:bg-gray-800 transition-all group"
+              title="Mostrar camaras"
+            >
+              <PanelRightOpen className="h-5 w-5 mb-2" />
+              <Video className="h-5 w-5 text-orange-400" />
+            </button>
+          )}
+
+          {/* Sliding panel */}
+          <div
+            className={`fixed top-0 right-0 h-full z-[40] transition-transform duration-300 ease-in-out ${
+              showVideo ? "translate-x-0" : "translate-x-full"
+            }`}
+            style={{ width: 340 }}
+          >
+            <div className="h-full bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col">
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-700 bg-gray-800">
+                <div className="flex items-center gap-2 text-white">
+                  <Video className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-bold">Camaras</span>
+                  {incomingCallResidencia && (
+                    <span className="text-xs text-emerald-400 font-medium truncate max-w-[120px]">
+                      {incomingCallResidencia.privada.descripcion}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowVideo(false)}
+                  className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition"
+                  title="Ocultar camaras"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Camera content */}
+              <div className="flex-1 overflow-y-auto p-2">
+                <CameraGrid
+                  telefono={incomingCallNumber || undefined}
+                  privadaId={incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : undefined)}
+                  refreshMs={300}
+                  active={showVideo}
+                  compact
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {showRegGeneral && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div

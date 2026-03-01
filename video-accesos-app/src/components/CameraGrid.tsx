@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2 } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -39,6 +39,7 @@ export default function CameraGrid({
   const [error, setError] = useState("");
   const [activeCamTab, setActiveCamTab] = useState(0); // indice de la camara activa en modo compact
   const [paused, setPaused] = useState(false);
+  const [enlargedCam, setEnlargedCam] = useState<number | null>(null); // indice de camara agrandada
   const imgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
   const intervalsRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
   const mountedRef = useRef(true);
@@ -225,161 +226,200 @@ export default function CameraGrid({
   const availableCams = lookup.cameras.filter((c) => c.available);
   if (availableCams.length === 0) return null;
 
-  // Determinar grid columns segun numero de camaras (solo para modo no-compact)
-  const gridCols =
-    availableCams.length === 1
-      ? "grid-cols-1"
-      : "grid-cols-2";
-
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
-        <div className="flex items-center gap-2 text-white">
-          <Camera className="h-4 w-4 text-orange-400" />
-          <span className="text-sm font-medium">
-            {lookup.privada}
-          </span>
-          {!compact && (
-            <span className="text-xs text-gray-400">
-              ({availableCams.length} camara{availableCams.length !== 1 ? "s" : ""})
+    <>
+      <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+          <div className="flex items-center gap-2 text-white">
+            <Camera className="h-4 w-4 text-orange-400" />
+            <span className="text-sm font-medium">
+              {lookup.privada}
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPaused(!paused)}
-            className={`p-1.5 rounded text-xs transition ${
-              paused
-                ? "bg-yellow-600 text-white"
-                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-            }`}
-            title={paused ? "Reanudar" : "Pausar"}
-          >
-            {paused ? (
-              <RefreshCw className="h-3.5 w-3.5" />
-            ) : (
-              <span className="h-3.5 w-3.5 flex items-center justify-center text-[10px] font-bold">||</span>
-            )}
-          </button>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Paused indicator */}
-      {paused && (
-        <div className="bg-yellow-900/50 border-b border-yellow-700/50 px-3 py-1 text-center">
-          <span className="text-xs text-yellow-400">Video pausado - clic para reanudar</span>
-        </div>
-      )}
-
-      {compact ? (
-        /* ============================================================
-           MODO COMPACT: una camara a la vez con tabs de navegacion
-           ============================================================ */
-        <>
-          {/* Tabs de camaras */}
-          {availableCams.length > 1 && (
-            <div className="flex items-center bg-gray-800/80 border-b border-gray-700">
-              <button
-                onClick={() => setActiveCamTab((activeCamTab - 1 + availableCams.length) % availableCams.length)}
-                className="p-1.5 text-gray-400 hover:text-white transition"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <div className="flex-1 flex justify-center gap-1">
-                {availableCams.map((cam, idx) => (
-                  <button
-                    key={cam.index}
-                    onClick={() => setActiveCamTab(idx)}
-                    className={`px-2 py-1 text-[11px] font-medium rounded transition ${
-                      activeCamTab === idx
-                        ? "bg-orange-500 text-white"
-                        : "text-gray-400 hover:text-white hover:bg-gray-700"
-                    }`}
-                  >
-                    {cam.alias}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setActiveCamTab((activeCamTab + 1) % availableCams.length)}
-                className="p-1.5 text-gray-400 hover:text-white transition"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Imagen de la camara activa - ocupa todo el ancho */}
-          <div className="relative bg-black">
-            {availableCams.map((cam, idx) => (
-              <div
-                key={cam.index}
-                className={activeCamTab === idx ? "block" : "hidden"}
-              >
-                {/* Camera label (solo si hay 1 camara, si hay varias ya esta en los tabs) */}
-                {availableCams.length === 1 && (
-                  <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
-                    <span className="text-[10px] text-white font-medium">{cam.alias}</span>
-                  </div>
-                )}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  ref={(el) => setImgRef(cam.index, el)}
-                  alt={cam.alias}
-                  className="w-full object-contain bg-black"
-                  style={{ minHeight: compact ? 280 : 360 }}
-                />
-              </div>
-            ))}
+            <span className="text-xs text-gray-400">
+              ({availableCams.length} cam{availableCams.length !== 1 ? "s" : ""})
+            </span>
           </div>
-        </>
-      ) : (
-        /* ============================================================
-           MODO NORMAL: grid de camaras
-           ============================================================ */
-        <div className={`grid ${gridCols} gap-0.5 p-0.5`}>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPaused(!paused)}
+              className={`p-1.5 rounded text-xs transition ${
+                paused
+                  ? "bg-yellow-600 text-white"
+                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              }`}
+              title={paused ? "Reanudar" : "Pausar"}
+            >
+              {paused ? (
+                <RefreshCw className="h-3.5 w-3.5" />
+              ) : (
+                <span className="h-3.5 w-3.5 flex items-center justify-center text-[10px] font-bold">||</span>
+              )}
+            </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Paused indicator */}
+        {paused && (
+          <div className="bg-yellow-900/50 border-b border-yellow-700/50 px-3 py-1 text-center">
+            <span className="text-xs text-yellow-400">Video pausado - clic para reanudar</span>
+          </div>
+        )}
+
+        {/* Camera thumbnails - stacked vertically */}
+        <div className="space-y-0.5 p-0.5">
           {availableCams.map((cam) => (
             <div key={cam.index} className="relative group bg-black">
-              {/* Camera label */}
+              {/* Camera label + enlarge button */}
               <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
                 <span className="text-[10px] text-white font-medium">{cam.alias}</span>
               </div>
+              <button
+                onClick={() => setEnlargedCam(cam.index)}
+                className="absolute top-1 right-1 z-10 bg-black/60 rounded p-1 text-white/70 hover:text-white hover:bg-black/80 transition opacity-0 group-hover:opacity-100"
+                title="Agrandar"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
 
-              {/* Camera image */}
+              {/* Camera image - small thumbnail */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 ref={(el) => setImgRef(cam.index, el)}
                 alt={cam.alias}
-                className="w-full object-contain bg-black"
-                style={{ minHeight: 360 }}
+                className="w-full object-contain bg-black cursor-pointer"
+                style={{ minHeight: compact ? 140 : 180 }}
+                onClick={() => setEnlargedCam(cam.index)}
               />
             </div>
           ))}
         </div>
-      )}
 
-      {/* Refresh rate indicator */}
-      <div className="bg-gray-800 border-t border-gray-700 px-3 py-1 flex items-center justify-between">
-        <span className="text-[10px] text-gray-500">
-          Refresh: {refreshMs}ms
-        </span>
-        {!paused && active && (
-          <span className="flex items-center gap-1 text-[10px] text-green-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-            EN VIVO
+        {/* Refresh rate indicator */}
+        <div className="bg-gray-800 border-t border-gray-700 px-3 py-1 flex items-center justify-between">
+          <span className="text-[10px] text-gray-500">
+            Refresh: {refreshMs}ms
           </span>
-        )}
+          {!paused && active && (
+            <span className="flex items-center gap-1 text-[10px] text-green-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              EN VIVO
+            </span>
+          )}
+        </div>
       </div>
-    </div>
-  );
 
+      {/* Enlarged camera overlay */}
+      {enlargedCam !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between bg-gray-900 rounded-t-xl px-4 py-2 border-b border-gray-700">
+              <div className="flex items-center gap-2 text-white">
+                <Camera className="h-4 w-4 text-orange-400" />
+                <span className="text-sm font-medium">
+                  {lookup.privada} - {availableCams.find(c => c.index === enlargedCam)?.alias}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Navigation between cameras */}
+                {availableCams.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const idx = availableCams.findIndex(c => c.index === enlargedCam);
+                        const prev = (idx - 1 + availableCams.length) % availableCams.length;
+                        setEnlargedCam(availableCams[prev].index);
+                      }}
+                      className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const idx = availableCams.findIndex(c => c.index === enlargedCam);
+                        const next = (idx + 1) % availableCams.length;
+                        setEnlargedCam(availableCams[next].index);
+                      }}
+                      className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setEnlargedCam(null)}
+                  className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-red-600 hover:text-white transition"
+                  title="Cerrar"
+                >
+                  <Minimize2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            {/* Enlarged image - uses the same img ref that's already refreshing */}
+            <div className="bg-black rounded-b-xl overflow-hidden">
+              {availableCams.map((cam) => (
+                <div
+                  key={cam.index}
+                  className={enlargedCam === cam.index ? "block" : "hidden"}
+                >
+                  {/* The image ref is already set on the thumbnail img element,
+                      so we show a clone that reads from the same src */}
+                  <EnlargedCameraView camIndex={cam.index} imgRefs={imgRefs} />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Click outside to close */}
+          <div
+            className="absolute inset-0 -z-10"
+            onClick={() => setEnlargedCam(null)}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Shows an enlarged copy of a camera that syncs with the thumbnail's src */
+function EnlargedCameraView({
+  camIndex,
+  imgRefs,
+}: {
+  camIndex: number;
+  imgRefs: React.RefObject<Map<number, HTMLImageElement>>;
+}) {
+  const enlargedImgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    // Sync the enlarged image src from the thumbnail
+    const syncSrc = () => {
+      const srcImg = imgRefs.current?.get(camIndex);
+      if (srcImg && enlargedImgRef.current && srcImg.src) {
+        enlargedImgRef.current.src = srcImg.src;
+      }
+    };
+
+    syncSrc();
+    const interval = setInterval(syncSrc, 200);
+    return () => clearInterval(interval);
+  }, [camIndex, imgRefs]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={enlargedImgRef}
+      alt="Camera enlarged"
+      className="w-full object-contain bg-black"
+      style={{ maxHeight: "80vh" }}
+    />
+  );
 }
