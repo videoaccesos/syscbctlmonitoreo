@@ -105,6 +105,12 @@ function makeDigestHeader(
   return header;
 }
 
+// Limpia un valor de la base de datos eliminando comillas sueltas y espacios
+// Necesario porque algunos registros tienen comillas extra (ej: url")
+function sanitizeDbValue(raw: string): string {
+  return raw.trim().replace(/^["']+|["']+$/g, "").trim();
+}
+
 // Construye la URL completa de la camara a partir de los campos de la privada
 // Si video_N ya es una URL completa (http://...), se usa directamente
 // Si es un path relativo, se combina con dns_N y puerto_N
@@ -113,13 +119,13 @@ function buildCameraUrl(
   dns: string,
   puerto: string
 ): string {
-  const trimmed = videoUrl.trim();
+  const trimmed = sanitizeDbValue(videoUrl);
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
   }
   // Construir URL a partir de DNS + puerto + path
-  const host = dns.trim();
-  const port = puerto.trim();
+  const host = sanitizeDbValue(dns);
+  const port = sanitizeDbValue(puerto);
   if (!host) return "";
   const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   return port ? `http://${host}:${port}${path}` : `http://${host}${path}`;
