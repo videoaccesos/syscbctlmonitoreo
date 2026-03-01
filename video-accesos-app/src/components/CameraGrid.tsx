@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2 } from "lucide-react";
 
 interface CameraInfo {
@@ -134,8 +135,8 @@ export default function CameraGrid({
         };
         img.onerror = () => {
           if (!mountedRef.current) return;
-          // En error, esperar mas para no saturar la camara
-          const tid = setTimeout(refreshCamera, Math.max(refreshMs, 2000));
+          // En error, esperar mas para no saturar la camara/DVR
+          const tid = setTimeout(refreshCamera, Math.max(refreshMs * 3, 3000));
           intervalsRef.current.set(cam.index, tid);
         };
 
@@ -317,74 +318,74 @@ export default function CameraGrid({
         </div>
       </div>
 
-      {/* Enlarged camera overlay */}
-      {enlargedCam !== null && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-4xl mx-4">
-            {/* Header */}
-            <div className="flex items-center justify-between bg-gray-900 rounded-t-xl px-4 py-2 border-b border-gray-700">
-              <div className="flex items-center gap-2 text-white">
-                <Camera className="h-4 w-4 text-orange-400" />
-                <span className="text-sm font-medium">
-                  {lookup.privada} - {availableCams.find(c => c.index === enlargedCam)?.alias}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Navigation between cameras */}
-                {availableCams.length > 1 && (
-                  <>
-                    <button
-                      onClick={() => {
-                        const idx = availableCams.findIndex(c => c.index === enlargedCam);
-                        const prev = (idx - 1 + availableCams.length) % availableCams.length;
-                        setEnlargedCam(availableCams[prev].index);
-                      }}
-                      className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const idx = availableCams.findIndex(c => c.index === enlargedCam);
-                        const next = (idx + 1) % availableCams.length;
-                        setEnlargedCam(availableCams[next].index);
-                      }}
-                      className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => setEnlargedCam(null)}
-                  className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-red-600 hover:text-white transition"
-                  title="Cerrar"
-                >
-                  <Minimize2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            {/* Enlarged image - uses the same img ref that's already refreshing */}
-            <div className="bg-black rounded-b-xl overflow-hidden">
-              {availableCams.map((cam) => (
-                <div
-                  key={cam.index}
-                  className={enlargedCam === cam.index ? "block" : "hidden"}
-                >
-                  {/* The image ref is already set on the thumbnail img element,
-                      so we show a clone that reads from the same src */}
-                  <EnlargedCameraView camIndex={cam.index} imgRefs={imgRefs} />
+      {/* Enlarged camera overlay - rendered via Portal to escape transformed parents */}
+      {enlargedCam !== null &&
+        createPortal(
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="relative w-full max-w-4xl mx-4">
+              {/* Header */}
+              <div className="flex items-center justify-between bg-gray-900 rounded-t-xl px-4 py-2 border-b border-gray-700">
+                <div className="flex items-center gap-2 text-white">
+                  <Camera className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-medium">
+                    {lookup.privada} - {availableCams.find(c => c.index === enlargedCam)?.alias}
+                  </span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  {/* Navigation between cameras */}
+                  {availableCams.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const idx = availableCams.findIndex(c => c.index === enlargedCam);
+                          const prev = (idx - 1 + availableCams.length) % availableCams.length;
+                          setEnlargedCam(availableCams[prev].index);
+                        }}
+                        className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const idx = availableCams.findIndex(c => c.index === enlargedCam);
+                          const next = (idx + 1) % availableCams.length;
+                          setEnlargedCam(availableCams[next].index);
+                        }}
+                        className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setEnlargedCam(null)}
+                    className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-red-600 hover:text-white transition"
+                    title="Cerrar"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              {/* Enlarged image - uses the same img ref that's already refreshing */}
+              <div className="bg-black rounded-b-xl overflow-hidden">
+                {availableCams.map((cam) => (
+                  <div
+                    key={cam.index}
+                    className={enlargedCam === cam.index ? "block" : "hidden"}
+                  >
+                    <EnlargedCameraView camIndex={cam.index} imgRefs={imgRefs} />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          {/* Click outside to close */}
-          <div
-            className="absolute inset-0 -z-10"
-            onClick={() => setEnlargedCam(null)}
-          />
-        </div>
-      )}
+            {/* Click outside to close */}
+            <div
+              className="absolute inset-0 -z-10"
+              onClick={() => setEnlargedCam(null)}
+            />
+          </div>,
+          document.body
+        )}
     </>
   );
 }

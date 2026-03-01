@@ -29,6 +29,42 @@ interface DigestCacheEntry {
 const digestNonceCache = new Map<string, DigestCacheEntry>();
 const NONCE_CACHE_TTL = 60_000; // 60 segundos
 
+// --- Semaforo por host: limita requests concurrentes al mismo DVR ---
+// Previene agotamiento de conexiones TCP cuando multiples camaras
+// del mismo host se refrescan simultaneamente
+const MAX_CONCURRENT_PER_HOST = 2;
+const hostQueues = new Map<string, { active: number; waiting: Array<() => void> }>();
+
+async function acquireHostSlot(hostKey: string): Promise<void> {
+  if (!hostKey) return;
+  let queue = hostQueues.get(hostKey);
+  if (!queue) {
+    queue = { active: 0, waiting: [] };
+    hostQueues.set(hostKey, queue);
+  }
+  if (queue.active < MAX_CONCURRENT_PER_HOST) {
+    queue.active++;
+    return;
+  }
+  // Esperar a que se libere un slot
+  return new Promise<void>((resolve) => {
+    queue!.waiting.push(resolve);
+  });
+}
+
+function releaseHostSlot(hostKey: string): void {
+  if (!hostKey) return;
+  const queue = hostQueues.get(hostKey);
+  if (!queue) return;
+  if (queue.waiting.length > 0) {
+    const next = queue.waiting.shift()!;
+    next(); // no decrementar active, el slot pasa al siguiente
+  } else {
+    queue.active--;
+    if (queue.active === 0) hostQueues.delete(hostKey); // limpiar
+  }
+}
+
 function getHostKey(url: string): string {
   try {
     const u = new URL(url);
@@ -478,47 +514,56 @@ export async function GET(request: NextRequest) {
     // Obtener credenciales
     const creds = findCredentials(cameraUrl, privada);
     console.log(`[camera-proxy] Credenciales: user="${creds.user}" pass="${creds.pass.substring(0, 3)}***"`);
-    console.log(`[camera-proxy] Iniciando fetch a: ${cameraUrl}`);
 
-    // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
-    const fetchStart = Date.now();
-    const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
-    const fetchMs = Date.now() - fetchStart;
+    // Adquirir slot del semaforo para este host (evita saturar conexiones al DVR)
+    const hostKey = getHostKey(cameraUrl);
+    await acquireHostSlot(hostKey);
 
-    if (result.ok && result.data) {
-      console.log(`[camera-proxy] ✅ Snapshot OK | ${result.data.length} bytes | ${result.contentType} | ${fetchMs}ms`);
-      console.log(`[camera-proxy] ==========================================`);
-      return new NextResponse(new Uint8Array(result.data), {
-        status: 200,
-        headers: {
-          "Content-Type": result.contentType || "image/jpeg",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-          "X-Camera-Index": String(camIndex),
-          "X-Privada": privada.descripcion,
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    }
+    try {
+      console.log(`[camera-proxy] Iniciando fetch a: ${cameraUrl}`);
 
-    // Error - devolver SVG placeholder
-    console.log(`[camera-proxy] ❌ Snapshot FALLO | status=${result.status} | error="${result.error}" | ${fetchMs}ms`);
-    console.log(`[camera-proxy] URL que fallo: ${cameraUrl}`);
-    console.log(`[camera-proxy] ==========================================`);
-    return new NextResponse(
-      noSignalSvg(
-        `Camara ${camIndex} - ${privada.descripcion}`,
-        result.error || `HTTP ${result.status}`
-      ),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "no-cache",
-        },
+      // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
+      const fetchStart = Date.now();
+      const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
+      const fetchMs = Date.now() - fetchStart;
+
+      if (result.ok && result.data) {
+        console.log(`[camera-proxy] ✅ Snapshot OK | ${result.data.length} bytes | ${result.contentType} | ${fetchMs}ms`);
+        console.log(`[camera-proxy] ==========================================`);
+        return new NextResponse(new Uint8Array(result.data), {
+          status: 200,
+          headers: {
+            "Content-Type": result.contentType || "image/jpeg",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+            "X-Camera-Index": String(camIndex),
+            "X-Privada": privada.descripcion,
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
       }
-    );
+
+      // Error - devolver SVG placeholder
+      console.log(`[camera-proxy] ❌ Snapshot FALLO | status=${result.status} | error="${result.error}" | ${fetchMs}ms`);
+      console.log(`[camera-proxy] URL que fallo: ${cameraUrl}`);
+      console.log(`[camera-proxy] ==========================================`);
+      return new NextResponse(
+        noSignalSvg(
+          `Camara ${camIndex} - ${privada.descripcion}`,
+          result.error || `HTTP ${result.status}`
+        ),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "image/svg+xml",
+            "Cache-Control": "no-cache",
+          },
+        }
+      );
+    } finally {
+      releaseHostSlot(hostKey);
+    }
   } catch (error) {
     console.error("[camera-proxy] ❌ ERROR CRITICO:", error);
     return new NextResponse(noSignalSvg("Error", "Error interno del servidor"), {
