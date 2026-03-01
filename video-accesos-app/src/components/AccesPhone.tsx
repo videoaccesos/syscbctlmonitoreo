@@ -18,6 +18,7 @@ import {
   MicOff,
   Volume2,
   VolumeX,
+  ChevronDown,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ export default function AccesPhone({
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
   const [dtmfSent, setDtmfSent] = useState(false);
+  const [minimized, setMinimized] = useState(true);
 
   // Audio controls
   const [muted, setMuted] = useState(false);
@@ -611,6 +613,13 @@ export default function AccesPhone({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-expand when ringing
+  useEffect(() => {
+    if (ringing) {
+      setMinimized(false);
+    }
+  }, [ringing]);
+
   // -----------------------------------------------------------
   // Render
   // -----------------------------------------------------------
@@ -620,6 +629,17 @@ export default function AccesPhone({
       ? "bg-yellow-500 animate-pulse"
       : "bg-red-500";
 
+  // Floating button colors based on state
+  const fabBg = ringing
+    ? "bg-red-500 animate-bounce"
+    : inCall
+      ? "bg-blue-500 animate-pulse"
+      : connected
+        ? "bg-green-500"
+        : connecting || reconnecting
+          ? "bg-yellow-500 animate-pulse"
+          : "bg-gray-500";
+
   return (
     <>
       {/* Hidden audio elements */}
@@ -627,17 +647,39 @@ export default function AccesPhone({
       <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
 
       {/* ============================================================= */}
-      {/* FLOATING SOFTPHONE - margen izquierdo inferior (dentro del sidebar) */}
+      {/* MINIMIZED: Circular floating phone button                     */}
       {/* ============================================================= */}
+      {minimized && (
+        <button
+          onClick={() => setMinimized(false)}
+          className={`fixed bottom-4 left-4 z-[55] flex items-center justify-center w-14 h-14 rounded-full shadow-lg ${fabBg} text-white hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer`}
+          title={`AccesPhone - ${statusText}`}
+        >
+          {ringing ? (
+            <PhoneIncoming className="h-7 w-7" />
+          ) : inCall ? (
+            <Phone className="h-7 w-7" />
+          ) : (
+            <Phone className="h-7 w-7" />
+          )}
+          {/* Small status dot */}
+          <span className={`absolute top-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-white ${statusColor}`} />
+        </button>
+      )}
+
+      {/* ============================================================= */}
+      {/* EXPANDED: Full softphone panel                                */}
+      {/* ============================================================= */}
+      {!minimized && (
       <div className="fixed bottom-0 left-0 z-[55] w-64">
         <div className="bg-slate-900 rounded-t-xl border-t border-x border-slate-700 shadow-2xl overflow-hidden">
-          {/* Header: status + settings */}
+          {/* Header: status + settings + minimize */}
           <div className="flex items-center justify-between px-3 py-2">
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-gray-400" />
               <span className="text-xs font-bold text-white">AccesPhone</span>
               <span className={`h-2 w-2 rounded-full ${statusColor}`} />
-              <span className="text-[10px] text-gray-400 truncate max-w-[100px]">
+              <span className="text-[10px] text-gray-400 truncate max-w-[80px]">
                 {statusText}
               </span>
               {reconnectAttempt > 0 && !connected && (
@@ -646,13 +688,22 @@ export default function AccesPhone({
                 </span>
               )}
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
-              title="Configuracion SIP"
-            >
-              <Settings className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
+                title="Configuracion SIP"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setMinimized(true)}
+                className="p-1 rounded text-gray-500 hover:text-white hover:bg-gray-700 transition"
+                title="Minimizar"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Call state: ringing */}
@@ -849,6 +900,7 @@ export default function AccesPhone({
           </div>
         </div>
       </div>
+      )}
 
       {/* ============================================================= */}
       {/* Settings Modal                                                */}
