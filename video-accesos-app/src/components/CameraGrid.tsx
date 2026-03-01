@@ -89,10 +89,16 @@ export default function CameraGrid({
   }, [lookupCameras]);
 
   // Iniciar/detener refresh de imagenes
+  // Usa carga secuencial: espera a que la imagen termine de cargar antes de pedir la siguiente
+  // Esto evita acumular requests concurrentes que saturan las conexiones del DVR
   useEffect(() => {
-    // Limpiar intervalos anteriores
-    intervalsRef.current.forEach((interval) => clearInterval(interval));
+    // Limpiar timers y handlers anteriores
+    intervalsRef.current.forEach((timer) => clearTimeout(timer));
     intervalsRef.current.clear();
+    imgRefs.current.forEach((img) => {
+      img.onload = null;
+      img.onerror = null;
+    });
 
     if (!active || paused || !lookup?.found || !lookup.cameras?.length) {
       return;
@@ -106,39 +112,58 @@ export default function CameraGrid({
       params.set("telefono", telefono);
     }
 
-    // Para cada camara disponible, crear un interval de refresh
+    // Para cada camara disponible, cargar secuencialmente
+    // Solo pide el siguiente snapshot cuando el actual termina (onload/onerror)
     for (const cam of lookup.cameras) {
       if (!cam.available) continue;
 
       const refreshCamera = () => {
         const img = imgRefs.current.get(cam.index);
-        if (!img) return;
-        // Agregar timestamp para evitar cache
+        if (!img || !mountedRef.current) return;
+
         const camParams = new URLSearchParams(params);
         camParams.set("cam", String(cam.index));
         camParams.set("t", String(Date.now()));
+
+        // Programar siguiente refresh solo cuando esta imagen termine de cargar
+        img.onload = () => {
+          if (!mountedRef.current) return;
+          const tid = setTimeout(refreshCamera, refreshMs);
+          intervalsRef.current.set(cam.index, tid);
+        };
+        img.onerror = () => {
+          if (!mountedRef.current) return;
+          // En error, esperar mas para no saturar la camara
+          const tid = setTimeout(refreshCamera, Math.max(refreshMs, 2000));
+          intervalsRef.current.set(cam.index, tid);
+        };
+
         img.src = `${proxyBase}?${camParams.toString()}`;
       };
 
       // Primer fetch inmediato
       refreshCamera();
-
-      // Refresh periodico
-      const interval = setInterval(refreshCamera, refreshMs);
-      intervalsRef.current.set(cam.index, interval);
     }
 
     return () => {
-      intervalsRef.current.forEach((interval) => clearInterval(interval));
+      intervalsRef.current.forEach((timer) => clearTimeout(timer));
       intervalsRef.current.clear();
+      imgRefs.current.forEach((img) => {
+        img.onload = null;
+        img.onerror = null;
+      });
     };
   }, [active, paused, lookup, telefono, refreshMs]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      intervalsRef.current.forEach((interval) => clearInterval(interval));
+      intervalsRef.current.forEach((timer) => clearTimeout(timer));
       intervalsRef.current.clear();
+      imgRefs.current.forEach((img) => {
+        img.onload = null;
+        img.onerror = null;
+      });
     };
   }, []);
 

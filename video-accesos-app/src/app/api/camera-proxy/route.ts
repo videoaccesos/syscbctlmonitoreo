@@ -14,6 +14,61 @@ function md5(str: string): string {
   return crypto.createHash("md5").update(str).digest("hex");
 }
 
+// --- Cache de nonce digest para evitar doble request por snapshot ---
+// Despues de la primera autenticacion exitosa, reutilizamos el nonce
+// con nc incrementado (1 request en vez de 2 por snapshot)
+interface DigestCacheEntry {
+  realm: string;
+  nonce: string;
+  qop: string;
+  opaque: string;
+  nc: number;
+  timestamp: number;
+}
+
+const digestNonceCache = new Map<string, DigestCacheEntry>();
+const NONCE_CACHE_TTL = 60_000; // 60 segundos
+
+function getHostKey(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}:${u.port || "80"}`;
+  } catch {
+    return "";
+  }
+}
+
+function makeDigestHeader(
+  user: string,
+  pass: string,
+  method: string,
+  uri: string,
+  realm: string,
+  nonce: string,
+  qopRaw: string,
+  opaque: string,
+  nc: number
+): string {
+  const ha1 = md5(`${user}:${realm}:${pass}`);
+  const ha2 = md5(`${method}:${uri}`);
+  const ncHex = nc.toString(16).padStart(8, "0");
+  const cnonce = crypto.randomBytes(8).toString("hex");
+  const qop = qopRaw.split(",")[0].trim();
+
+  let response: string;
+  if (qop) {
+    response = md5(`${ha1}:${nonce}:${ncHex}:${cnonce}:${qop}:${ha2}`);
+  } else {
+    response = md5(`${ha1}:${nonce}:${ha2}`);
+  }
+
+  let header = `Digest username="${user}", realm="${realm}", nonce="${nonce}", uri="${uri}"`;
+  if (qop) header += `, qop=${qop}, nc=${ncHex}, cnonce="${cnonce}"`;
+  header += `, response="${response}"`;
+  if (opaque) header += `, opaque="${opaque}"`;
+  return header;
+}
+
 // Construye la URL completa de la camara a partir de los campos de la privada
 // Si video_N ya es una URL completa (http://...), se usa directamente
 // Si es un path relativo, se combina con dns_N y puerto_N
@@ -98,23 +153,76 @@ function findCredentials(
 }
 
 // Implementacion de HTTP Digest Authentication
+// - Reutiliza nonce en cache para hacer 1 request en vez de 2
+// - Consume response bodies para liberar conexiones TCP (evita "fetch failed")
+// - Propaga signal del cliente para cancelar fetches cuando el browser cancela
 async function fetchWithDigestAuth(
   url: string,
   user: string,
   pass: string,
-  timeoutMs: number = 8000
+  timeoutMs: number = 8000,
+  clientSignal?: AbortSignal
 ): Promise<{ ok: boolean; data: Buffer | null; contentType: string; status: number; error?: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Cancelar fetch a la camara si el cliente se desconecta
+  const onClientAbort = () => controller.abort();
+  if (clientSignal) {
+    if (clientSignal.aborted) {
+      clearTimeout(timeout);
+      return { ok: false, data: null, contentType: "", status: 0, error: "Client disconnected" };
+    }
+    clientSignal.addEventListener("abort", onClientAbort, { once: true });
+  }
+
+  const fetchHeaders = {
+    Accept: "image/jpeg, image/*",
+    "Cache-Control": "no-cache",
+    "User-Agent": "VideoAccesos/2.0",
+  };
+
   try {
+    let uri: string;
+    try { uri = new URL(url).pathname; } catch { uri = "/"; }
+    const hostKey = getHostKey(url);
+
+    // --- Intentar con nonce en cache (1 solo request) ---
+    const cached = hostKey ? digestNonceCache.get(hostKey) : undefined;
+    if (cached && Date.now() - cached.timestamp < NONCE_CACHE_TTL) {
+      cached.nc++;
+      const authHeader = makeDigestHeader(
+        user, pass, "GET", uri,
+        cached.realm, cached.nonce, cached.qop, cached.opaque, cached.nc
+      );
+      const resCached = await fetch(url, {
+        headers: { ...fetchHeaders, Authorization: authHeader },
+        signal: controller.signal,
+      });
+
+      if (resCached.ok) {
+        const buf = Buffer.from(await resCached.arrayBuffer());
+        cached.timestamp = Date.now(); // refrescar TTL
+        return {
+          ok: true, data: buf,
+          contentType: resCached.headers.get("content-type") || "image/jpeg",
+          status: resCached.status,
+        };
+      }
+
+      // Nonce expirado u otro error - consumir body para liberar conexion
+      await resCached.arrayBuffer().catch(() => {});
+      if (resCached.status === 401) {
+        digestNonceCache.delete(hostKey); // nonce stale, caer al flujo completo
+      } else {
+        return { ok: false, data: null, contentType: "", status: resCached.status, error: `HTTP ${resCached.status}` };
+      }
+    }
+
+    // --- Flujo completo de 2 pasos (sin cache o nonce expirado) ---
     // Primer request - esperamos 401 con challenge
     const res1 = await fetch(url, {
-      headers: {
-        Accept: "image/jpeg, image/*",
-        "Cache-Control": "no-cache",
-        "User-Agent": "VideoAccesos/2.0",
-      },
+      headers: fetchHeaders,
       signal: controller.signal,
     });
 
@@ -122,52 +230,37 @@ async function fetchWithDigestAuth(
     if (res1.ok) {
       const buf = Buffer.from(await res1.arrayBuffer());
       return {
-        ok: true,
-        data: buf,
+        ok: true, data: buf,
         contentType: res1.headers.get("content-type") || "image/jpeg",
         status: res1.status,
       };
     }
 
     if (res1.status !== 401) {
-      return {
-        ok: false,
-        data: null,
-        contentType: "",
-        status: res1.status,
-        error: `HTTP ${res1.status}`,
-      };
+      await res1.arrayBuffer().catch(() => {}); // CRITICO: consumir body para liberar conexion
+      return { ok: false, data: null, contentType: "", status: res1.status, error: `HTTP ${res1.status}` };
     }
 
     const wwwAuth = res1.headers.get("www-authenticate") || "";
+    await res1.arrayBuffer().catch(() => {}); // CRITICO: consumir body del 401 para liberar conexion
 
     // Intentar Basic Auth si no es Digest
     if (!wwwAuth.toLowerCase().startsWith("digest")) {
       const basicAuth = Buffer.from(`${user}:${pass}`).toString("base64");
       const res2 = await fetch(url, {
-        headers: {
-          Authorization: `Basic ${basicAuth}`,
-          Accept: "image/jpeg, image/*",
-          "Cache-Control": "no-cache",
-        },
+        headers: { ...fetchHeaders, Authorization: `Basic ${basicAuth}` },
         signal: controller.signal,
       });
       if (res2.ok) {
         const buf = Buffer.from(await res2.arrayBuffer());
         return {
-          ok: true,
-          data: buf,
+          ok: true, data: buf,
           contentType: res2.headers.get("content-type") || "image/jpeg",
           status: res2.status,
         };
       }
-      return {
-        ok: false,
-        data: null,
-        contentType: "",
-        status: res2.status,
-        error: "Basic auth failed",
-      };
+      await res2.arrayBuffer().catch(() => {}); // consumir body para liberar conexion
+      return { ok: false, data: null, contentType: "", status: res2.status, error: "Basic auth failed" };
     }
 
     // Parsear challenge Digest
@@ -176,70 +269,38 @@ async function fetchWithDigestAuth(
     const qopRaw = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
     const opaque = wwwAuth.match(/opaque="([^"]+)"/)?.[1] || "";
 
-    // Calcular response
-    const uri = new URL(url).pathname;
-    const ha1 = md5(`${user}:${realm}:${pass}`);
-    const ha2 = md5(`GET:${uri}`);
-    const nc = "00000001";
-    const cnonce = crypto.randomBytes(8).toString("hex");
-
-    let response: string;
-    const qop = qopRaw.split(",")[0].trim();
-    if (qop) {
-      response = md5(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`);
-    } else {
-      response = md5(`${ha1}:${nonce}:${ha2}`);
-    }
-
-    // Construir Authorization header
-    let authHeader = `Digest username="${user}", realm="${realm}", nonce="${nonce}", uri="${uri}"`;
-    if (qop) {
-      authHeader += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
-    }
-    authHeader += `, response="${response}"`;
-    if (opaque) {
-      authHeader += `, opaque="${opaque}"`;
-    }
+    const nc = 1;
+    const authHeader = makeDigestHeader(user, pass, "GET", uri, realm, nonce, qopRaw, opaque, nc);
 
     // Segundo request con credenciales digest
     const res3 = await fetch(url, {
-      headers: {
-        Authorization: authHeader,
-        Accept: "image/jpeg, image/*",
-        "Cache-Control": "no-cache",
-        "User-Agent": "VideoAccesos/2.0",
-      },
+      headers: { ...fetchHeaders, Authorization: authHeader },
       signal: controller.signal,
     });
 
     if (res3.ok) {
       const buf = Buffer.from(await res3.arrayBuffer());
+      // Guardar nonce en cache para reutilizar en siguientes requests
+      if (hostKey) {
+        digestNonceCache.set(hostKey, { realm, nonce, qop: qopRaw, opaque, nc, timestamp: Date.now() });
+      }
       return {
-        ok: true,
-        data: buf,
+        ok: true, data: buf,
         contentType: res3.headers.get("content-type") || "image/jpeg",
         status: res3.status,
       };
     }
 
-    return {
-      ok: false,
-      data: null,
-      contentType: "",
-      status: res3.status,
-      error: `Digest auth failed: HTTP ${res3.status}`,
-    };
+    await res3.arrayBuffer().catch(() => {}); // consumir body para liberar conexion
+    return { ok: false, data: null, contentType: "", status: res3.status, error: `Digest auth failed: HTTP ${res3.status}` };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return {
-      ok: false,
-      data: null,
-      contentType: "",
-      status: 0,
-      error: message.includes("abort") ? "Timeout" : message,
-    };
+    return { ok: false, data: null, contentType: "", status: 0, error: message.includes("abort") ? "Timeout" : message };
   } finally {
     clearTimeout(timeout);
+    if (clientSignal) {
+      clientSignal.removeEventListener("abort", onClientAbort);
+    }
   }
 }
 
@@ -419,9 +480,9 @@ export async function GET(request: NextRequest) {
     console.log(`[camera-proxy] Credenciales: user="${creds.user}" pass="${creds.pass.substring(0, 3)}***"`);
     console.log(`[camera-proxy] Iniciando fetch a: ${cameraUrl}`);
 
-    // Fetch snapshot con digest auth
+    // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
     const fetchStart = Date.now();
-    const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass);
+    const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
     const fetchMs = Date.now() - fetchStart;
 
     if (result.ok && result.data) {
