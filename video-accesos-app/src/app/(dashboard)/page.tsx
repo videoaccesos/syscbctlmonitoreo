@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Shield,
@@ -48,22 +48,35 @@ function getEstatusColor(id: number) {
   }
 }
 
-export default function DashboardPage() {
-  const { data: session } = useSession();
+function AccessDeniedBanner() {
   const searchParams = useSearchParams();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("acceso") === "denegado") {
       setAccessDenied(true);
-      // Clear the URL param
       window.history.replaceState({}, "", "/");
       const timer = setTimeout(() => setAccessDenied(false), 5000);
       return () => clearTimeout(timer);
     }
   }, [searchParams]);
+
+  if (!accessDenied) return null;
+
+  return (
+    <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center gap-2">
+      <ShieldX className="h-5 w-5 flex-shrink-0" />
+      <span>
+        <strong>Acceso denegado.</strong> No tiene permisos para acceder a esa sección. Contacte al administrador.
+      </span>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const { data: session } = useSession();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -87,14 +100,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {accessDenied && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center gap-2">
-          <ShieldX className="h-5 w-5 flex-shrink-0" />
-          <span>
-            <strong>Acceso denegado.</strong> No tiene permisos para acceder a esa sección. Contacte al administrador.
-          </span>
-        </div>
-      )}
+      <Suspense>
+        <AccessDeniedBanner />
+      </Suspense>
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
           Bienvenido, {session?.user?.name || "Operador"}
