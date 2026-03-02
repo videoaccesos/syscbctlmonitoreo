@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/seguridad/usuarios/[id] - Obtener un usuario por ID
 export async function GET(
@@ -20,6 +20,8 @@ export async function GET(
     if (isNaN(usuarioId)) {
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
+
+    await fixZeroDates();
 
     const usuario = await prisma.usuario.findUnique({
       where: { id: usuarioId },

@@ -13,42 +13,55 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 // schema (DateTime?), so we first try to make it nullable, then clean up.
 // Runs once per application lifecycle; subsequent calls are no-ops.
 let zeroDatesFixed = false;
+
+// All table/column pairs known to contain zero dates in this legacy DB
+const ZERO_DATE_COLUMNS = [
+  { table: "privadas", column: "vence_contrato" },
+  { table: "empleados", column: "fecha_baja" },
+  { table: "usuarios", column: "cambio_contrasena" },
+] as const;
+
 export async function fixZeroDates() {
   if (zeroDatesFixed) return;
   try {
-    // Step 1: Align DB column with Prisma schema (DateTime? = nullable)
-    try {
-      await prisma.$executeRawUnsafe(
-        `ALTER TABLE privadas MODIFY COLUMN vence_contrato DATE NULL`
-      );
-    } catch {
-      // ALTER may fail if user lacks ALTER privilege; continue to try UPDATE
-    }
-
-    // Step 2: Replace invalid zero dates with NULL
-    const result: number = await prisma.$executeRawUnsafe(
-      `UPDATE privadas SET vence_contrato = NULL WHERE vence_contrato < '1000-01-01'`
-    );
-    zeroDatesFixed = true;
-    if (result > 0) {
-      console.log(
-        `[DB] Fixed ${result} rows with invalid zero dates in privadas.vence_contrato`
-      );
-    }
-  } catch {
-    // Fallback: if NULL still not allowed, set to a valid sentinel date
-    try {
-      const result: number = await prisma.$executeRawUnsafe(
-        `UPDATE privadas SET vence_contrato = '1970-01-01' WHERE vence_contrato < '1000-01-01'`
-      );
-      zeroDatesFixed = true;
-      if (result > 0) {
-        console.log(
-          `[DB] Fixed ${result} rows (fallback to 1970-01-01) in privadas.vence_contrato`
+    for (const { table, column } of ZERO_DATE_COLUMNS) {
+      // Step 1: Try to align DB column with Prisma schema (DateTime? = nullable)
+      try {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE ${table} MODIFY COLUMN ${column} DATE NULL`
         );
+      } catch {
+        // ALTER may fail if user lacks ALTER privilege; continue to try UPDATE
       }
-    } catch (e) {
-      console.error("[DB] Error fixing zero dates:", e);
+
+      // Step 2: Replace invalid zero dates with NULL
+      try {
+        const result: number = await prisma.$executeRawUnsafe(
+          `UPDATE ${table} SET ${column} = NULL WHERE ${column} < '1000-01-01'`
+        );
+        if (result > 0) {
+          console.log(
+            `[DB] Fixed ${result} rows with invalid zero dates in ${table}.${column}`
+          );
+        }
+      } catch {
+        // Fallback: if NULL still not allowed, set to a valid sentinel date
+        try {
+          const result: number = await prisma.$executeRawUnsafe(
+            `UPDATE ${table} SET ${column} = '1970-01-01' WHERE ${column} < '1000-01-01'`
+          );
+          if (result > 0) {
+            console.log(
+              `[DB] Fixed ${result} rows (fallback to 1970-01-01) in ${table}.${column}`
+            );
+          }
+        } catch (e) {
+          console.error(`[DB] Error fixing zero dates in ${table}.${column}:`, e);
+        }
+      }
     }
+    zeroDatesFixed = true;
+  } catch (e) {
+    console.error("[DB] Error fixing zero dates:", e);
   }
 }

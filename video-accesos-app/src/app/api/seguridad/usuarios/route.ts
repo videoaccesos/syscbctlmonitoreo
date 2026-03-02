@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/seguridad/usuarios - Listar usuarios con busqueda y paginacion
 export async function GET(request: NextRequest) {
@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
     const skip = (page - 1) * pageSize;
+
+    await fixZeroDates();
 
     const where = {
       ...(search

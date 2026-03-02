@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/empleados/[id] - Obtener un empleado por ID
 export async function GET(
@@ -20,6 +20,8 @@ export async function GET(
     if (isNaN(empleadoId)) {
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
+
+    await fixZeroDates();
 
     const empleado = await prisma.empleado.findUnique({
       where: { id: empleadoId },
