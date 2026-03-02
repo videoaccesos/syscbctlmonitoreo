@@ -116,10 +116,22 @@ export const authOptions: NextAuthOptions = {
 
           const routes = new Set<string>();
           for (const row of permisos) {
-            if (row.funcion) routes.add(row.funcion);
-            if (row.ruta_acceso) routes.add(row.ruta_acceso);
+            // Solo agregar valores que sean rutas Next.js validas (empiezan con "/")
+            // Esto filtra funciones PHP legacy como "listar", "editar", etc.
+            if (row.funcion && row.funcion.startsWith("/")) routes.add(row.funcion);
+            if (row.ruta_acceso && row.ruta_acceso.startsWith("/")) routes.add(row.ruta_acceso);
           }
+
+          // Anti-lockout: si el usuario tiene ALGUN permiso configurado,
+          // siempre incluir rutas de Seguridad para que pueda arreglar permisos
+          if (routes.size > 0) {
+            routes.add("/seguridad/usuarios");
+            routes.add("/seguridad/grupos-usuarios");
+            routes.add("/seguridad/permisos");
+          }
+
           allowedRoutes = Array.from(routes);
+          console.log("[AUTH] Rutas permitidas para usuario", usuario.id, ":", allowedRoutes);
         } catch (err) {
           console.error("[AUTH] Error obteniendo permisos (login continúa):", err);
         }

@@ -83,6 +83,8 @@ const fullNavigation: NavItem[] = [
 /**
  * Filtra el menu segun las rutas permitidas del usuario.
  * "/" (Inicio) siempre se muestra.
+ * "Seguridad" siempre se muestra (anti-lockout: evita que un admin
+ * se quede sin acceso al panel de permisos por mala configuracion).
  * Si el usuario no tiene permisos configurados (array vacio),
  * se muestra el menu completo para no bloquear el acceso durante
  * la primera configuracion.
@@ -96,12 +98,21 @@ function filterNavigation(
     return items;
   }
 
-  const allowed = new Set(allowedRoutes);
+  // Solo considerar rutas validas de Next.js (empiezan con "/")
+  const validRoutes = allowedRoutes.filter((r) => r.startsWith("/"));
+  if (validRoutes.length === 0) {
+    return items;
+  }
+
+  const allowed = new Set(validRoutes);
 
   return items
     .map((item) => {
       // Inicio siempre se muestra
       if (item.href === "/") return item;
+
+      // Seguridad siempre se muestra (anti-lockout)
+      if (item.label === "Seguridad") return item;
 
       // Items directos (sin hijos)
       if (item.href) {
