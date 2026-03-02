@@ -31,11 +31,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Obtener todos los procesos con subprocesos
+    // Obtener todos los procesos con subprocesos (solo los que tienen padre,
+    // ya que los padres son categorias y los hijos son los items de menu reales)
     const procesos = await prisma.proceso.findMany({
+      where: {
+        subprocesos: { some: {} }, // Solo procesos que tienen al menos un subproceso
+      },
       include: {
         subprocesos: {
           orderBy: { id: "asc" },
+        },
+        procesoPadre: {
+          select: { id: true, nombre: true },
         },
       },
       orderBy: { id: "asc" },

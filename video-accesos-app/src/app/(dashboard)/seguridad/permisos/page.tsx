@@ -7,6 +7,7 @@ import {
   Save,
   ChevronRight,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +60,35 @@ export default function PermisosPage() {
   const [expandedProcesos, setExpandedProcesos] = useState<
     Record<number, boolean>
   >({});
+  const [syncing, setSyncing] = useState(false);
+
+  // -----------------------------------------------------------
+  // Sync procesos/subprocesos with app routes
+  // -----------------------------------------------------------
+  const handleSync = async () => {
+    setSyncing(true);
+    setError("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/seguridad/sync-procesos", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Error al sincronizar");
+      const json = await res.json();
+      setSuccessMsg(
+        `Catálogo sincronizado. ${json.totalCreated} elemento(s) creado(s).`
+      );
+      setTimeout(() => setSuccessMsg(""), 5000);
+      // Reload permissions if a group is selected
+      if (selectedGrupoId) {
+        fetchPermisos(selectedGrupoId);
+      }
+    } catch {
+      setError("Error al sincronizar catálogo de procesos");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // -----------------------------------------------------------
   // Fetch grupos de usuarios
@@ -235,14 +265,25 @@ export default function PermisosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <KeyRound className="h-7 w-7 text-blue-600" />
-          Permisos de Acceso
-        </h1>
-        <p className="text-gray-500 mt-1 text-sm">
-          Configura los permisos de acceso por grupo de usuarios
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <KeyRound className="h-7 w-7 text-blue-600" />
+            Permisos de Acceso
+          </h1>
+          <p className="text-gray-500 mt-1 text-sm">
+            Configura los permisos de acceso por grupo de usuarios
+          </p>
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition"
+          title="Sincronizar catálogo de procesos con las rutas del sistema"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+          Sincronizar Catálogo
+        </button>
       </div>
 
       {/* Group selector */}

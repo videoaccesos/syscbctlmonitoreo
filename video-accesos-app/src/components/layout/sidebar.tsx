@@ -5,23 +5,15 @@ import { usePathname } from "next/navigation";
 import {
   Shield,
   Building2,
-  Home,
-  Users,
-  CreditCard,
   ClipboardList,
-  Wrench,
-  Phone,
-  DollarSign,
   BarChart3,
-  Settings,
-  UserCog,
   KeyRound,
   ChevronDown,
   LogOut,
   Monitor,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { signOut, useSession } from "next-auth/react";
+import { useState, useMemo } from "react";
 
 interface NavItem {
   label: string;
@@ -30,10 +22,16 @@ interface NavItem {
   children?: { label: string; href: string }[];
 }
 
-const navigation: NavItem[] = [
+/** Menu completo del sistema. Se filtra segun permisos del usuario. */
+const fullNavigation: NavItem[] = [
   {
     label: "Inicio",
     href: "/",
+    icon: <Monitor className="h-5 w-5" />,
+  },
+  {
+    label: "Terminal de Monitoreo",
+    href: "/procesos/monitoristas",
     icon: <Monitor className="h-5 w-5" />,
   },
   {
@@ -82,9 +80,59 @@ const navigation: NavItem[] = [
   },
 ];
 
+/**
+ * Filtra el menu segun las rutas permitidas del usuario.
+ * "/" (Inicio) siempre se muestra.
+ * Si el usuario no tiene permisos configurados (array vacio),
+ * se muestra el menu completo para no bloquear el acceso durante
+ * la primera configuracion.
+ */
+function filterNavigation(
+  items: NavItem[],
+  allowedRoutes: string[]
+): NavItem[] {
+  // Si no hay permisos configurados, mostrar todo (modo bootstrap)
+  if (!allowedRoutes || allowedRoutes.length === 0) {
+    return items;
+  }
+
+  const allowed = new Set(allowedRoutes);
+
+  return items
+    .map((item) => {
+      // Inicio siempre se muestra
+      if (item.href === "/") return item;
+
+      // Items directos (sin hijos)
+      if (item.href) {
+        return allowed.has(item.href) ? item : null;
+      }
+
+      // Items con hijos: filtrar los hijos
+      if (item.children) {
+        const filteredChildren = item.children.filter((child) =>
+          allowed.has(child.href)
+        );
+        // Solo mostrar el padre si tiene al menos un hijo visible
+        if (filteredChildren.length === 0) return null;
+        return { ...item, children: filteredChildren };
+      }
+
+      return null;
+    })
+    .filter((item): item is NavItem => item !== null);
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+
+  // Filtrar navegacion segun permisos del usuario
+  const navigation = useMemo(() => {
+    const allowedRoutes = session?.user?.allowedRoutes || [];
+    return filterNavigation(fullNavigation, allowedRoutes);
+  }, [session?.user?.allowedRoutes]);
 
   const toggleMenu = (label: string) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));

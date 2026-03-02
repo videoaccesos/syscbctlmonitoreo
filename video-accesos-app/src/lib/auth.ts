@@ -98,6 +98,32 @@ export const authOptions: NextAuthOptions = {
           console.error("[AUTH] Error en bitácora/update (login continúa):", err);
         }
 
+        // Obtener rutas permitidas para este usuario basado en sus grupos/permisos
+        let allowedRoutes: string[] = [];
+        try {
+          const permisos = await prisma.$queryRawUnsafe<
+            Array<{ funcion: string | null; ruta_acceso: string | null }>
+          >(`
+            SELECT DISTINCT sp.funcion, p.ruta_acceso
+            FROM subprocesos sp
+            INNER JOIN permisos_acceso pa ON pa.subproceso_id = sp.subproceso_id
+            INNER JOIN grupos_usuarios gu ON gu.grupo_usuario_id = pa.grupo_usuario_id
+            INNER JOIN grupos_usuarios_detalles gud ON gud.grupo_usuario_id = gu.grupo_usuario_id
+            INNER JOIN procesos p ON p.proceso_id = sp.proceso_id
+            WHERE gud.usuario_id = ?
+              AND gu.estatus_id = 1
+          `, usuario.id);
+
+          const routes = new Set<string>();
+          for (const row of permisos) {
+            if (row.funcion) routes.add(row.funcion);
+            if (row.ruta_acceso) routes.add(row.ruta_acceso);
+          }
+          allowedRoutes = Array.from(routes);
+        } catch (err) {
+          console.error("[AUTH] Error obteniendo permisos (login continúa):", err);
+        }
+
         return {
           id: String(usuario.id),
           name: usuario.empleado
@@ -111,6 +137,7 @@ export const authOptions: NextAuthOptions = {
           nroOperador: usuario.empleado?.nroOperador,
           modificarFechas: usuario.modificarFechas,
           privadaId: usuario.privadaId,
+          allowedRoutes,
         };
       },
     }),
@@ -125,6 +152,7 @@ export const authOptions: NextAuthOptions = {
         token.nroOperador = u.nroOperador as string | undefined;
         token.modificarFechas = u.modificarFechas as string;
         token.privadaId = u.privadaId as number | null;
+        token.allowedRoutes = u.allowedRoutes as string[];
       }
       return token;
     },
@@ -136,6 +164,7 @@ export const authOptions: NextAuthOptions = {
         session.user.nroOperador = token.nroOperador as string | undefined;
         session.user.modificarFechas = token.modificarFechas as string;
         session.user.privadaId = token.privadaId as number | null;
+        session.user.allowedRoutes = token.allowedRoutes as string[];
       }
       return session;
     },

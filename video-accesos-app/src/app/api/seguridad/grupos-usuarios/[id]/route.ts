@@ -24,6 +24,20 @@ export async function GET(
 
     await fixZeroDates();
 
+    // First clean up orphaned subproceso references that cause
+    // "Field proceso is required to return data, got null" errors.
+    // This happens because relationMode="prisma" has no real FK constraints.
+    await prisma.$executeRawUnsafe(`
+      DELETE pa FROM permisos_acceso pa
+      LEFT JOIN subprocesos sp ON pa.subproceso_id = sp.subproceso_id
+      WHERE sp.subproceso_id IS NULL
+    `);
+    await prisma.$executeRawUnsafe(`
+      DELETE sp FROM subprocesos sp
+      LEFT JOIN procesos p ON sp.proceso_id = p.proceso_id
+      WHERE p.proceso_id IS NULL
+    `);
+
     const grupo = await prisma.grupoUsuario.findUnique({
       where: { id: grupoId },
       include: {

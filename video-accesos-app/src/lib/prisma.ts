@@ -86,6 +86,27 @@ export async function fixZeroDates() {
       console.error("[DB] Error cleaning orphaned grupo-usuario details:", e);
     }
 
+    // Clean up orphaned subprocesos (proceso_id that doesn't exist in procesos)
+    try {
+      const r1: number = await prisma.$executeRawUnsafe(
+        `DELETE pa FROM permisos_acceso pa
+         LEFT JOIN subprocesos sp ON pa.subproceso_id = sp.subproceso_id
+         WHERE sp.subproceso_id IS NULL`
+      );
+      const r2: number = await prisma.$executeRawUnsafe(
+        `DELETE sp FROM subprocesos sp
+         LEFT JOIN procesos p ON sp.proceso_id = p.proceso_id
+         WHERE p.proceso_id IS NULL`
+      );
+      if (r1 > 0 || r2 > 0) {
+        console.log(
+          `[DB] Cleaned up ${r1} orphaned permisos + ${r2} orphaned subprocesos`
+        );
+      }
+    } catch (e) {
+      console.error("[DB] Error cleaning orphaned subprocesos:", e);
+    }
+
     zeroDatesFixed = true;
   } catch (e) {
     console.error("[DB] Error fixing zero dates:", e);

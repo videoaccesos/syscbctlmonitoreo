@@ -9,6 +9,7 @@ declare module "next-auth" {
       nroOperador: string | undefined;
       modificarFechas: string; // "S" o "N" (char 1 en BD)
       privadaId: number | null;
+      allowedRoutes: string[]; // rutas permitidas segun permisos del grupo
     };
   }
 
@@ -19,6 +20,7 @@ declare module "next-auth" {
     nroOperador: string | undefined;
     modificarFechas: string;
     privadaId: number | null;
+    allowedRoutes: string[];
   }
 }
 
@@ -30,5 +32,6 @@ declare module "next-auth/jwt" {
     nroOperador: string | undefined;
     modificarFechas: string;
     privadaId: number | null;
+    allowedRoutes: string[];
   }
 }
