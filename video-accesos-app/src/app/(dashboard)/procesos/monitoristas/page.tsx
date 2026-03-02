@@ -422,6 +422,19 @@ export default function MonitoristasPage() {
   }, [formPrivadaId]);
 
   // -----------------------------------------------------------
+  // ESC key closes camera panel
+  // -----------------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showVideo) {
+        setShowVideo(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showVideo]);
+
+  // -----------------------------------------------------------
   // Search residencias
   // -----------------------------------------------------------
   const buscarResidencias = useCallback(async () => {
@@ -564,24 +577,38 @@ export default function MonitoristasPage() {
         );
         if (res.ok) {
           const json = await res.json();
-          if (json.found && json.data) {
-            setIncomingCallResidencia({
-              id: json.data.id,
-              nroCasa: json.data.nroCasa,
-              calle: json.data.calle,
-              privada: json.data.privada,
-              observaciones: json.data.observaciones,
-              estatusId: json.data.estatusId,
-            });
+          if (json.found) {
+            const isResidenciaMatch = json.matchLevel === "residencia" && json.data;
 
-            // Auto-populate form
-            const privId = String(json.data.privada.id);
-            setFormPrivadaId(privId);
-            setSelectedResidencia(json.data);
-            setResidencias([]);
-            setResidenciaSearch("");
-            setFormSolicitanteId("");
-            setFormSolicitanteNombre("");
+            if (isResidenciaMatch) {
+              // Match exacto a nivel residencia - auto-poblar todo
+              setIncomingCallResidencia({
+                id: json.data.id,
+                nroCasa: json.data.nroCasa,
+                calle: json.data.calle,
+                privada: json.data.privada,
+                observaciones: json.data.observaciones,
+                estatusId: json.data.estatusId,
+              });
+
+              const privId = String(json.data.privada.id);
+              setFormPrivadaId(privId);
+              setSelectedResidencia(json.data);
+              setResidencias([]);
+              setResidenciaSearch("");
+              setFormSolicitanteId("");
+              setFormSolicitanteNombre("");
+            } else if (json.matchLevel === "privada" && json.privada) {
+              // Match a nivel privada - solo seleccionar la privada, dejar residencia limpia
+              setIncomingCallResidencia(null);
+              const privId = String(json.privada.id);
+              setFormPrivadaId(privId);
+              setSelectedResidencia(null);
+              setResidencias([]);
+              setResidenciaSearch("");
+              setFormSolicitanteId("");
+              setFormSolicitanteNombre("");
+            }
 
             // Start timer
             setTimerRunning(true);
@@ -1677,17 +1704,21 @@ export default function MonitoristasPage() {
       {/* ================================================================= */}
       {(formPrivadaId || incomingCallNumber) && (
         <>
-          {/* Toggle tab on right edge (visible when panel is collapsed) */}
-          {!showVideo && (
-            <button
-              onClick={() => setShowVideo(true)}
-              className="fixed right-0 top-1/2 -translate-y-1/2 z-[40] bg-gray-900 text-white rounded-l-xl px-2 py-4 shadow-lg hover:bg-gray-800 transition-all group"
-              title="Mostrar camaras"
-            >
+          {/* Toggle tab on right edge - always visible, toggles open/close */}
+          <button
+            onClick={() => setShowVideo((v) => !v)}
+            className={`fixed top-1/2 -translate-y-1/2 z-[41] bg-gray-900 text-white rounded-l-xl px-2 py-4 shadow-lg hover:bg-gray-800 transition-all group ${
+              showVideo ? "right-[340px]" : "right-0"
+            }`}
+            title={showVideo ? "Ocultar camaras (Esc)" : "Mostrar camaras"}
+          >
+            {showVideo ? (
+              <PanelRightClose className="h-5 w-5 mb-2" />
+            ) : (
               <PanelRightOpen className="h-5 w-5 mb-2" />
-              <Video className="h-5 w-5 text-orange-400" />
-            </button>
-          )}
+            )}
+            <Video className="h-5 w-5 text-orange-400" />
+          </button>
 
           {/* Sliding panel */}
           <div
@@ -1711,7 +1742,7 @@ export default function MonitoristasPage() {
                 <button
                   onClick={() => setShowVideo(false)}
                   className="p-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition"
-                  title="Ocultar camaras"
+                  title="Ocultar camaras (Esc)"
                 >
                   <PanelRightClose className="h-4 w-4" />
                 </button>

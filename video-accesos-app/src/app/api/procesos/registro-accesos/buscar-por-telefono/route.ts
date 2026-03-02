@@ -75,6 +75,9 @@ export async function GET(request: NextRequest) {
     const numberVariants = [cleanNumber, telefono];
     if (last10) numberVariants.push(last10);
 
+    // matchLevel indica si la coincidencia fue a nivel residencia (exacta) o privada (general)
+    let matchLevel: "residencia" | "privada" = "residencia";
+
     // 1. Buscar en residencia por telefonoInterfon (busqueda principal)
     let residencia = await prisma.residencia.findFirst({
       where: {
@@ -102,7 +105,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Si aun no se encuentra, buscar via privada (telefono/celular de la privada)
-    //    y devolver la primera residencia activa de esa privada
+    //    Solo se identifica la privada, no se asigna una residencia por defecto
     if (!residencia) {
       const privada = await prisma.privada.findFirst({
         where: {
@@ -112,17 +115,16 @@ export async function GET(request: NextRequest) {
             { celular: num },
           ]),
         },
-        select: { id: true },
+        select: { id: true, descripcion: true },
       });
 
       if (privada) {
-        residencia = await prisma.residencia.findFirst({
-          where: {
-            privadaId: privada.id,
-            estatusId: { in: [1, 2, 3] },
-          },
-          select: residenciaSelect,
-          orderBy: { nroCasa: "asc" },
+        matchLevel = "privada";
+        return NextResponse.json({
+          found: true,
+          matchLevel,
+          privada: { id: privada.id, descripcion: privada.descripcion },
+          data: null,
         });
       }
     }
@@ -136,17 +138,16 @@ export async function GET(request: NextRequest) {
             contains: nombre.trim(),
           },
         },
-        select: { id: true },
+        select: { id: true, descripcion: true },
       });
 
       if (privada) {
-        residencia = await prisma.residencia.findFirst({
-          where: {
-            privadaId: privada.id,
-            estatusId: { in: [1, 2, 3] },
-          },
-          select: residenciaSelect,
-          orderBy: { nroCasa: "asc" },
+        matchLevel = "privada";
+        return NextResponse.json({
+          found: true,
+          matchLevel,
+          privada: { id: privada.id, descripcion: privada.descripcion },
+          data: null,
         });
       }
     }
@@ -160,6 +161,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       found: true,
+      matchLevel,
       data: residencia,
     });
   } catch (error) {
