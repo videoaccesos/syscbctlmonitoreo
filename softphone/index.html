@@ -636,21 +636,166 @@
             closeSettings(); connectToServer();
         }
 
+        // ==========================================
+        // DEBUG LOGGING
+        // ==========================================
+        const debugLogs = [];
+        function debugLog(level, category, msg, data) {
+            const ts = new Date().toLocaleTimeString('es-MX', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit', fractionalSecondDigits:3});
+            const entry = {ts, level, category, msg, data};
+            debugLogs.push(entry);
+            if(debugLogs.length > 500) debugLogs.shift();
+            const styles = {error:'color:#ef4444;font-weight:bold', warn:'color:#f59e0b', info:'color:#3b82f6', debug:'color:#6b7280'};
+            const prefix = `[${ts}] [${category}]`;
+            if(data !== undefined) {
+                console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`%c${prefix} ${msg}`, styles[level] || '', data);
+            } else {
+                console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`%c${prefix} ${msg}`, styles[level] || '');
+            }
+            updateDebugPanel(entry);
+        }
+
+        function updateDebugPanel(entry) {
+            const panel = document.getElementById('debugLogContent');
+            if(!panel) return;
+            const colors = {error:'#ef4444', warn:'#f59e0b', info:'#3b82f6', debug:'#6b7280'};
+            const line = document.createElement('div');
+            line.style.cssText = `color:${colors[entry.level]||'#fff'};font-size:11px;padding:1px 4px;border-bottom:1px solid #333;word-break:break-all;`;
+            line.textContent = `${entry.ts} [${entry.category}] ${entry.msg}` + (entry.data ? ' | ' + (typeof entry.data === 'object' ? JSON.stringify(entry.data) : entry.data) : '');
+            panel.appendChild(line);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
         function connectToServer() {
-            if(!config.extension||!config.password){updateStatus('Config incompleta',false);return;}
+            if(!config.extension||!config.password){
+                debugLog('warn','CONFIG','Configuración incompleta - falta extensión o password', {extension:config.extension?'SET':'EMPTY', password:config.password?'SET':'EMPTY'});
+                updateStatus('Config incompleta',false);return;
+            }
+
+            debugLog('info','CONNECT','=== Iniciando conexión SIP ===');
+            debugLog('info','CONNECT','Servidor WebSocket: ' + config.wsServer);
+            debugLog('info','CONNECT','Extensión: ' + config.extension);
+            debugLog('info','CONNECT','Dominio SIP: ' + config.domain);
+            debugLog('info','CONNECT','URI SIP: sip:' + config.extension + '@' + config.domain);
             updateStatus('Conectando...',false);
+
             try{
-                if(ua){ua.stop();ua=null;}
+                if(ua){
+                    debugLog('info','CONNECT','Deteniendo UA anterior...');
+                    ua.stop();ua=null;
+                }
+
+                debugLog('info','WS','Creando WebSocket hacia: ' + config.wsServer);
                 const socket=new JsSIP.WebSocketInterface(config.wsServer);
-                ua=new JsSIP.UA({sockets:[socket],uri:'sip:'+config.extension+'@'+config.domain,password:config.password,register:true,register_expires:600,session_timers:false,user_agent:'Access Phone v3.1'});
-                ua.on('connected',()=>updateStatus('Registrando...',false));
-                ua.on('disconnected',()=>updateStatus('Desconectado',false));
-                ua.on('registered',()=>updateStatus('Conectado',true));
-                ua.on('unregistered',()=>updateStatus('Desconectado',false));
-                ua.on('registrationFailed',()=>updateStatus('Error registro',false));
-                ua.on('newRTCSession',(e)=>{if(e.originator==='remote')handleIncomingCall(e.session);});
+
+                // Monitor WebSocket connection at low level
+                const origConnect = socket.connect.bind(socket);
+                socket.connect = function() {
+                    debugLog('info','WS','WebSocket.connect() llamado');
+                    return origConnect();
+                };
+
+                socket.onconnect = function() { debugLog('info','WS','WebSocket CONECTADO'); };
+                socket.ondisconnect = function(error, code, reason) {
+                    debugLog('error','WS','WebSocket DESCONECTADO', {error:!!error, code:code, reason:reason});
+                };
+                socket.ondata = function(data) {
+                    const preview = typeof data === 'string' ? data.substring(0,200) : '(binary)';
+                    debugLog('debug','WS','<< Datos recibidos: ' + preview);
+                };
+
+                const uaConfig = {
+                    sockets:[socket],
+                    uri:'sip:'+config.extension+'@'+config.domain,
+                    password:config.password,
+                    register:true,
+                    register_expires:600,
+                    session_timers:false,
+                    user_agent:'Access Phone v3.1'
+                };
+                debugLog('info','SIP','Creando JsSIP.UA con config:', {uri:uaConfig.uri, register:uaConfig.register, register_expires:uaConfig.register_expires});
+
+                ua=new JsSIP.UA(uaConfig);
+
+                ua.on('connecting', (e) => {
+                    debugLog('info','SIP','Evento: connecting - intentando conectar al WebSocket...');
+                });
+
+                ua.on('connected', () => {
+                    debugLog('info','SIP','Evento: connected - WebSocket conectado, enviando REGISTER...');
+                    updateStatus('Registrando...',false);
+                });
+
+                ua.on('disconnected', (e) => {
+                    debugLog('error','SIP','Evento: disconnected - Conexión perdida', {
+                        error: e && e.error,
+                        code: e && e.code,
+                        reason: e && e.reason
+                    });
+                    updateStatus('Desconectado',false);
+                });
+
+                ua.on('registered', (e) => {
+                    debugLog('info','SIP','Evento: registered - Registro SIP EXITOSO');
+                    if(e && e.response) {
+                        debugLog('info','SIP','Response status: ' + e.response.status_code + ' ' + e.response.reason_phrase);
+                    }
+                    updateStatus('Conectado',true);
+                });
+
+                ua.on('unregistered', (e) => {
+                    debugLog('warn','SIP','Evento: unregistered', {cause: e && e.cause, response: e && e.response ? e.response.status_code : 'N/A'});
+                    updateStatus('Desconectado',false);
+                });
+
+                ua.on('registrationFailed', (e) => {
+                    const cause = e && e.cause ? e.cause : 'desconocido';
+                    const statusCode = e && e.response ? e.response.status_code : 'N/A';
+                    const reasonPhrase = e && e.response ? e.response.reason_phrase : 'N/A';
+                    debugLog('error','SIP','Evento: registrationFailed - FALLO DE REGISTRO', {
+                        cause: cause,
+                        status_code: statusCode,
+                        reason: reasonPhrase
+                    });
+                    if(statusCode === 401 || statusCode === 403) {
+                        debugLog('error','SIP','>>> Credenciales incorrectas (extensión/password) o extensión no autorizada');
+                    } else if(statusCode === 404) {
+                        debugLog('error','SIP','>>> Extensión no encontrada en el PBX');
+                    } else if(statusCode === 408) {
+                        debugLog('error','SIP','>>> Timeout - el servidor PBX no respondió a tiempo');
+                    } else if(cause === 'Request Timeout') {
+                        debugLog('error','SIP','>>> Timeout de solicitud - posible problema de red o firewall');
+                    } else if(cause === 'Connection Error') {
+                        debugLog('error','SIP','>>> Error de conexión WebSocket - verificar URL del servidor y certificado SSL');
+                    }
+                    updateStatus('Error registro ('+cause+')',false);
+                });
+
+                ua.on('registrationExpiring', () => {
+                    debugLog('info','SIP','Evento: registrationExpiring - renovando registro...');
+                });
+
+                ua.on('newRTCSession',(e)=>{
+                    debugLog('info','RTC','Evento: newRTCSession - originator: ' + e.originator);
+                    if(e.originator==='remote') {
+                        debugLog('info','RTC','Llamada entrante de: ' + (e.session.remote_identity ? e.session.remote_identity.uri.user : 'desconocido'));
+                        handleIncomingCall(e.session);
+                    }
+                });
+
+                ua.on('newMessage', (e) => {
+                    debugLog('info','SIP','Evento: newMessage - ' + e.originator);
+                });
+
+                debugLog('info','SIP','Llamando ua.start()...');
                 ua.start();
-            }catch(e){console.error('Error:',e);updateStatus('Error conexión',false);}
+                debugLog('info','SIP','ua.start() ejecutado - esperando eventos de conexión...');
+
+            }catch(e){
+                debugLog('error','CONNECT','EXCEPCIÓN al conectar: ' + e.message, {stack: e.stack});
+                console.error('Error completo:',e);
+                updateStatus('Error conexión',false);
+            }
         }
 
         function updateStatus(t,c) { document.getElementById('statusText').textContent=t; document.getElementById('statusDot').classList.toggle('connected',c); }
@@ -781,16 +926,33 @@
         // INIT
         // ==========================================
         window.onload=function(){
+            // Habilitar debug de JsSIP para ver mensajes SIP en consola
+            if(typeof JsSIP !== 'undefined' && JsSIP.debug) {
+                try { JsSIP.debug.enable('JsSIP:*'); } catch(e) {}
+            }
+            debugLog('info','INIT','Access Phone v3.1 iniciado');
+            debugLog('info','INIT','User Agent: ' + navigator.userAgent);
+            debugLog('info','INIT','Protocolo: ' + window.location.protocol);
+            if(window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                debugLog('warn','INIT','ADVERTENCIA: No estás en HTTPS. WebRTC requiere HTTPS para funcionar correctamente.');
+            }
+
             const sc=localStorage.getItem('webphoneConfig');
             if(sc){
                 try{
                     config=JSON.parse(sc);
+                    debugLog('info','INIT','Config cargada de localStorage', {wsServer:config.wsServer, extension:config.extension, domain:config.domain});
                     document.getElementById('wsServer').value=config.wsServer||'';
                     document.getElementById('sipExtension').value=config.extension||'';
                     document.getElementById('sipPassword').value=config.password||'';
                     document.getElementById('sipDomain').value=config.domain||'';
-                    if(config.extension&&config.password)setTimeout(connectToServer,1000);
-                }catch(e){}
+                    if(config.extension&&config.password){
+                        debugLog('info','INIT','Auto-conectando en 1 segundo...');
+                        setTimeout(connectToServer,1000);
+                    } else {
+                        debugLog('warn','INIT','No hay extensión/password configurados. Abre Ajustes para configurar.');
+                    }
+                }catch(e){debugLog('error','INIT','Error parseando config de localStorage',e.message);}
             }
             const sv=localStorage.getItem('videoSettings');
             if(sv){try{Object.assign(videoSettings,JSON.parse(sv));}catch(e){}}
@@ -817,6 +979,33 @@
         });
 
         window.onclick=function(e){if(e.target.classList.contains('modal'))e.target.style.display='none';};
+    </script>
+
+    <!-- Debug Panel -->
+    <div id="debugPanel" style="position:fixed;bottom:0;left:0;width:100%;height:0;background:#1a1a2e;transition:height 0.3s;z-index:99999;overflow:hidden;border-top:2px solid #FF6B35;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:#16213e;border-bottom:1px solid #333;">
+            <span style="color:#FF6B35;font-weight:bold;font-size:13px;">Debug Log - Access Phone</span>
+            <div style="display:flex;gap:8px;">
+                <button onclick="document.getElementById('debugLogContent').innerHTML=''" style="background:#333;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Limpiar</button>
+                <button onclick="copyDebugLogs()" style="background:#333;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Copiar</button>
+                <button onclick="toggleDebugPanel()" style="background:#ef4444;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;">Cerrar</button>
+            </div>
+        </div>
+        <div id="debugLogContent" style="height:calc(100% - 36px);overflow-y:auto;padding:4px;font-family:'Courier New',monospace;"></div>
+    </div>
+    <button id="debugToggleBtn" onclick="toggleDebugPanel()" style="position:fixed;bottom:10px;left:10px;z-index:99998;background:#1a1a2e;color:#FF6B35;border:1px solid #FF6B35;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:bold;opacity:0.8;transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">Debug Log</button>
+    <script>
+        let debugPanelOpen = false;
+        function toggleDebugPanel() {
+            debugPanelOpen = !debugPanelOpen;
+            document.getElementById('debugPanel').style.height = debugPanelOpen ? '250px' : '0';
+        }
+        function copyDebugLogs() {
+            const text = debugLogs.map(e => `${e.ts} [${e.level.toUpperCase()}] [${e.category}] ${e.msg}` + (e.data ? ' | ' + JSON.stringify(e.data) : '')).join('\n');
+            navigator.clipboard.writeText(text).then(() => alert('Logs copiados al portapapeles')).catch(() => {
+                const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert('Logs copiados');
+            });
+        }
     </script>
 </body>
 </html>
