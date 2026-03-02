@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAccesoSeguridad } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MENU_CONFIG } from "@/lib/menu-config";
 
@@ -16,23 +16,19 @@ export async function POST() {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
-    const created: string[] = [];
+    const changes: string[] = [];
 
     for (const item of MENU_CONFIG) {
-      // Items con ruta directa (sin hijos) = proceso padre con un subproceso
+      // Items con ruta directa (sin hijos) = proceso raiz con un subproceso
       if (item.rutaAcceso && !item.hijos) {
+        // Buscar por nombre (flexible: con o sin procesoPadreId)
         let proceso = await prisma.proceso.findFirst({
-          where: { nombre: item.nombre, procesoPadreId: null },
+          where: { nombre: item.nombre },
         });
-
-        if (!proceso) {
-          // Check by procesoPadreId = 0 (legacy) or null
-          proceso = await prisma.proceso.findFirst({
-            where: { nombre: item.nombre },
-          });
-        }
 
         if (!proceso) {
           proceso = await prisma.proceso.create({
@@ -43,14 +39,22 @@ export async function POST() {
               usuarioModId: 0,
             },
           });
-          created.push(`Proceso: ${item.nombre}`);
+          changes.push(`+ Proceso: ${item.nombre}`);
+        } else if (proceso.rutaAcceso !== item.rutaAcceso) {
+          // Actualizar ruta si cambio
+          await prisma.proceso.update({
+            where: { id: proceso.id },
+            data: { rutaAcceso: item.rutaAcceso },
+          });
+          changes.push(`~ Proceso actualizado: ${item.nombre} -> ${item.rutaAcceso}`);
         }
 
-        // Ensure at least one subproceso exists
-        const subCount = await prisma.subproceso.count({
+        // Buscar o crear subproceso con funcion correcta
+        const existingSub = await prisma.subproceso.findFirst({
           where: { procesoId: proceso.id },
         });
-        if (subCount === 0) {
+
+        if (!existingSub) {
           await prisma.subproceso.create({
             data: {
               procesoId: proceso.id,
@@ -58,24 +62,29 @@ export async function POST() {
               funcion: item.rutaAcceso,
             },
           });
-          created.push(`Subproceso: ${item.nombre} -> ${item.rutaAcceso}`);
+          changes.push(`+ Subproceso: ${item.nombre} -> ${item.rutaAcceso}`);
+        } else if (existingSub.funcion !== item.rutaAcceso) {
+          // Actualizar funcion si cambio
+          await prisma.subproceso.update({
+            where: { id: existingSub.id },
+            data: { funcion: item.rutaAcceso, nombre: item.nombre },
+          });
+          changes.push(`~ Subproceso actualizado: ${item.nombre} -> ${item.rutaAcceso}`);
         }
         continue;
       }
 
       // Items con hijos = proceso padre + procesos hijos con subprocesos
       if (item.hijos) {
-        // Find or create the parent proceso
+        // Buscar o crear padre
         let padre = await prisma.proceso.findFirst({
           where: { nombre: item.nombre, procesoPadreId: null },
         });
-
         if (!padre) {
           padre = await prisma.proceso.findFirst({
             where: { nombre: item.nombre },
           });
         }
-
         if (!padre) {
           padre = await prisma.proceso.create({
             data: {
@@ -85,14 +94,30 @@ export async function POST() {
               usuarioModId: 0,
             },
           });
-          created.push(`Proceso padre: ${item.nombre}`);
+          changes.push(`+ Proceso padre: ${item.nombre}`);
         }
 
         for (const hijo of item.hijos) {
-          // Find or create the child proceso
+          // Buscar hijo por nombre bajo este padre
           let procesoHijo = await prisma.proceso.findFirst({
             where: { nombre: hijo.nombre, procesoPadreId: padre.id },
           });
+
+          if (!procesoHijo) {
+            // Buscar por nombre en cualquier padre (legacy puede tener estructura diferente)
+            procesoHijo = await prisma.proceso.findFirst({
+              where: { nombre: hijo.nombre },
+            });
+
+            if (procesoHijo) {
+              // Existe pero bajo otro padre o sin padre - reasignar
+              await prisma.proceso.update({
+                where: { id: procesoHijo.id },
+                data: { procesoPadreId: padre.id, rutaAcceso: hijo.funcion },
+              });
+              changes.push(`~ Reasignado: ${hijo.nombre} -> padre ${item.nombre}`);
+            }
+          }
 
           if (!procesoHijo) {
             procesoHijo = await prisma.proceso.create({
@@ -103,10 +128,16 @@ export async function POST() {
                 usuarioModId: 0,
               },
             });
-            created.push(`Proceso hijo: ${hijo.nombre}`);
+            changes.push(`+ Proceso hijo: ${hijo.nombre}`);
+          } else if (procesoHijo.rutaAcceso !== hijo.funcion) {
+            await prisma.proceso.update({
+              where: { id: procesoHijo.id },
+              data: { rutaAcceso: hijo.funcion },
+            });
+            changes.push(`~ Ruta actualizada: ${hijo.nombre} -> ${hijo.funcion}`);
           }
 
-          // Ensure subproceso exists with the correct funcion/ruta
+          // Buscar o crear subproceso
           const existingSub = await prisma.subproceso.findFirst({
             where: { procesoId: procesoHijo.id },
           });
@@ -119,7 +150,13 @@ export async function POST() {
                 funcion: hijo.funcion,
               },
             });
-            created.push(`Subproceso: ${hijo.nombre} -> ${hijo.funcion}`);
+            changes.push(`+ Subproceso: ${hijo.nombre} -> ${hijo.funcion}`);
+          } else if (existingSub.funcion !== hijo.funcion) {
+            await prisma.subproceso.update({
+              where: { id: existingSub.id },
+              data: { funcion: hijo.funcion, nombre: hijo.nombre },
+            });
+            changes.push(`~ Subproceso actualizado: ${hijo.nombre} -> ${hijo.funcion}`);
           }
         }
       }
@@ -127,8 +164,8 @@ export async function POST() {
 
     return NextResponse.json({
       message: "Sincronización completada",
-      created,
-      totalCreated: created.length,
+      changes,
+      totalChanges: changes.length,
     });
   } catch (error) {
     console.error("Error al sincronizar procesos:", error);

@@ -1,8 +1,43 @@
-import { NextAuthOptions } from "next-auth";
+import { NextAuthOptions, Session } from "next-auth";
+import { NextResponse } from "next/server";
 import CredentialsProvider from "next-auth/providers/credentials";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const crypt = require("unix-crypt-td-js");
 import { prisma } from "./prisma";
+
+const SEGURIDAD_ROUTES = ["/seguridad/usuarios", "/seguridad/grupos-usuarios", "/seguridad/permisos"];
+
+/**
+ * Verifica que el usuario tenga acceso al modulo de Seguridad.
+ * Retorna null si tiene acceso, o un NextResponse 403 si no.
+ *
+ * Reglas:
+ * - Si allowedRoutes esta vacio = modo bootstrap (nadie tiene permisos aun) → permitir
+ * - Si allowedRoutes contiene alguna ruta de /seguridad/* → permitir
+ * - De lo contrario → 403 Prohibido
+ */
+export function verificarAccesoSeguridad(session: Session): NextResponse | null {
+  const allowedRoutes = session.user?.allowedRoutes || [];
+
+  // Modo bootstrap: no hay permisos configurados, permitir todo
+  if (allowedRoutes.length === 0) {
+    return null;
+  }
+
+  // Verificar que tenga al menos una ruta de seguridad
+  const tieneAccesoSeguridad = allowedRoutes.some((r: string) =>
+    SEGURIDAD_ROUTES.some((sr) => r === sr || r.startsWith(sr + "/"))
+  );
+
+  if (!tieneAccesoSeguridad) {
+    return NextResponse.json(
+      { error: "No tiene permisos para acceder al módulo de Seguridad" },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
 
 /**
  * Verifica una contraseña contra el hash DES crypt almacenado por el sistema legacy PHP.
@@ -120,14 +155,6 @@ export const authOptions: NextAuthOptions = {
             // Esto filtra funciones PHP legacy como "listar", "editar", etc.
             if (row.funcion && row.funcion.startsWith("/")) routes.add(row.funcion);
             if (row.ruta_acceso && row.ruta_acceso.startsWith("/")) routes.add(row.ruta_acceso);
-          }
-
-          // Anti-lockout: si el usuario tiene ALGUN permiso configurado,
-          // siempre incluir rutas de Seguridad para que pueda arreglar permisos
-          if (routes.size > 0) {
-            routes.add("/seguridad/usuarios");
-            routes.add("/seguridad/grupos-usuarios");
-            routes.add("/seguridad/permisos");
           }
 
           allowedRoutes = Array.from(routes);

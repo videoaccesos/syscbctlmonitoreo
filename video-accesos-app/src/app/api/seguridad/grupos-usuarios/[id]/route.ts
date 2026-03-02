@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAccesoSeguridad } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -13,6 +13,8 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -97,6 +99,8 @@ export async function PUT(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -221,6 +225,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;

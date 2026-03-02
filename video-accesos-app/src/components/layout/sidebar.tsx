@@ -83,11 +83,9 @@ const fullNavigation: NavItem[] = [
 /**
  * Filtra el menu segun las rutas permitidas del usuario.
  * "/" (Inicio) siempre se muestra.
- * "Seguridad" siempre se muestra (anti-lockout: evita que un admin
- * se quede sin acceso al panel de permisos por mala configuracion).
  * Si el usuario no tiene permisos configurados (array vacio),
  * se muestra el menu completo para no bloquear el acceso durante
- * la primera configuracion.
+ * la primera configuracion (modo bootstrap).
  */
 function filterNavigation(
   items: NavItem[],
@@ -110,9 +108,6 @@ function filterNavigation(
     .map((item) => {
       // Inicio siempre se muestra
       if (item.href === "/") return item;
-
-      // Seguridad siempre se muestra (anti-lockout)
-      if (item.label === "Seguridad") return item;
 
       // Items directos (sin hijos)
       if (item.href) {

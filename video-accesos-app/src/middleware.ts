@@ -1,17 +1,6 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
-/**
- * Rutas que NUNCA se bloquean para usuarios autenticados.
- * Esto evita lockout permanente: si un admin configura mal los permisos,
- * siempre puede llegar a Seguridad para arreglarlos.
- */
-const ANTI_LOCKOUT_ROUTES = [
-  "/seguridad/usuarios",
-  "/seguridad/grupos-usuarios",
-  "/seguridad/permisos",
-];
-
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
@@ -22,18 +11,10 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // Anti-lockout: Seguridad routes are always accessible to prevent
-    // permanent lockout when permissions are misconfigured
-    if (ANTI_LOCKOUT_ROUTES.some(
-      (route) => pathname === route || pathname.startsWith(route + "/")
-    )) {
-      return NextResponse.next();
-    }
-
     const allowedRoutes = (token?.allowedRoutes as string[]) || [];
 
     // If no permissions configured yet (empty array), allow everything
-    // to avoid locking out users during initial setup
+    // to avoid locking out users during initial setup (bootstrap mode)
     if (allowedRoutes.length === 0) {
       return NextResponse.next();
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAccesoSeguridad } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/seguridad/usuarios/[id] - Obtener un usuario por ID
@@ -12,6 +12,8 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -62,6 +64,8 @@ export async function PUT(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado2 = verificarAccesoSeguridad(session);
+  if (denegado2) return denegado2;
 
   try {
     const { id } = await params;
@@ -170,6 +174,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado3 = verificarAccesoSeguridad(session);
+  if (denegado3) return denegado3;
 
   try {
     const { id } = await params;

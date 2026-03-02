@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAccesoSeguridad } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/seguridad/usuarios - Listar usuarios con busqueda y paginacion
@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -79,6 +81,8 @@ export async function POST(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAccesoSeguridad(session);
+  if (denegado) return denegado;
 
   try {
     const body = await request.json();
