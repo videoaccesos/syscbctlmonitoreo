@@ -522,6 +522,7 @@ export default function RegistroAccesosPage() {
   // Form handlers
   // -----------------------------------------------------------
   const resetForm = () => {
+    setFormPrivadaId("");
     setSelectedResidencia(null);
     setResidenciaSearch("");
     setResidencias([]);
@@ -534,6 +535,9 @@ export default function RegistroAccesosPage() {
     setTimerRunning(false);
     setTimerSeconds(0);
     setError("");
+    // Limpiar estado de llamada entrante
+    setIncomingCallNumber("");
+    setIncomingCallResidencia(null);
   };
 
   const startNewRegistro = () => {
@@ -699,10 +703,8 @@ export default function RegistroAccesosPage() {
         },
       }));
 
-      // Reset para siguiente registro - mantener privada
-      const keepPrivada = formPrivadaId;
+      // Reset completo para siguiente registro (privada, camaras, etc.)
       resetForm();
-      setFormPrivadaId(keepPrivada);
       fetchRegistros();
 
       // Limpiar mensaje de exito despues de 5 segundos

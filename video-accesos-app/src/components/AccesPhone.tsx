@@ -464,14 +464,29 @@ export default function AccesPhone({
     }
   }, []);
 
+  // Pre-acquire microphone when a call starts ringing so answering is instant
+  useEffect(() => {
+    if (ringing && !localStreamRef.current) {
+      acquireMicOrFallback()
+        .then((stream) => {
+          localStreamRef.current = stream;
+        })
+        .catch(() => {
+          // will be retried in answerCall if needed
+        });
+    }
+  }, [ringing, acquireMicOrFallback]);
+
   const answerCall = useCallback(async () => {
     if (!sessionRef.current) return;
     try {
-      const stream = await acquireMicOrFallback();
-      localStreamRef.current = stream;
+      // Use pre-acquired stream if available, otherwise acquire now
+      if (!localStreamRef.current) {
+        localStreamRef.current = await acquireMicOrFallback();
+      }
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
-        mediaStream: stream,
+        mediaStream: localStreamRef.current,
       });
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
