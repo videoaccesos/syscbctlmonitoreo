@@ -118,6 +118,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Ensure cambio_contrasena column allows NULL (legacy DB may have 0000-00-00 default)
+    await fixZeroDates();
+
     // Almacenar contrasena en texto plano (legacy MySQL 5.7, varchar(10))
     const nuevoUsuario = await prisma.usuario.create({
       data: {
@@ -126,6 +129,7 @@ export async function POST(request: NextRequest) {
         empleadoId: body.empleadoId ? parseInt(body.empleadoId, 10) : null,
         privadaId: body.privadaId ? parseInt(body.privadaId, 10) : null,
         modificarFechas: body.modificarFechas || "N",
+        cambioContrasena: null,
         logueado: body.logueado || 0,
         usuarioMovId: body.usuarioMovId || 0,
         estatusId: 1,

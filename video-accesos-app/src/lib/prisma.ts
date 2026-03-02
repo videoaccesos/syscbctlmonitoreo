@@ -32,10 +32,11 @@ export async function fixZeroDates() {
       const fallbackValue = "fallback" in entry && entry.fallback ? entry.fallback : null;
 
       // Step 1: Try to align DB column with Prisma schema (DateTime? = nullable)
+      // Also set DEFAULT NULL to prevent MySQL from using '0000-00-00' on INSERT
       if (!fallbackValue) {
         try {
           await prisma.$executeRawUnsafe(
-            `ALTER TABLE ${table} MODIFY COLUMN ${column} DATE NULL`
+            `ALTER TABLE ${table} MODIFY COLUMN ${column} DATE NULL DEFAULT NULL`
           );
         } catch {
           // ALTER may fail if user lacks ALTER privilege; continue to try UPDATE
