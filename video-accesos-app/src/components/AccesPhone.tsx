@@ -113,6 +113,8 @@ export default function AccesPhone({
   // Audio controls
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
+  const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
+  const [micWarning, setMicWarning] = useState(false);
 
   // Dial input
   const [dialNumber, setDialNumber] = useState("");
@@ -156,6 +158,25 @@ export default function AccesPhone({
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
+  }, []);
+
+  // Check microphone permission on mount
+  useEffect(() => {
+    async function checkMicPermission() {
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          setMicPermission(result.state as "granted" | "denied" | "prompt");
+          result.addEventListener("change", () => {
+            setMicPermission(result.state as "granted" | "denied" | "prompt");
+            if (result.state === "granted") setMicWarning(false);
+          });
+        }
+      } catch {
+        // permissions API not available, will check on first call
+      }
+    }
+    checkMicPermission();
   }, []);
 
   // Call duration timer
@@ -446,11 +467,30 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
+  const requestMicPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicPermission("granted");
+      setMicWarning(false);
+      return true;
+    } catch {
+      setMicPermission("denied");
+      setMicWarning(true);
+      return false;
+    }
+  }, []);
+
   const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setMicPermission("granted");
+      setMicWarning(false);
       return stream;
-    } catch {
+    } catch (err) {
+      console.warn("[AccesPhone] Microfono no disponible, modo solo-escucha:", err);
+      setMicPermission("denied");
+      setMicWarning(true);
       const ctx = new AudioContext();
       const oscillator = ctx.createOscillator();
       const dst = ctx.createMediaStreamDestination();
@@ -720,6 +760,47 @@ export default function AccesPhone({
               </button>
             </div>
           </div>
+
+          {/* Microphone permission warning */}
+          {micWarning && (
+            <div className="bg-red-900/60 border-t border-red-700/50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <MicOff className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <span className="text-[11px] text-red-200">
+                  Sin acceso al microfono. No te escucharan.
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  const ok = await requestMicPermission();
+                  if (!ok) {
+                    alert(
+                      "No se pudo acceder al microfono.\n\n" +
+                      "Para habilitarlo:\n" +
+                      "1. Haz clic en el icono de candado/info en la barra de direcciones\n" +
+                      "2. Busca 'Microfono' y cambialo a 'Permitir'\n" +
+                      "3. Recarga la pagina"
+                    );
+                  }
+                }}
+                className="mt-1.5 w-full rounded-md bg-red-700 px-2 py-1 text-[11px] font-bold text-white hover:bg-red-600 transition"
+              >
+                Solicitar permiso de microfono
+              </button>
+            </div>
+          )}
+
+          {/* Mic permission indicator when denied but no active warning */}
+          {micPermission === "denied" && !micWarning && (
+            <div className="bg-yellow-900/40 border-t border-yellow-700/50 px-3 py-1">
+              <div className="flex items-center gap-1.5">
+                <MicOff className="h-3 w-3 text-yellow-400" />
+                <span className="text-[10px] text-yellow-300">
+                  Microfono bloqueado
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Call state: ringing */}
           {ringing && callInfo && (

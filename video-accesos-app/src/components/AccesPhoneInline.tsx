@@ -104,6 +104,8 @@ export default function AccesPhoneInline({
   const [ringing, setRinging] = useState(false);
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
+  const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
+  const [micWarning, setMicWarning] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [dialNumber, setDialNumber] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -149,6 +151,25 @@ export default function AccesPhoneInline({
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
+  }, []);
+
+  // Check microphone permission on mount
+  useEffect(() => {
+    async function checkMicPermission() {
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          setMicPermission(result.state as "granted" | "denied" | "prompt");
+          result.addEventListener("change", () => {
+            setMicPermission(result.state as "granted" | "denied" | "prompt");
+            if (result.state === "granted") setMicWarning(false);
+          });
+        }
+      } catch {
+        // permissions API not available
+      }
+    }
+    checkMicPermission();
   }, []);
 
   // Call duration timer
@@ -437,12 +458,30 @@ export default function AccesPhoneInline({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
+  const requestMicPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicPermission("granted");
+      setMicWarning(false);
+      return true;
+    } catch {
+      setMicPermission("denied");
+      setMicWarning(true);
+      return false;
+    }
+  }, []);
+
   const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setMicPermission("granted");
+      setMicWarning(false);
       return stream;
-    } catch {
-      // Create silent stream as fallback (listen-only mode)
+    } catch (err) {
+      console.warn("[AccesPhoneInline] Microfono no disponible, modo solo-escucha:", err);
+      setMicPermission("denied");
+      setMicWarning(true);
       const ctx = new AudioContext();
       const oscillator = ctx.createOscillator();
       const dst = ctx.createMediaStreamDestination();
@@ -655,6 +694,50 @@ export default function AccesPhoneInline({
           </button>
         )}
       </div>
+
+      {/* Microphone permission warning */}
+      {micWarning && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <MicOff className="h-5 w-5 text-red-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-700">
+                Sin acceso al microfono
+              </p>
+              <p className="text-xs text-red-600">
+                Puedes escuchar pero no te escucharan. Permite el acceso al microfono para hablar.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              const ok = await requestMicPermission();
+              if (!ok) {
+                alert(
+                  "No se pudo acceder al microfono.\n\n" +
+                  "Para habilitarlo:\n" +
+                  "1. Haz clic en el icono de candado/info en la barra de direcciones del navegador\n" +
+                  "2. Busca 'Microfono' y cambialo a 'Permitir'\n" +
+                  "3. Recarga la pagina (F5)"
+                );
+              }
+            }}
+            className="w-full rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-700 transition"
+          >
+            Permitir acceso al microfono
+          </button>
+        </div>
+      )}
+
+      {/* Mic permission status when denied but warning dismissed */}
+      {micPermission === "denied" && !micWarning && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center gap-2">
+          <MicOff className="h-4 w-4 text-yellow-600" />
+          <span className="text-xs text-yellow-700">
+            Microfono bloqueado - haz clic en el candado de la barra de direcciones para habilitarlo
+          </span>
+        </div>
+      )}
 
       {/* Call in progress / Incoming call */}
       {(inCall || ringing) && callInfo && (
