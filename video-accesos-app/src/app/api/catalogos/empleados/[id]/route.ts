@@ -127,6 +127,86 @@ export async function PUT(
   }
 }
 
+// PATCH /api/catalogos/empleados/[id] - Cambiar estatus (activar/desactivar)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    const empleadoId = parseInt(id, 10);
+
+    if (isNaN(empleadoId)) {
+      return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { estatusId } = body;
+
+    if (estatusId !== 1 && estatusId !== 2) {
+      return NextResponse.json(
+        { error: "Estatus invalido. Use 1 (Activo) o 2 (Baja)" },
+        { status: 400 }
+      );
+    }
+
+    const existente = await prisma.empleado.findUnique({
+      where: { id: empleadoId },
+    });
+
+    if (!existente) {
+      return NextResponse.json(
+        { error: "Empleado no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    if (existente.estatusId === estatusId) {
+      return NextResponse.json(
+        { error: estatusId === 1 ? "El empleado ya esta activo" : "El empleado ya esta dado de baja" },
+        { status: 400 }
+      );
+    }
+
+    const updateData: Record<string, unknown> = { estatusId };
+
+    if (estatusId === 2) {
+      // Dar de baja
+      updateData.fechaBaja = new Date();
+      if (body.motivoBaja) {
+        updateData.motivoBaja = body.motivoBaja;
+      }
+    } else {
+      // Reactivar: limpiar fecha y motivo de baja
+      updateData.fechaBaja = null;
+      updateData.motivoBaja = "";
+    }
+
+    const empleado = await prisma.empleado.update({
+      where: { id: empleadoId },
+      data: updateData,
+      include: { puesto: true },
+    });
+
+    const mensaje = estatusId === 1
+      ? "Empleado reactivado correctamente"
+      : "Empleado dado de baja correctamente";
+
+    return NextResponse.json({ message: mensaje, data: empleado });
+  } catch (error) {
+    console.error("Error al cambiar estatus del empleado:", error);
+    return NextResponse.json(
+      { error: "Error al cambiar estatus del empleado" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE /api/catalogos/empleados/[id] - Baja logica (estatusId=2, fechaBaja=hoy)
 export async function DELETE(
   _request: NextRequest,

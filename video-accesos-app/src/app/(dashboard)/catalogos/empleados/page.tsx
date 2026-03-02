@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Users,
   Loader2,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -111,6 +113,9 @@ export default function EmpleadosPage() {
   const [deletingEmpleado, setDeletingEmpleado] = useState<Empleado | null>(
     null
   );
+  const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
+  const [reactivatingEmpleado, setReactivatingEmpleado] =
+    useState<Empleado | null>(null);
   const [form, setForm] = useState<EmpleadoForm>(emptyForm);
   const [error, setError] = useState("");
 
@@ -211,6 +216,11 @@ export default function EmpleadosPage() {
     setDeleteModalOpen(true);
   };
 
+  const openReactivateModal = (emp: Empleado) => {
+    setReactivatingEmpleado(emp);
+    setReactivateModalOpen(true);
+  };
+
   const handleFormChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -293,7 +303,11 @@ export default function EmpleadosPage() {
     try {
       const res = await fetch(
         `/api/catalogos/empleados/${deletingEmpleado.id}`,
-        { method: "DELETE" }
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estatusId: 2 }),
+        }
       );
 
       if (!res.ok) {
@@ -307,6 +321,36 @@ export default function EmpleadosPage() {
       fetchEmpleados();
     } catch {
       setError("Error de conexion al eliminar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!reactivatingEmpleado) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/catalogos/empleados/${reactivatingEmpleado.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estatusId: 1 }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Error al reactivar al empleado");
+        return;
+      }
+
+      setReactivateModalOpen(false);
+      setReactivatingEmpleado(null);
+      fetchEmpleados();
+    } catch {
+      setError("Error de conexion al reactivar");
     } finally {
       setSaving(false);
     }
@@ -450,13 +494,21 @@ export default function EmpleadosPage() {
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
-                        {emp.estatusId === 1 && (
+                        {emp.estatusId === 1 ? (
                           <button
                             onClick={() => openDeleteModal(emp)}
                             className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
                             title="Dar de baja"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <UserX className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openReactivateModal(emp)}
+                            className="p-1.5 rounded-md text-gray-500 hover:text-green-600 hover:bg-green-50 transition"
+                            title="Reactivar"
+                          >
+                            <UserCheck className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -851,6 +903,59 @@ export default function EmpleadosPage() {
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 Dar de Baja
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* Reactivate confirmation Modal                                      */}
+      {/* ================================================================= */}
+      {reactivateModalOpen && reactivatingEmpleado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setReactivateModalOpen(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Confirmar Reactivacion
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Esta a punto de reactivar al empleado{" "}
+              <span className="font-medium text-gray-900">
+                {reactivatingEmpleado.nombre} {reactivatingEmpleado.apePaterno}{" "}
+                {reactivatingEmpleado.apeMaterno}
+              </span>
+              . Su estado cambiara a &quot;Activo&quot;.
+            </p>
+
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 mb-4">
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setReactivateModalOpen(false);
+                  setError("");
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleReactivate}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Reactivar
               </button>
             </div>
           </div>
