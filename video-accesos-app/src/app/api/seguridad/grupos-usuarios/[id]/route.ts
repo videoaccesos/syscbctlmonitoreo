@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, fixZeroDates } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 // GET /api/seguridad/grupos-usuarios/[id] - Obtener un grupo por ID con detalles
@@ -21,6 +21,8 @@ export async function GET(
     if (isNaN(grupoId)) {
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
+
+    await fixZeroDates();
 
     const grupo = await prisma.grupoUsuario.findUnique({
       where: { id: grupoId },

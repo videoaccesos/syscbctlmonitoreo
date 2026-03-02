@@ -19,33 +19,42 @@ const ZERO_DATE_COLUMNS = [
   { table: "privadas", column: "vence_contrato" },
   { table: "empleados", column: "fecha_baja" },
   { table: "usuarios", column: "cambio_contrasena" },
+  { table: "usuarios", column: "fecha_modificacion", fallback: "NOW()" },
+  { table: "usuarios", column: "ultima_sesion", fallback: "NOW()" },
+  { table: "grupos_usuarios", column: "fecha_modificacion", fallback: "NOW()" },
 ] as const;
 
 export async function fixZeroDates() {
   if (zeroDatesFixed) return;
   try {
-    for (const { table, column } of ZERO_DATE_COLUMNS) {
+    for (const entry of ZERO_DATE_COLUMNS) {
+      const { table, column } = entry;
+      const fallbackValue = "fallback" in entry && entry.fallback ? entry.fallback : null;
+
       // Step 1: Try to align DB column with Prisma schema (DateTime? = nullable)
-      try {
-        await prisma.$executeRawUnsafe(
-          `ALTER TABLE ${table} MODIFY COLUMN ${column} DATE NULL`
-        );
-      } catch {
-        // ALTER may fail if user lacks ALTER privilege; continue to try UPDATE
+      if (!fallbackValue) {
+        try {
+          await prisma.$executeRawUnsafe(
+            `ALTER TABLE ${table} MODIFY COLUMN ${column} DATE NULL`
+          );
+        } catch {
+          // ALTER may fail if user lacks ALTER privilege; continue to try UPDATE
+        }
       }
 
-      // Step 2: Replace invalid zero dates with NULL
+      // Step 2: Replace invalid zero dates
       try {
+        const replacement = fallbackValue || "NULL";
         const result: number = await prisma.$executeRawUnsafe(
-          `UPDATE ${table} SET ${column} = NULL WHERE ${column} < '1000-01-01'`
+          `UPDATE ${table} SET ${column} = ${replacement} WHERE ${column} < '1000-01-01'`
         );
         if (result > 0) {
           console.log(
-            `[DB] Fixed ${result} rows with invalid zero dates in ${table}.${column}`
+            `[DB] Fixed ${result} rows with invalid zero dates in ${table}.${column} -> ${replacement}`
           );
         }
       } catch {
-        // Fallback: if NULL still not allowed, set to a valid sentinel date
+        // Fallback: set to a valid sentinel date
         try {
           const result: number = await prisma.$executeRawUnsafe(
             `UPDATE ${table} SET ${column} = '1970-01-01' WHERE ${column} < '1000-01-01'`
@@ -60,6 +69,23 @@ export async function fixZeroDates() {
         }
       }
     }
+
+    // Clean up orphaned grupo-usuario detail records (usuarios that no longer exist)
+    try {
+      const result: number = await prisma.$executeRawUnsafe(
+        `DELETE gd FROM grupos_usuarios_detalles gd
+         LEFT JOIN usuarios u ON gd.usuario_id = u.usuario_id
+         WHERE u.usuario_id IS NULL`
+      );
+      if (result > 0) {
+        console.log(
+          `[DB] Cleaned up ${result} orphaned grupo-usuario detail records`
+        );
+      }
+    } catch (e) {
+      console.error("[DB] Error cleaning orphaned grupo-usuario details:", e);
+    }
+
     zeroDatesFixed = true;
   } catch (e) {
     console.error("[DB] Error fixing zero dates:", e);

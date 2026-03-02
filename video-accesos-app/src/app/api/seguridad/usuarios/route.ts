@@ -15,11 +15,20 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
+    const estatusParam = searchParams.get("estatusId");
     const skip = (page - 1) * pageSize;
 
     await fixZeroDates();
 
+    // Por defecto mostrar solo activos (estatusId=1).
+    // Usar estatusId=0 para ver todos, o estatusId=2 para ver solo bajas.
+    const estatusFilter =
+      estatusParam === "0" || estatusParam === "all"
+        ? {}
+        : { estatusId: parseInt(estatusParam || "1", 10) };
+
     const where = {
+      ...estatusFilter,
       ...(search
         ? {
             usuario: { contains: search },
