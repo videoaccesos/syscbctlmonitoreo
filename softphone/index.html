@@ -293,6 +293,11 @@
                 <div class="setting-group"><label>URL Proxy Cámaras</label><input type="text" id="cameraProxyUrl" placeholder="camera_proxy.php"></div>
                 <div class="setting-group"><label>Refresh (ms)</label><input type="number" id="videoRefreshRate" placeholder="500" min="100" max="2000"></div>
                 <div class="setting-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoShowVideo" checked style="width:auto;">Video automático en llamadas</label></div>
+                <hr class="settings-divider">
+                <div class="settings-section-title">🔊 Dispositivos de Audio</div>
+                <div class="setting-group"><label>Dispositivo de Salida (Bocina)</label><select id="audioOutputDevice" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;"><option value="default">Predeterminado del sistema</option></select></div>
+                <div class="setting-group"><label>Dispositivo de Entrada (Micrófono)</label><select id="audioInputDevice" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;"><option value="default">Predeterminado del sistema</option></select></div>
+                <button class="save-settings-btn" style="background:#10b981;margin-bottom:8px;" onclick="testSpeaker()">🔊 Probar Bocina</button>
                 <button class="save-settings-btn" onclick="saveSettings()">Guardar y Conectar</button>
             </div>
         </div>
@@ -606,13 +611,114 @@
         function updateRingtoneVolume(v) { audioSettings.ringtoneVolume=v; document.getElementById('ringtoneLevel').textContent=v+'%'; document.getElementById('ringtone').volume=v/100; saveAudioSettings(); }
         function toggleMute() {
             isMuted=!isMuted; const b=document.getElementById('muteBtn');
-            if(isMuted){b.classList.add('muted');b.textContent='🔇 Activar Mic';if(currentSession&&localStream) localStream.getAudioTracks().forEach(t=>{t.enabled=false;});}
-            else{b.classList.remove('muted');b.textContent='🎙 Silenciar';if(currentSession&&localStream) localStream.getAudioTracks().forEach(t=>{t.enabled=true;});}
+            if(isMuted){
+                b.classList.add('muted');b.textContent='🔇 Activar Mic';
+                // Silenciar micrófono usando los senders del peerconnection (tracks locales)
+                if(currentSession&&currentSession.connection){
+                    currentSession.connection.getSenders().forEach(sender=>{
+                        if(sender.track&&sender.track.kind==='audio'){sender.track.enabled=false;debugLog('info','AUDIO','Micrófono silenciado (sender track)');}
+                    });
+                }
+            }else{
+                b.classList.remove('muted');b.textContent='🎙 Silenciar';
+                if(currentSession&&currentSession.connection){
+                    currentSession.connection.getSenders().forEach(sender=>{
+                        if(sender.track&&sender.track.kind==='audio'){sender.track.enabled=true;debugLog('info','AUDIO','Micrófono activado (sender track)');}
+                    });
+                }
+            }
         }
         function saveAudioSettings() { localStorage.setItem('webphoneAudioSettings',JSON.stringify(audioSettings)); }
         function loadAudioSettings() {
             const s=localStorage.getItem('webphoneAudioSettings');
             if(s){audioSettings=JSON.parse(s);document.getElementById('micSlider').value=audioSettings.micVolume;document.getElementById('speakerSlider').value=audioSettings.speakerVolume;document.getElementById('ringtoneSlider').value=audioSettings.ringtoneVolume;document.getElementById('micLevel').textContent=audioSettings.micVolume+'%';document.getElementById('speakerLevel').textContent=audioSettings.speakerVolume+'%';document.getElementById('ringtoneLevel').textContent=audioSettings.ringtoneVolume+'%';}
+        }
+
+        // ==========================================
+        // AUDIO DEVICE MANAGEMENT
+        // ==========================================
+        async function enumerateAudioDevices() {
+            try {
+                // Necesitamos pedir permiso primero para ver nombres de dispositivos
+                const tempStream = await navigator.mediaDevices.getUserMedia({audio:true});
+                tempStream.getTracks().forEach(t=>t.stop());
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const outputSelect = document.getElementById('audioOutputDevice');
+                const inputSelect = document.getElementById('audioInputDevice');
+
+                // Limpiar opciones existentes
+                outputSelect.innerHTML = '<option value="default">Predeterminado del sistema</option>';
+                inputSelect.innerHTML = '<option value="default">Predeterminado del sistema</option>';
+
+                devices.forEach(device => {
+                    if(device.kind === 'audiooutput') {
+                        const opt = document.createElement('option');
+                        opt.value = device.deviceId;
+                        opt.textContent = device.label || ('Bocina ' + outputSelect.options.length);
+                        outputSelect.appendChild(opt);
+                    } else if(device.kind === 'audioinput') {
+                        const opt = document.createElement('option');
+                        opt.value = device.deviceId;
+                        opt.textContent = device.label || ('Micrófono ' + inputSelect.options.length);
+                        inputSelect.appendChild(opt);
+                    }
+                });
+
+                // Restaurar selección guardada
+                const savedOutput = localStorage.getItem('webphoneAudioOutput');
+                const savedInput = localStorage.getItem('webphoneAudioInput');
+                if(savedOutput) outputSelect.value = savedOutput;
+                if(savedInput) inputSelect.value = savedInput;
+
+                debugLog('info','AUDIO','Dispositivos enumerados: ' + outputSelect.options.length + ' salidas, ' + inputSelect.options.length + ' entradas');
+            } catch(e) {
+                debugLog('error','AUDIO','Error al enumerar dispositivos: ' + e.message);
+            }
+        }
+
+        async function applyAudioOutputDevice() {
+            const deviceId = document.getElementById('audioOutputDevice').value;
+            const ra = document.getElementById('remoteAudio');
+            const ringtone = document.getElementById('ringtone');
+
+            if(typeof ra.setSinkId === 'function') {
+                try {
+                    await ra.setSinkId(deviceId === 'default' ? '' : deviceId);
+                    await ringtone.setSinkId(deviceId === 'default' ? '' : deviceId);
+                    localStorage.setItem('webphoneAudioOutput', deviceId);
+                    debugLog('info','AUDIO','Dispositivo de salida cambiado a: ' + deviceId);
+                } catch(e) {
+                    debugLog('error','AUDIO','Error al cambiar dispositivo de salida: ' + e.message);
+                    alert('No se pudo cambiar la bocina: ' + e.message);
+                }
+            } else {
+                debugLog('warn','AUDIO','setSinkId no soportado en este navegador');
+                alert('Tu navegador no soporta selección de bocina. Usa Chrome o Edge.');
+            }
+        }
+
+        async function testSpeaker() {
+            debugLog('info','AUDIO','Probando bocina...');
+            try {
+                const ctx = new (window.AudioContext||window.webkitAudioContext)();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                oscillator.frequency.value = 440;
+                gainNode.gain.value = 0.3;
+                oscillator.start();
+                setTimeout(()=>{oscillator.stop();ctx.close();}, 1000);
+                debugLog('info','AUDIO','Tono de prueba reproducido (440Hz, 1s)');
+
+                // También probar reproducción del elemento remoteAudio
+                const ra = document.getElementById('remoteAudio');
+                debugLog('info','AUDIO','Estado remoteAudio: srcObject=' + (ra.srcObject?'SET':'NULL') + ', paused=' + ra.paused + ', volume=' + ra.volume + ', sinkId=' + (ra.sinkId||'default'));
+            } catch(e) {
+                debugLog('error','AUDIO','Error al probar bocina: ' + e.message);
+                alert('Error al probar bocina: ' + e.message);
+            }
         }
 
         // ==========================================
@@ -623,7 +729,7 @@
         function addDigit(d) { playDTMF(d); phoneNumber+=d; document.getElementById('phoneNumber').textContent=formatPhoneNumber(phoneNumber); if(currentSession&&currentSession.isEstablished()) currentSession.sendDTMF(d); }
         function deleteDigit() { phoneNumber=phoneNumber.slice(0,-1); document.getElementById('phoneNumber').textContent=formatPhoneNumber(phoneNumber); }
         function formatPhoneNumber(n) { if(!n)return'';if(n.length<=3)return n;if(n.length<=6)return n.slice(0,3)+' '+n.slice(3);if(n.length<=10)return n.slice(0,2)+' '+n.slice(2,6)+' '+n.slice(6);return n; }
-        function openSettings() { document.getElementById('settingsModal').style.display='block'; }
+        function openSettings() { document.getElementById('settingsModal').style.display='block'; enumerateAudioDevices(); }
         function closeSettings() { document.getElementById('settingsModal').style.display='none'; }
 
         function saveSettings() {
@@ -633,6 +739,11 @@
             videoSettings.autoShowOnCall=document.getElementById('autoShowVideo').checked;
             localStorage.setItem('webphoneConfig',JSON.stringify(config));
             localStorage.setItem('videoSettings',JSON.stringify(videoSettings));
+            // Aplicar dispositivo de audio seleccionado
+            applyAudioOutputDevice();
+            // Guardar dispositivo de entrada seleccionado
+            const inputDeviceId = document.getElementById('audioInputDevice').value;
+            localStorage.setItem('webphoneAudioInput', inputDeviceId);
             closeSettings(); connectToServer();
         }
 
@@ -813,14 +924,45 @@
             updateCallStatus('Llamando...');
             if(videoSettings.autoShowOnCall){const ch=await getCameraForExtension(phoneNumber);showVideoPanel(ch);}
             const eh={
+                'peerconnection':(e)=>{
+                    debugLog('info','RTC','[OUTGOING] Evento peerconnection capturado');
+                    e.peerconnection.addEventListener('track',(ev)=>{
+                        debugLog('info','AUDIO','[OUTGOING] Track remoto recibido: kind=' + ev.track.kind + ', readyState=' + ev.track.readyState);
+                        const ra=document.getElementById('remoteAudio');
+                        if(ev.streams&&ev.streams[0]){
+                            ra.srcObject=ev.streams[0];
+                            debugLog('info','AUDIO','[OUTGOING] Stream remoto asignado a remoteAudio (tracks: ' + ev.streams[0].getTracks().length + ')');
+                        }else{
+                            if(!ra.srcObject) ra.srcObject=new MediaStream();
+                            ra.srcObject.addTrack(ev.track);
+                            debugLog('info','AUDIO','[OUTGOING] Track añadido manualmente a remoteAudio');
+                        }
+                        ra.volume=audioSettings.speakerVolume/100;
+                        ra.play().then(()=>{debugLog('info','AUDIO','[OUTGOING] remoteAudio.play() exitoso');}).catch(err=>{debugLog('error','AUDIO','[OUTGOING] remoteAudio.play() falló: '+err.message);});
+                    });
+                    // Capturar stream local para mute desde los senders
+                    e.peerconnection.addEventListener('negotiationneeded',()=>{
+                        debugLog('info','RTC','[OUTGOING] negotiationneeded disparado');
+                    });
+                },
                 'progress':()=>updateCallStatus('Llamando...'),
                 'failed':()=>{addToCallHistory('outgoing',phoneNumber,0);endCall();},
                 'ended':()=>{const d=callStartTime?Math.floor((Date.now()-callStartTime)/1000):0;addToCallHistory('outgoing',phoneNumber,d);endCall();},
-                'confirmed':()=>{updateCallStatus('En llamada');startCallTimer();}
+                'confirmed':()=>{
+                    updateCallStatus('En llamada');startCallTimer();
+                    // Verificar estado del audio remoto al confirmar llamada
+                    const ra=document.getElementById('remoteAudio');
+                    debugLog('info','AUDIO','[OUTGOING] Llamada confirmada - remoteAudio.srcObject=' + (ra.srcObject?'SET':'NULL') + ', paused=' + ra.paused + ', volume=' + ra.volume);
+                    if(ra.srcObject){
+                        const tracks=ra.srcObject.getAudioTracks();
+                        debugLog('info','AUDIO','[OUTGOING] Audio tracks remotos: ' + tracks.length + ', enabled=' + tracks.map(t=>t.enabled).join(',') + ', readyState=' + tracks.map(t=>t.readyState).join(','));
+                    }
+                    if(ra.paused){ra.play().then(()=>{debugLog('info','AUDIO','[OUTGOING] Reproducción forzada exitosa');}).catch(err=>{debugLog('error','AUDIO','[OUTGOING] Reproducción forzada falló: '+err.message);});}
+                }
             };
             let num=phoneNumber;if(phoneNumber.length===10&&phoneNumber.startsWith('5'))num='52'+phoneNumber;
+            debugLog('info','CALL','Iniciando llamada saliente a: ' + num);
             currentSession=ua.call('sip:'+num+'@'+config.domain,{eventHandlers:eh,mediaConstraints:{audio:true,video:false},rtcOfferConstraints:{offerToReceiveAudio:true,offerToReceiveVideo:false}});
-            setupSessionEvents(currentSession);
             document.getElementById('callBtn').style.display='none';document.getElementById('hangupBtn').style.display='flex';document.getElementById('callInfo').classList.add('active');
         }
 
@@ -856,9 +998,46 @@
 
         function setupSessionEvents(session) {
             session.on('peerconnection',(e)=>{
-                e.peerconnection.addEventListener('track',(ev)=>{const ra=document.getElementById('remoteAudio');ra.srcObject=ev.streams[0];ra.volume=audioSettings.speakerVolume/100;});
-                e.peerconnection.addEventListener('addstream',(ev)=>{if(ev.stream&&ev.stream.getAudioTracks().length>0){localStream=ev.stream;if(isMuted)localStream.getAudioTracks().forEach(t=>{t.enabled=false;});}});
+                debugLog('info','RTC','[INCOMING] Evento peerconnection capturado');
+                e.peerconnection.addEventListener('track',(ev)=>{
+                    debugLog('info','AUDIO','[INCOMING] Track remoto recibido: kind=' + ev.track.kind + ', readyState=' + ev.track.readyState);
+                    const ra=document.getElementById('remoteAudio');
+                    if(ev.streams&&ev.streams[0]){
+                        ra.srcObject=ev.streams[0];
+                        debugLog('info','AUDIO','[INCOMING] Stream remoto asignado a remoteAudio (tracks: ' + ev.streams[0].getTracks().length + ')');
+                    }else{
+                        if(!ra.srcObject) ra.srcObject=new MediaStream();
+                        ra.srcObject.addTrack(ev.track);
+                        debugLog('info','AUDIO','[INCOMING] Track añadido manualmente a remoteAudio');
+                    }
+                    ra.volume=audioSettings.speakerVolume/100;
+                    ra.play().then(()=>{debugLog('info','AUDIO','[INCOMING] remoteAudio.play() exitoso');}).catch(err=>{debugLog('error','AUDIO','[INCOMING] remoteAudio.play() falló: '+err.message);});
+                });
+                // Monitorear estado de la conexión
+                e.peerconnection.addEventListener('connectionstatechange',()=>{
+                    debugLog('info','RTC','connectionState cambió a: ' + e.peerconnection.connectionState);
+                });
+                e.peerconnection.addEventListener('iceconnectionstatechange',()=>{
+                    debugLog('info','RTC','iceConnectionState cambió a: ' + e.peerconnection.iceConnectionState);
+                });
             });
+
+            // Fallback: si la sesión ya tiene connection (peerconnection ya fue creado)
+            if(session.connection){
+                debugLog('warn','RTC','La sesión ya tiene connection - configurando track listener como fallback');
+                session.connection.addEventListener('track',(ev)=>{
+                    debugLog('info','AUDIO','[FALLBACK] Track remoto recibido: kind=' + ev.track.kind);
+                    const ra=document.getElementById('remoteAudio');
+                    if(ev.streams&&ev.streams[0]){
+                        ra.srcObject=ev.streams[0];
+                    }else{
+                        if(!ra.srcObject) ra.srcObject=new MediaStream();
+                        ra.srcObject.addTrack(ev.track);
+                    }
+                    ra.volume=audioSettings.speakerVolume/100;
+                    ra.play().catch(err=>{debugLog('error','AUDIO','[FALLBACK] remoteAudio.play() falló: '+err.message);});
+                });
+            }
         }
 
         function updateCallStatus(s) { document.getElementById('callStatus').textContent=s; }
@@ -961,6 +1140,18 @@
             document.getElementById('autoShowVideo').checked=videoSettings.autoShowOnCall;
             loadContacts();loadCallHistory();loadAudioSettings();loadCameraList();
             checkMicPermission();
+            // Aplicar dispositivo de salida de audio guardado
+            const savedOutputDevice = localStorage.getItem('webphoneAudioOutput');
+            if(savedOutputDevice) {
+                const ra = document.getElementById('remoteAudio');
+                const ringtone = document.getElementById('ringtone');
+                if(typeof ra.setSinkId === 'function') {
+                    ra.setSinkId(savedOutputDevice === 'default' ? '' : savedOutputDevice).then(()=>{
+                        debugLog('info','AUDIO','Dispositivo de salida restaurado: ' + savedOutputDevice);
+                    }).catch(e=>{debugLog('warn','AUDIO','No se pudo restaurar dispositivo de salida: ' + e.message);});
+                    ringtone.setSinkId(savedOutputDevice === 'default' ? '' : savedOutputDevice).catch(()=>{});
+                }
+            }
             setTimeout(()=>{document.getElementById('phoneWrapper').classList.add('open');phoneOpen=true;},500);
         };
 
