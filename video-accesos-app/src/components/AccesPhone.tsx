@@ -13,12 +13,12 @@ import {
   RefreshCw,
   Unplug,
   Wifi,
-  DoorOpen,
   Mic,
   MicOff,
   Volume2,
   VolumeX,
   ChevronDown,
+  ChevronUp,
   ShieldAlert,
 } from "lucide-react";
 
@@ -51,8 +51,6 @@ interface AccesPhoneProps {
   onIncomingCall?: (callerNumber: string, displayName?: string) => void;
   onCallAnswered?: (callerNumber: string) => void;
   onCallEnded?: () => void;
-  /** DTMF digit to send when "Abrir" button is pressed during a call */
-  openDtmf?: string;
 }
 
 // Default SIP config - stored in localStorage
@@ -96,7 +94,6 @@ export default function AccesPhone({
   onIncomingCall,
   onCallAnswered,
   onCallEnded,
-  openDtmf = "1",
 }: AccesPhoneProps) {
   // State
   const [connected, setConnected] = useState(false);
@@ -108,8 +105,8 @@ export default function AccesPhone({
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
-  const [dtmfSent, setDtmfSent] = useState(false);
   const [minimized, setMinimized] = useState(true);
+  const [showAudioControls, setShowAudioControls] = useState(false);
 
   // HTTPS security check
   const [isInsecureContext, setIsInsecureContext] = useState(false);
@@ -117,6 +114,9 @@ export default function AccesPhone({
   // Audio controls
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
+  const [micVolume, setMicVolume] = useState(50);
+  const [speakerVolume, setSpeakerVolume] = useState(75);
+  const [ringtoneVolume, setRingtoneVolume] = useState(80);
   const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
   const [micWarning, setMicWarning] = useState(false);
 
@@ -226,7 +226,6 @@ export default function AccesPhone({
     setInCall(false);
     setRinging(false);
     setCallInfo(null);
-    setDtmfSent(false);
     setMuted(false);
     sessionRef.current = null;
     if (localStreamRef.current) {
@@ -426,7 +425,6 @@ export default function AccesPhone({
 
           sessionRef.current = session;
           setRinging(true);
-          setDtmfSent(false);
           setCallInfo({
             number: callerNumber,
             direction: "incoming",
@@ -571,14 +569,6 @@ export default function AccesPhone({
     cleanupCall();
   }, [cleanupCall]);
 
-  /** Send DTMF to open gate/door */
-  const sendOpenDtmf = useCallback(() => {
-    if (!sessionRef.current || !inCall) return;
-    sessionRef.current.sendDTMF(openDtmf);
-    setDtmfSent(true);
-    setTimeout(() => setDtmfSent(false), 2000);
-  }, [inCall, openDtmf]);
-
   /** Toggle microphone mute */
   const toggleMute = useCallback(() => {
     if (!sessionRef.current) return;
@@ -597,6 +587,33 @@ export default function AccesPhone({
     }
     setSpeakerOn(!speakerOn);
   }, [speakerOn]);
+
+  /** Update mic volume */
+  const updateMicVolume = useCallback((val: number) => {
+    setMicVolume(val);
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => {
+        // Apply gain via track enabled (0 = mute)
+        t.enabled = val > 0;
+      });
+    }
+  }, []);
+
+  /** Update speaker volume */
+  const updateSpeakerVolume = useCallback((val: number) => {
+    setSpeakerVolume(val);
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = val / 100;
+    }
+  }, []);
+
+  /** Update ringtone volume */
+  const updateRingtoneVolume = useCallback((val: number) => {
+    setRingtoneVolume(val);
+    if (ringtoneRef.current) {
+      ringtoneRef.current.volume = val / 100;
+    }
+  }, []);
 
   /** Make outgoing call */
   const makeCall = useCallback(async () => {
@@ -798,23 +815,6 @@ export default function AccesPhone({
             </div>
           )}
 
-          {/* HTTPS security warning */}
-          {isInsecureContext && (
-            <div className="bg-red-900/80 border-t border-red-600 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-red-400 flex-shrink-0" />
-                <div>
-                  <span className="text-[11px] font-bold text-red-200 block">
-                    Conexion no segura (HTTP)
-                  </span>
-                  <span className="text-[10px] text-red-300">
-                    El navegador bloquea el microfono en HTTP. Se requiere HTTPS para usar el softphone.
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Microphone permission warning */}
           {micWarning && !isInsecureContext && (
             <div className="bg-red-900/60 border-t border-red-700/50 px-3 py-2">
@@ -903,7 +903,7 @@ export default function AccesPhone({
                 </span>
               </div>
 
-              {/* Audio controls + Abrir + Colgar */}
+              {/* Mute + Speaker + Colgar */}
               <div className="flex gap-1.5">
                 <button
                   onClick={toggleMute}
@@ -928,22 +928,11 @@ export default function AccesPhone({
                   {speakerOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
                 </button>
                 <button
-                  onClick={sendOpenDtmf}
-                  className={`flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold transition ${
-                    dtmfSent
-                      ? "bg-emerald-500 text-white"
-                      : "bg-emerald-600 text-white hover:bg-emerald-500"
-                  }`}
-                  title={`Enviar DTMF "${openDtmf}" para abrir acceso`}
-                >
-                  <DoorOpen className="h-3.5 w-3.5" />
-                  {dtmfSent ? "Enviado!" : "Abrir"}
-                </button>
-                <button
                   onClick={hangupCall}
-                  className="flex items-center justify-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
+                  className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition"
                 >
                   <PhoneOff className="h-3.5 w-3.5" />
+                  Colgar
                 </button>
               </div>
             </div>
@@ -1004,6 +993,69 @@ export default function AccesPhone({
                   )
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Audio controls (volume sliders) */}
+          {connected && (
+            <div className="border-t border-gray-700/50">
+              <button
+                onClick={() => setShowAudioControls((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Volume2 className="h-3 w-3" />
+                  Controles de Audio
+                </span>
+                {showAudioControls ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
+              {showAudioControls && (
+                <div className="px-3 pb-2 space-y-1.5">
+                  {/* Mic volume */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] w-4 text-center">🎙</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={micVolume}
+                      onChange={(e) => updateMicVolume(Number(e.target.value))}
+                      className="flex-1 h-1 rounded-full bg-gray-600 accent-orange-500 cursor-pointer"
+                    />
+                    <span className="text-[10px] text-gray-400 w-8 text-right">{micVolume}%</span>
+                  </div>
+                  {/* Speaker volume */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] w-4 text-center">🔊</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={speakerVolume}
+                      onChange={(e) => updateSpeakerVolume(Number(e.target.value))}
+                      className="flex-1 h-1 rounded-full bg-gray-600 accent-orange-500 cursor-pointer"
+                    />
+                    <span className="text-[10px] text-gray-400 w-8 text-right">{speakerVolume}%</span>
+                  </div>
+                  {/* Ringtone volume */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] w-4 text-center">🔔</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={ringtoneVolume}
+                      onChange={(e) => updateRingtoneVolume(Number(e.target.value))}
+                      className="flex-1 h-1 rounded-full bg-gray-600 accent-orange-500 cursor-pointer"
+                    />
+                    <span className="text-[10px] text-gray-400 w-8 text-right">{ringtoneVolume}%</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
