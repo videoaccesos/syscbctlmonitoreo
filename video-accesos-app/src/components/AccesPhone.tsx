@@ -19,6 +19,7 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
+  ShieldAlert,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -110,6 +111,9 @@ export default function AccesPhone({
   const [dtmfSent, setDtmfSent] = useState(false);
   const [minimized, setMinimized] = useState(true);
 
+  // HTTPS security check
+  const [isInsecureContext, setIsInsecureContext] = useState(false);
+
   // Audio controls
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
@@ -158,6 +162,18 @@ export default function AccesPhone({
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
+  }, []);
+
+  // Detect insecure context (HTTP) - browsers block getUserMedia on HTTP
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isSecure =
+        window.isSecureContext ||
+        window.location.protocol === "https:" ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+      setIsInsecureContext(!isSecure);
+    }
   }, []);
 
   // Check microphone permission on mount
@@ -445,10 +461,14 @@ export default function AccesPhone({
   }, [connectSIPInternal]);
 
   const connectSIP = useCallback(() => {
+    if (isInsecureContext) {
+      setStatusText("HTTPS requerido");
+      return;
+    }
     manualDisconnectRef.current = false;
     cancelReconnect();
     connectSIPInternalRef.current?.();
-  }, [cancelReconnect]);
+  }, [cancelReconnect, isInsecureContext]);
 
   const disconnectSIP = useCallback(() => {
     manualDisconnectRef.current = true;
@@ -761,8 +781,42 @@ export default function AccesPhone({
             </div>
           </div>
 
+          {/* HTTPS security warning */}
+          {isInsecureContext && (
+            <div className="bg-red-900/80 border-t border-red-600 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <div>
+                  <span className="text-[11px] font-bold text-red-200 block">
+                    Conexion no segura (HTTP)
+                  </span>
+                  <span className="text-[10px] text-red-300 block mt-0.5">
+                    El navegador bloquea el acceso al microfono en HTTP. Se requiere HTTPS para usar el softphone.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HTTPS security warning */}
+          {isInsecureContext && (
+            <div className="bg-red-900/80 border-t border-red-600 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <div>
+                  <span className="text-[11px] font-bold text-red-200 block">
+                    Conexion no segura (HTTP)
+                  </span>
+                  <span className="text-[10px] text-red-300">
+                    El navegador bloquea el microfono en HTTP. Se requiere HTTPS para usar el softphone.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Microphone permission warning */}
-          {micWarning && (
+          {micWarning && !isInsecureContext && (
             <div className="bg-red-900/60 border-t border-red-700/50 px-3 py-2">
               <div className="flex items-center gap-2">
                 <MicOff className="h-4 w-4 text-red-400 flex-shrink-0" />
@@ -974,6 +1028,11 @@ export default function AccesPhone({
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 Reconectando...
               </button>
+            ) : isInsecureContext ? (
+              <div className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-900/60 px-2 py-1.5 text-[11px] font-medium text-red-300">
+                <ShieldAlert className="h-3 w-3" />
+                HTTPS requerido
+              </div>
             ) : (
               <button
                 onClick={connectSIP}

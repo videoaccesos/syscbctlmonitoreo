@@ -15,6 +15,7 @@ import {
   Settings,
   X,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,7 @@ export default function AccesPhoneInline({
   const [inCall, setInCall] = useState(false);
   const [callInfo, setCallInfo] = useState<CallInfo | null>(null);
   const [ringing, setRinging] = useState(false);
+  const [isInsecureContext, setIsInsecureContext] = useState(false);
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
@@ -151,6 +153,18 @@ export default function AccesPhoneInline({
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
+  }, []);
+
+  // Detect insecure context (HTTP) - browsers block getUserMedia on HTTP
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isSecure =
+        window.isSecureContext ||
+        window.location.protocol === "https:" ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+      setIsInsecureContext(!isSecure);
+    }
   }, []);
 
   // Check microphone permission on mount
@@ -436,10 +450,14 @@ export default function AccesPhoneInline({
   }, [connectSIPInternal]);
 
   const connectSIP = useCallback(() => {
+    if (isInsecureContext) {
+      setStatusText("HTTPS requerido");
+      return;
+    }
     manualDisconnectRef.current = false;
     cancelReconnect();
     connectSIPInternalRef.current?.();
-  }, [cancelReconnect]);
+  }, [cancelReconnect, isInsecureContext]);
 
   const disconnectSIP = useCallback(() => {
     manualDisconnectRef.current = true;
@@ -695,8 +713,25 @@ export default function AccesPhoneInline({
         )}
       </div>
 
+      {/* HTTPS security warning */}
+      {isInsecureContext && (
+        <div className="bg-red-50 border-b-2 border-red-400 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-700">
+                Conexion no segura (HTTP)
+              </p>
+              <p className="text-xs text-red-600">
+                El navegador bloquea el microfono en conexiones HTTP. Se requiere HTTPS para usar el softphone.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Microphone permission warning */}
-      {micWarning && (
+      {micWarning && !isInsecureContext && (
         <div className="bg-red-50 border-b border-red-200 px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
             <MicOff className="h-5 w-5 text-red-500 flex-shrink-0" />
@@ -876,6 +911,11 @@ export default function AccesPhoneInline({
             <RefreshCw className="h-4 w-4 animate-spin" />
             Reconectando... (clic para forzar)
           </button>
+        ) : isInsecureContext ? (
+          <div className="w-full rounded-lg bg-red-100 border border-red-300 px-3 py-2.5 text-sm font-medium text-red-700 flex items-center justify-center gap-2">
+            <ShieldAlert className="h-4 w-4" />
+            HTTPS requerido para usar el softphone
+          </div>
         ) : (
           <button
             onClick={connectSIP}

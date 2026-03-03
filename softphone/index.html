@@ -73,6 +73,11 @@
         .mute-row { display: flex; gap: 6px; margin-top: 6px; }
         .mute-btn { flex: 1; padding: 6px; background: linear-gradient(135deg, #64748b 0%, #475569 100%); color: white; border: none; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         .mute-btn.muted { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+        .https-warning { display: none; background: linear-gradient(135deg, #991b1b, #7f1d1d); color: white; padding: 10px 12px; font-size: 11px; align-items: center; gap: 8px; border-bottom: 2px solid #ef4444; }
+        .https-warning.show { display: flex; }
+        .https-warning-icon { font-size: 18px; flex-shrink: 0; }
+        .https-warning-text { flex: 1; }
+        .https-warning-text strong { display: block; font-size: 12px; margin-bottom: 2px; color: #fca5a5; }
         .mic-warning { display: none; background: linear-gradient(135deg, #dc2626, #b91c1c); color: white; padding: 8px 12px; font-size: 11px; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
         .mic-warning.show { display: flex; }
         .mic-warning:hover { background: linear-gradient(135deg, #ef4444, #dc2626); }
@@ -187,6 +192,14 @@
                     </div>
                 </div>
                 <div class="connection-status"><span class="status-dot" id="statusDot"></span><span id="statusText">Desconectado</span></div>
+            </div>
+            <!-- HTTPS WARNING -->
+            <div class="https-warning" id="httpsWarning">
+                <span class="https-warning-icon">🔒</span>
+                <div class="https-warning-text">
+                    <strong>Conexion no segura (HTTP)</strong>
+                    El navegador bloquea el microfono en conexiones HTTP. Se requiere HTTPS para usar el softphone.
+                </div>
             </div>
             <!-- MIC WARNING -->
             <div class="mic-warning" id="micWarning" onclick="requestMicPermission()">
@@ -761,6 +774,11 @@
         }
 
         function connectToServer() {
+            var isSecure=window.isSecureContext||window.location.protocol==='https:'||window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1';
+            if(!isSecure){
+                debugLog('error','CONNECT','Conexión bloqueada: se requiere HTTPS para acceder al micrófono.');
+                updateStatus('HTTPS requerido',false);return;
+            }
             if(!config.extension||!config.password){
                 debugLog('warn','CONFIG','Configuración incompleta - falta extensión o password', {extension:config.extension?'SET':'EMPTY', password:config.password?'SET':'EMPTY'});
                 updateStatus('Config incompleta',false);return;
@@ -1095,8 +1113,12 @@
             debugLog('info','INIT','Access Phone v3.1 iniciado');
             debugLog('info','INIT','User Agent: ' + navigator.userAgent);
             debugLog('info','INIT','Protocolo: ' + window.location.protocol);
-            if(window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                debugLog('warn','INIT','ADVERTENCIA: No estás en HTTPS. WebRTC requiere HTTPS para funcionar correctamente.');
+            var isSecure=window.isSecureContext||window.location.protocol==='https:'||window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1';
+            if(!isSecure) {
+                debugLog('warn','INIT','BLOQUEADO: No estás en HTTPS. WebRTC requiere HTTPS para acceder al micrófono.');
+                var hw=document.getElementById('httpsWarning');
+                if(hw){hw.classList.add('show');}
+                updateStatus('HTTPS requerido',false);
             }
 
             const sc=localStorage.getItem('webphoneConfig');
