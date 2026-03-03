@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const fechaHasta = searchParams.get("fechaHasta");
     const supervisorId = searchParams.get("supervisorId");
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
     const skip = (page - 1) * limit;
 
     // Construir filtros

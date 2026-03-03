@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") || "";
     const residenciaId = searchParams.get("residenciaId");
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
 
     if (!q || q.length < 1) {
       return NextResponse.json({ data: [] });

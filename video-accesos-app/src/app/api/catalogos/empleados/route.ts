@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const estatusParam = searchParams.get("estatusId");
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
+    const pageSize = Math.min(parseInt(searchParams.get("pageSize") || "10", 10), 100);
     const skip = (page - 1) * pageSize;
 
     await fixZeroDates();

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions, verificarAccesoSeguridad } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const crypt = require("unix-crypt-td-js");
 
 // GET /api/seguridad/usuarios/[id] - Obtener un usuario por ID
 export async function GET(
@@ -123,7 +125,7 @@ export async function PUT(
       usuarioMovId: body.usuarioMovId || 0,
     };
 
-    // Si se proporciona contrasena, almacenar en texto plano (legacy MySQL 5.7, varchar(10))
+    // Si se proporciona contrasena, hashear con DES crypt (compatible con sistema legacy PHP)
     if (contrasena && contrasena.length > 0) {
       if (contrasena.length < 6) {
         return NextResponse.json(
@@ -137,7 +139,7 @@ export async function PUT(
           { status: 400 }
         );
       }
-      updateData.contrasena = contrasena;
+      updateData.contrasena = crypt(contrasena, "0").substring(0, 10);
       updateData.cambioContrasena = new Date();
     }
 

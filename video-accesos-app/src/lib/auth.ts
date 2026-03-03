@@ -97,14 +97,10 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        console.log("[AUTH] Usuario encontrado:", usuario ? `ID=${usuario.id}, estatus=${usuario.estatusId}` : "NO");
-
-        if (!usuario) return null;
-
-        console.log("[AUTH] Hash almacenado:", usuario.contrasena, "longitud:", usuario.contrasena.length);
-        const salt = usuario.contrasena.substring(0, 2);
-        const hashCalculado = crypt(credentials.contrasena, salt).substring(0, 10);
-        console.log("[AUTH] Salt:", salt, "Hash calculado:", hashCalculado, "Coincide:", hashCalculado === usuario.contrasena);
+        if (!usuario) {
+          console.log("[AUTH] Usuario no encontrado:", credentials.usuario);
+          return null;
+        }
 
         // BD legacy usa DES crypt de PHP: substr(crypt($pass, 0), 0, 10)
         if (!verificarContrasena(credentials.contrasena, usuario.contrasena)) return null;

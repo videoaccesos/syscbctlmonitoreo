@@ -369,8 +369,6 @@ export async function GET(request: NextRequest) {
     const privadaId = searchParams.get("privada_id");
     const camIndex = parseInt(searchParams.get("cam") || "1");
 
-    console.log(`[camera-proxy] Peticion recibida: telefono="${telefono}" privada_id="${privadaId}" cam=${camIndex}`);
-
     if (!telefono && !privadaId) {
       return NextResponse.json(
         { error: "Se requiere telefono o privada_id" },
@@ -469,18 +467,7 @@ export async function GET(request: NextRequest) {
 
     const rawVideoUrl = videoUrls[camIndex - 1] || "";
 
-    console.log(`[camera-proxy] ========== SNAPSHOT REQUEST ==========`);
-    console.log(`[camera-proxy] Privada: ${privada.descripcion} (ID: ${privada.id})`);
-    console.log(`[camera-proxy] Cam index: ${camIndex}`);
-    console.log(`[camera-proxy] DB video_${camIndex}: "${rawVideoUrl}"`);
-    console.log(`[camera-proxy] DB dns_${camIndex}: "${dnsHosts[camIndex - 1] || ""}" | puerto_${camIndex}: "${dnsPorts[camIndex - 1] || ""}"`);
-    console.log(`[camera-proxy] Todos los videos: video_1="${privada.video1}" | video_2="${privada.video2}" | video_3="${privada.video3}"`);
-    console.log(`[camera-proxy] Todos los DNS: dns_1="${privada.dns1}" | dns_2="${privada.dns2}" | dns_3="${privada.dns3}"`);
-    console.log(`[camera-proxy] Todos los puertos: puerto_1="${privada.puerto1}" | puerto_2="${privada.puerto2}" | puerto_3="${privada.puerto3}"`);
-
     if (!rawVideoUrl || rawVideoUrl.trim() === "") {
-      console.log(`[camera-proxy] ❌ video_${camIndex} esta VACIO - No configurada`);
-      console.log(`[camera-proxy] ==========================================`);
       return new NextResponse(
         noSignalSvg(`Camara ${camIndex}`, "No configurada"),
         {
@@ -500,11 +487,7 @@ export async function GET(request: NextRequest) {
       dnsPorts[camIndex - 1] || dnsPorts[0] || ""
     );
 
-    console.log(`[camera-proxy] >>> URL CONSTRUIDA: ${cameraUrl}`);
-
     if (!cameraUrl) {
-      console.log(`[camera-proxy] ❌ URL construida esta VACIA - URL invalida`);
-      console.log(`[camera-proxy] ==========================================`);
       return new NextResponse(
         noSignalSvg(`Camara ${camIndex}`, "URL invalida"),
         {
@@ -519,23 +502,17 @@ export async function GET(request: NextRequest) {
 
     // Obtener credenciales
     const creds = findCredentials(cameraUrl, privada);
-    console.log(`[camera-proxy] Credenciales: user="${creds.user}" pass="${creds.pass.substring(0, 3)}***"`);
 
     // Adquirir slot del semaforo para este host (evita saturar conexiones al DVR)
     const hostKey = getHostKey(cameraUrl);
     await acquireHostSlot(hostKey);
 
     try {
-      console.log(`[camera-proxy] Iniciando fetch a: ${cameraUrl}`);
 
       // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
-      const fetchStart = Date.now();
       const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
-      const fetchMs = Date.now() - fetchStart;
 
       if (result.ok && result.data) {
-        console.log(`[camera-proxy] ✅ Snapshot OK | ${result.data.length} bytes | ${result.contentType} | ${fetchMs}ms`);
-        console.log(`[camera-proxy] ==========================================`);
         return new NextResponse(new Uint8Array(result.data), {
           status: 200,
           headers: {
@@ -551,9 +528,6 @@ export async function GET(request: NextRequest) {
       }
 
       // Error - devolver SVG placeholder
-      console.log(`[camera-proxy] ❌ Snapshot FALLO | status=${result.status} | error="${result.error}" | ${fetchMs}ms`);
-      console.log(`[camera-proxy] URL que fallo: ${cameraUrl}`);
-      console.log(`[camera-proxy] ==========================================`);
       return new NextResponse(
         noSignalSvg(
           `Camara ${camIndex} - ${privada.descripcion}`,

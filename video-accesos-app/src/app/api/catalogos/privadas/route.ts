@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     // Aceptar tanto "pageSize" como "limit" para compatibilidad
-    const pageSize = parseInt(
+    const pageSize = Math.min(parseInt(
       searchParams.get("pageSize") || searchParams.get("limit") || "10",
       10
-    );
+    ), 100);
     const skip = (page - 1) * pageSize;
 
     // estatusId: si se pasa, filtrar por ese estatus exacto (dropdowns: estatusId=1).
