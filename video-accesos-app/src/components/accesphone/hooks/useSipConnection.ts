@@ -27,6 +27,8 @@ export interface UseSipConnectionReturn {
   connecting: boolean;
   reconnecting: boolean;
   reconnectAttempt: number;
+  reconnectExhausted: boolean;
+  networkOffline: boolean;
   statusText: string;
   setStatusText: React.Dispatch<React.SetStateAction<string>>;
   isInsecureContext: boolean;
@@ -56,6 +58,8 @@ export function useSipConnection<T extends AccesPhoneConfig>({
   const [connecting, setConnecting] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [reconnectExhausted, setReconnectExhausted] = useState(false);
+  const [networkOffline, setNetworkOffline] = useState(false);
   const [statusText, setStatusText] = useState("Desconectado");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -67,6 +71,8 @@ export function useSipConnection<T extends AccesPhoneConfig>({
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectSIPInternalRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  /** Guards against overlapping connect attempts */
+  const connectingLockRef = useRef(false);
 
   // Stable ref for the incoming-session callback
   const onNewIncomingSessionRef = useRef(onNewIncomingSession);
@@ -79,14 +85,88 @@ export function useSipConnection<T extends AccesPhoneConfig>({
   }, [reconnectAttempt]);
 
   // -----------------------------------------------------------------
+  // Network status detection
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleOffline = () => {
+      setNetworkOffline(true);
+      setStatusText("Sin conexion de red");
+    };
+
+    const handleOnline = () => {
+      setNetworkOffline(false);
+      // If we were waiting to reconnect, try now
+      if (
+        !manualDisconnectRef.current &&
+        !uaRef.current &&
+        mountedRef.current
+      ) {
+        setStatusText("Red disponible, reconectando...");
+        // Reset attempt counter when network comes back
+        reconnectAttemptRef.current = 0;
+        setReconnectAttempt(0);
+        setReconnectExhausted(false);
+        // Small delay to let the network stabilize
+        setTimeout(() => {
+          if (mountedRef.current && !manualDisconnectRef.current) {
+            connectSIPInternalRef.current?.();
+          }
+        }, 2000);
+      }
+    };
+
+    // Check initial state
+    if (!navigator.onLine) {
+      setNetworkOffline(true);
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
+  // -----------------------------------------------------------------
+  // Force-close the UA and its underlying WebSocket transport
+  // -----------------------------------------------------------------
+  const forceCloseUA = useCallback(() => {
+    const ua = uaRef.current;
+    if (!ua) return;
+    try {
+      ua.terminateSessions();
+    } catch { /* ignore */ }
+    try {
+      ua.unregister();
+    } catch { /* ignore */ }
+    try {
+      ua.stop();
+    } catch { /* ignore */ }
+    uaRef.current = null;
+  }, []);
+
+  // -----------------------------------------------------------------
   // Schedule auto-reconnect
   // -----------------------------------------------------------------
   const scheduleReconnect = useCallback((attempt: number) => {
     if (manualDisconnectRef.current) return;
     if (!mountedRef.current) return;
-    if (RECONNECT_MAX_ATTEMPTS > 0 && attempt >= RECONNECT_MAX_ATTEMPTS) {
-      setStatusText("Reconexion fallida");
+
+    // If network is offline, don't schedule — the "online" listener will handle it
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setStatusText("Sin conexion de red");
+      setNetworkOffline(true);
       setReconnecting(false);
+      return;
+    }
+
+    if (RECONNECT_MAX_ATTEMPTS > 0 && attempt >= RECONNECT_MAX_ATTEMPTS) {
+      setStatusText("Reconexion fallida — limite alcanzado");
+      setReconnecting(false);
+      setReconnectExhausted(true);
       return;
     }
 
@@ -96,20 +176,21 @@ export function useSipConnection<T extends AccesPhoneConfig>({
     );
 
     setReconnecting(true);
+    setReconnectExhausted(false);
     setReconnectAttempt(attempt + 1);
     reconnectAttemptRef.current = attempt + 1;
-    setStatusText(`Reconectando en ${Math.round(delay / 1000)}s...`);
+    setStatusText(`Reconectando en ${Math.round(delay / 1000)}s... (${attempt + 1}/${RECONNECT_MAX_ATTEMPTS})`);
 
     reconnectTimerRef.current = setTimeout(() => {
       if (!mountedRef.current || manualDisconnectRef.current) return;
-      if (uaRef.current) {
-        try { uaRef.current.stop(); } catch { /* ignore */ }
-        uaRef.current = null;
-      }
+
+      // Ensure previous UA is fully torn down before reconnecting
+      forceCloseUA();
+
       setReconnecting(false);
       connectSIPInternalRef.current?.();
     }, delay);
-  }, []);
+  }, [forceCloseUA]);
 
   const cancelReconnect = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -118,13 +199,23 @@ export function useSipConnection<T extends AccesPhoneConfig>({
     }
     setReconnecting(false);
     setReconnectAttempt(0);
+    reconnectAttemptRef.current = 0;
   }, []);
 
   // -----------------------------------------------------------------
   // Connect SIP internal
   // -----------------------------------------------------------------
   const connectSIPInternal = useCallback(async () => {
+    // Prevent overlapping connection attempts
+    if (connectingLockRef.current) return;
     if (uaRef.current) return;
+
+    // Don't attempt if network is offline
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setStatusText("Sin conexion de red");
+      setNetworkOffline(true);
+      return;
+    }
 
     let cfg = configRef.current;
     if (!cfg.extension || !cfg.sipPassword) {
@@ -138,6 +229,7 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       return;
     }
 
+    connectingLockRef.current = true;
     manualDisconnectRef.current = false;
     setConnecting(true);
     setStatusText("Conectando...");
@@ -164,7 +256,10 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       ua.on("disconnected", () => {
         setConnected(false);
         setConnecting(false);
-        uaRef.current = null;
+        connectingLockRef.current = false;
+
+        // Ensure the disconnected UA is fully cleaned up
+        forceCloseUA();
 
         if (manualDisconnectRef.current) {
           setStatusText("Desconectado");
@@ -177,8 +272,10 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       ua.on("registered", () => {
         setConnected(true);
         setConnecting(false);
+        connectingLockRef.current = false;
         setReconnecting(false);
         setReconnectAttempt(0);
+        setReconnectExhausted(false);
         reconnectAttemptRef.current = 0;
         setStatusText("Registrado");
       });
@@ -191,6 +288,7 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       ua.on("registrationFailed", (e) => {
         setConnected(false);
         setConnecting(false);
+        connectingLockRef.current = false;
         setStatusText(`Error: ${e.cause || "registro fallido"}`);
         if (!manualDisconnectRef.current) {
           scheduleReconnect(reconnectAttemptRef.current);
@@ -211,12 +309,13 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       setStatusText("Conectando WebSocket...");
     } catch (err) {
       setConnecting(false);
+      connectingLockRef.current = false;
       setStatusText(`Error: ${err instanceof Error ? err.message : String(err)}`);
       if (!manualDisconnectRef.current) {
         scheduleReconnect(reconnectAttemptRef.current);
       }
     }
-  }, [defaults, userAgent, scheduleReconnect]);
+  }, [defaults, userAgent, scheduleReconnect, forceCloseUA]);
 
   // Keep the ref in sync so the reconnect timer can call the latest version
   useEffect(() => {
@@ -246,21 +345,22 @@ export function useSipConnection<T extends AccesPhoneConfig>({
     }
     manualDisconnectRef.current = false;
     cancelReconnect();
+    setReconnectExhausted(false);
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
     connectSIPInternalRef.current?.();
   }, [cancelReconnect, isInsecureContext]);
 
   const disconnectSIP = useCallback(() => {
     manualDisconnectRef.current = true;
     cancelReconnect();
-    if (uaRef.current) {
-      uaRef.current.unregister();
-      uaRef.current.stop();
-      uaRef.current = null;
-    }
+    forceCloseUA();
     setConnected(false);
     setConnecting(false);
+    connectingLockRef.current = false;
+    setReconnectExhausted(false);
     setStatusText("Desconectado");
-  }, [cancelReconnect]);
+  }, [cancelReconnect, forceCloseUA]);
 
   // -----------------------------------------------------------------
   // Auto-connect on mount if credentials are saved
@@ -286,11 +386,7 @@ export function useSipConnection<T extends AccesPhoneConfig>({
       mountedRef.current = false;
       manualDisconnectRef.current = true;
       cancelReconnect();
-      if (uaRef.current) {
-        uaRef.current.unregister();
-        uaRef.current.stop();
-        uaRef.current = null;
-      }
+      forceCloseUA();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -300,6 +396,8 @@ export function useSipConnection<T extends AccesPhoneConfig>({
     connecting,
     reconnecting,
     reconnectAttempt,
+    reconnectExhausted,
+    networkOffline,
     statusText,
     setStatusText,
     isInsecureContext,

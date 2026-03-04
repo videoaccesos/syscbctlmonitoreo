@@ -26,6 +26,8 @@ interface PhonePanelProps {
   connecting: boolean;
   reconnecting: boolean;
   reconnectAttempt: number;
+  reconnectExhausted: boolean;
+  networkOffline: boolean;
   statusText: string;
   statusColor: string;
   isInsecureContext: boolean;
@@ -81,6 +83,8 @@ export default function PhonePanel({
   connecting,
   reconnecting,
   reconnectAttempt,
+  reconnectExhausted,
+  networkOffline,
   statusText,
   statusColor,
   isInsecureContext,
@@ -315,6 +319,18 @@ export default function PhonePanel({
             >
               <Unplug className="h-3 w-3" />
               Desconectar
+            </button>
+          ) : networkOffline ? (
+            <div className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-900/60 px-2 py-1.5 text-[11px] font-medium text-red-300">
+              Sin red
+            </div>
+          ) : reconnectExhausted ? (
+            <button
+              onClick={connectSIP}
+              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-orange-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-orange-500 transition"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Reintentar
             </button>
           ) : reconnecting ? (
             <button

@@ -145,7 +145,10 @@ export default function AccesPhoneInline({
 
       {/* Status bar */}
       <div className={`px-4 py-1.5 border-b border-gray-200 text-xs flex items-center justify-between ${
-        sip.reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-500"
+        sip.networkOffline ? "bg-red-50 text-red-700"
+        : sip.reconnectExhausted ? "bg-red-50 text-red-600"
+        : sip.reconnecting ? "bg-yellow-50 text-yellow-700"
+        : "bg-gray-50 text-gray-500"
       }`}>
         <span className="flex items-center gap-1.5">
           {sip.reconnecting && <RefreshCw className="h-3 w-3 animate-spin" />}
@@ -156,18 +159,28 @@ export default function AccesPhoneInline({
             </span>
           )}
         </span>
-        {sip.reconnecting && (
-          <button
-            onClick={() => {
-              sip.cancelReconnect();
-              sip.manualDisconnectRef.current = true;
-              sip.setStatusText("Desconectado");
-            }}
-            className="text-yellow-600 hover:text-yellow-800 text-xs underline"
-          >
-            Cancelar
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {sip.reconnectExhausted && (
+            <button
+              onClick={sip.connectSIP}
+              className="text-green-600 hover:text-green-800 text-xs underline font-medium"
+            >
+              Reintentar
+            </button>
+          )}
+          {sip.reconnecting && (
+            <button
+              onClick={() => {
+                sip.cancelReconnect();
+                sip.manualDisconnectRef.current = true;
+                sip.setStatusText("Desconectado");
+              }}
+              className="text-yellow-600 hover:text-yellow-800 text-xs underline"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* HTTPS security warning */}
@@ -270,6 +283,18 @@ export default function AccesPhoneInline({
             className="w-full rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 transition"
           >
             Desconectar
+          </button>
+        ) : sip.networkOffline ? (
+          <div className="w-full rounded-lg bg-red-100 border border-red-300 px-3 py-2.5 text-sm font-medium text-red-700 flex items-center justify-center gap-2">
+            Sin conexion de red — se reconectara automaticamente
+          </div>
+        ) : sip.reconnectExhausted ? (
+          <button
+            onClick={sip.connectSIP}
+            className="w-full rounded-lg bg-orange-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-orange-700 transition flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Reintentar conexion
           </button>
         ) : sip.reconnecting ? (
           <button

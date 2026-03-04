@@ -166,6 +166,8 @@ export default function AccesPhone({
           connecting={sip.connecting}
           reconnecting={sip.reconnecting}
           reconnectAttempt={sip.reconnectAttempt}
+          reconnectExhausted={sip.reconnectExhausted}
+          networkOffline={sip.networkOffline}
           statusText={sip.statusText}
           statusColor={statusColor}
           isInsecureContext={sip.isInsecureContext}

@@ -3,9 +3,9 @@ import type { AccesPhoneConfig, AccesPhoneInlineConfig } from "./types";
 // ---------------------------------------------------------------------------
 // Auto-reconnect constants
 // ---------------------------------------------------------------------------
-export const RECONNECT_BASE_DELAY = 2000;
-export const RECONNECT_MAX_DELAY = 30000;
-export const RECONNECT_MAX_ATTEMPTS = 0; // 0 = unlimited
+export const RECONNECT_BASE_DELAY = 3000;   // 3s initial delay
+export const RECONNECT_MAX_DELAY = 60000;   // 60s max between retries
+export const RECONNECT_MAX_ATTEMPTS = 12;   // stop after 12 attempts (~5 min total)
 
 // ---------------------------------------------------------------------------
 // Default SIP config - stored in localStorage
