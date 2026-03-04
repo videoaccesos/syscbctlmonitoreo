@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RTCSession } from "jssip/lib/RTCSession";
 import type { UA } from "jssip/lib/UA";
+import { DTMF_TRANSPORT } from "jssip/lib/Constants";
 import type { CallInfo } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -366,9 +367,24 @@ export function useCallManager({
   const dialpadPress = useCallback((digit: string) => {
     setDialNumber((prev) => prev + digit);
     if (sessionRef.current) {
-      sessionRef.current.sendDTMF(digit);
+      try {
+        sessionRef.current.sendDTMF(digit, {
+          transportType: DTMF_TRANSPORT.RFC2833,
+          duration: 160,
+          interToneGap: 70,
+        });
+      } catch {
+        // Fallback to SIP INFO if RFC2833 is not available
+        try {
+          sessionRef.current.sendDTMF(digit, {
+            duration: 160,
+          });
+        } catch (e2) {
+          console.warn(`[${logPrefix}] Error sending DTMF:`, e2);
+        }
+      }
     }
-  }, []);
+  }, [logPrefix]);
 
   return {
     inCall,
