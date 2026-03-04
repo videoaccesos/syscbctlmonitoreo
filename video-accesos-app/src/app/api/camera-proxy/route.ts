@@ -487,6 +487,8 @@ export async function GET(request: NextRequest) {
       dnsPorts[camIndex - 1] || dnsPorts[0] || ""
     );
 
+    console.log(`[camera-proxy] Privada: ${privada.descripcion} (ID:${privada.id}) | Cam ${camIndex} | URL: ${cameraUrl || "(vacia)"} | raw: ${rawVideoUrl} | dns: ${dnsHosts[camIndex - 1] || dnsHosts[0] || "(none)"} | puerto: ${dnsPorts[camIndex - 1] || dnsPorts[0] || "(none)"}`);
+
     if (!cameraUrl) {
       return new NextResponse(
         noSignalSvg(`Camara ${camIndex}`, "URL invalida"),
@@ -502,6 +504,7 @@ export async function GET(request: NextRequest) {
 
     // Obtener credenciales
     const creds = findCredentials(cameraUrl, privada);
+    console.log(`[camera-proxy] Credenciales: user="${creds.user}" | pass="${creds.pass ? "***" : "(vacio)"}" `);
 
     // Adquirir slot del semaforo para este host (evita saturar conexiones al DVR)
     const hostKey = getHostKey(cameraUrl);
@@ -510,9 +513,12 @@ export async function GET(request: NextRequest) {
     try {
 
       // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
+      const startMs = Date.now();
       const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
+      const elapsedMs = Date.now() - startMs;
 
       if (result.ok && result.data) {
+        console.log(`[camera-proxy] ✅ OK | Cam ${camIndex} | ${privada.descripcion} | ${result.data.length} bytes | ${elapsedMs}ms | Content-Type: ${result.contentType}`);
         return new NextResponse(new Uint8Array(result.data), {
           status: 200,
           headers: {
@@ -528,6 +534,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Error - devolver SVG placeholder
+      console.log(`[camera-proxy] ❌ FALLO | Cam ${camIndex} | ${privada.descripcion} | ${elapsedMs}ms | Status: ${result.status} | Error: ${result.error}`);
       return new NextResponse(
         noSignalSvg(
           `Camara ${camIndex} - ${privada.descripcion}`,
