@@ -554,24 +554,38 @@ export default function RegistroAccesosPage() {
         );
         if (res.ok) {
           const json = await res.json();
-          if (json.found && json.data) {
-            setIncomingCallResidencia({
-              id: json.data.id,
-              nroCasa: json.data.nroCasa,
-              calle: json.data.calle,
-              privada: json.data.privada,
-              observaciones: json.data.observaciones,
-              estatusId: json.data.estatusId,
-            });
+          if (json.found) {
+            const isResidenciaMatch = json.matchLevel === "residencia" && json.data;
 
-            // Auto-populate form: select privada and residencia
-            const privId = String(json.data.privada.id);
-            setFormPrivadaId(privId);
-            setSelectedResidencia(json.data);
-            setResidencias([]);
-            setResidenciaSearch("");
-            setFormSolicitanteId("");
-            setFormSolicitanteNombre("");
+            if (isResidenciaMatch) {
+              // Match exacto a nivel residencia - auto-poblar todo
+              setIncomingCallResidencia({
+                id: json.data.id,
+                nroCasa: json.data.nroCasa,
+                calle: json.data.calle,
+                privada: json.data.privada,
+                observaciones: json.data.observaciones,
+                estatusId: json.data.estatusId,
+              });
+
+              const privId = String(json.data.privada.id);
+              setFormPrivadaId(privId);
+              setSelectedResidencia(json.data);
+              setResidencias([]);
+              setResidenciaSearch("");
+              setFormSolicitanteId("");
+              setFormSolicitanteNombre("");
+            } else if (json.matchLevel === "privada" && json.privada) {
+              // Match a nivel privada (telefono o celular) - solo seleccionar la privada
+              setIncomingCallResidencia(null);
+              const privId = String(json.privada.id);
+              setFormPrivadaId(privId);
+              setSelectedResidencia(null);
+              setResidencias([]);
+              setResidenciaSearch("");
+              setFormSolicitanteId("");
+              setFormSolicitanteNombre("");
+            }
 
             // Start timer for new registro
             setTimerRunning(true);

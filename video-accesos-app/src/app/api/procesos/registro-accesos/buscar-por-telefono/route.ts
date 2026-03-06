@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/procesos/registro-accesos/buscar-por-telefono?telefono=123456
-// Busca residencia por telefono_interfon para identificar llamadas entrantes
+// Busca primero en residencia.telefonoInterfon, luego en privada.telefono/celular
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,24 +22,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Buscar residencia cuyo telefonoInterfon coincida con el numero entrante
-    // Probamos coincidencia exacta y tambien sin prefijos comunes
     const cleanNumber = telefono.replace(/\D/g, "");
+    const last10 = cleanNumber.length > 10 ? cleanNumber.slice(-10) : null;
+
+    console.log("[buscar-por-telefono] ========================================");
+    console.log("[buscar-por-telefono] Caller ID recibido:", telefono);
+    console.log("[buscar-por-telefono] Numero limpio:", cleanNumber);
+    if (last10) console.log("[buscar-por-telefono] Ultimos 10 digitos:", last10);
+
+    // ---------------------------------------------------------------
+    // PASO 1: Buscar por residencia.telefonoInterfon (match exacto)
+    // ---------------------------------------------------------------
+    const residenciaConditions = [
+      { telefonoInterfon: cleanNumber },
+      { telefonoInterfon: telefono },
+      ...(last10 ? [{ telefonoInterfon: last10 }] : []),
+    ];
+
+    console.log("[buscar-por-telefono] Paso 1: Buscando en residencia.telefonoInterfon...");
 
     const residencia = await prisma.residencia.findFirst({
       where: {
-        telefonoInterfon: {
-          not: "",
-        },
+        telefonoInterfon: { not: "" },
         estatusId: { in: [1, 2, 3] },
-        OR: [
-          { telefonoInterfon: cleanNumber },
-          { telefonoInterfon: telefono },
-          // Buscar ultimos 10 digitos por si viene con codigo de pais
-          ...(cleanNumber.length > 10
-            ? [{ telefonoInterfon: cleanNumber.slice(-10) }]
-            : []),
-        ],
+        OR: residenciaConditions,
       },
       select: {
         id: true,
@@ -86,21 +92,83 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (!residencia) {
-      return NextResponse.json(
-        { found: false, message: "No se encontro residencia con ese telefono" },
-        { status: 200 }
-      );
+    if (residencia) {
+      console.log("[buscar-por-telefono] MATCH RESIDENCIA encontrado!");
+      console.log("[buscar-por-telefono]   Privada:", residencia.privada.descripcion, "(ID:", residencia.privada.id, ")");
+      console.log("[buscar-por-telefono]   Casa:", residencia.nroCasa, residencia.calle);
+      console.log("[buscar-por-telefono]   telefonoInterfon:", residencia.telefonoInterfon);
+      console.log("[buscar-por-telefono]   Residentes:", residencia.residentes.length);
+      console.log("[buscar-por-telefono] ========================================");
+
+      return NextResponse.json({
+        found: true,
+        matchLevel: "residencia",
+        data: residencia,
+      });
     }
 
-    return NextResponse.json({
-      found: true,
-      data: residencia,
+    // ---------------------------------------------------------------
+    // PASO 2: Buscar por privada.telefono o privada.celular
+    // ---------------------------------------------------------------
+    const privadaConditions = [
+      { telefono: cleanNumber },
+      { telefono: telefono },
+      { celular: cleanNumber },
+      { celular: telefono },
+      ...(last10
+        ? [{ telefono: last10 }, { celular: last10 }]
+        : []),
+    ];
+
+    console.log("[buscar-por-telefono] Paso 2: Buscando en privada.telefono / privada.celular...");
+
+    const privada = await prisma.privada.findFirst({
+      where: {
+        estatusId: { in: [1, 2, 3] },
+        OR: privadaConditions,
+      },
+      select: {
+        id: true,
+        descripcion: true,
+        telefono: true,
+        celular: true,
+      },
     });
-  } catch (error) {
-    console.error("Error al buscar residencia por telefono:", error);
+
+    if (privada) {
+      const matchedField = privadaConditions.some(
+        (c) => ("telefono" in c && (c.telefono === cleanNumber || c.telefono === telefono || c.telefono === last10))
+      ) && privada.telefono ? "telefono" : "celular";
+
+      console.log("[buscar-por-telefono] MATCH PRIVADA encontrado!");
+      console.log("[buscar-por-telefono]   Privada:", privada.descripcion, "(ID:", privada.id, ")");
+      console.log("[buscar-por-telefono]   Campo que hizo match:", matchedField);
+      console.log("[buscar-por-telefono]   privada.telefono:", privada.telefono || "(vacio)");
+      console.log("[buscar-por-telefono]   privada.celular:", privada.celular || "(vacio)");
+      console.log("[buscar-por-telefono] ========================================");
+
+      return NextResponse.json({
+        found: true,
+        matchLevel: "privada",
+        privada,
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // SIN MATCH - Log para depuración
+    // ---------------------------------------------------------------
+    console.log("[buscar-por-telefono] SIN MATCH para:", telefono);
+    console.log("[buscar-por-telefono] Numero no encontrado en residencia.telefonoInterfon, privada.telefono ni privada.celular");
+    console.log("[buscar-por-telefono] ========================================");
+
     return NextResponse.json(
-      { error: "Error al buscar residencia por telefono" },
+      { found: false, message: "No se encontro residencia ni privada con ese telefono" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("[buscar-por-telefono] ERROR:", error);
+    return NextResponse.json(
+      { error: "Error al buscar por telefono" },
       { status: 500 }
     );
   }
