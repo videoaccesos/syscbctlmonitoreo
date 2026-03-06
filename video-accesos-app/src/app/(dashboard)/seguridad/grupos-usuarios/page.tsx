@@ -114,11 +114,7 @@ export default function GruposUsuariosPage() {
       const res = await fetch("/api/seguridad/usuarios?pageSize=1000");
       if (!res.ok) return;
       const json = await res.json();
-      // Filtrar solo activos
-      const activos = (json.data || []).filter(
-        (u: UsuarioBasico) => u.estatusId === 1
-      );
-      setUsuariosDisponibles(activos);
+      setUsuariosDisponibles(json.data || []);
     } catch {
       console.error("Error al cargar usuarios");
     }

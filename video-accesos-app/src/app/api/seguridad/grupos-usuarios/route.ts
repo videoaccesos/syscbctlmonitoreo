@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           _count: {
-            select: { detalles: true },
+            select: {
+              detalles: {
+                where: { usuario: { estatusId: 1 } },
+              },
+            },
           },
         },
         orderBy: { nombre: "asc" },
