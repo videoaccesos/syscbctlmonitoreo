@@ -814,7 +814,7 @@ export default function AccesPhone({
 
             {/* Status bar */}
             <div className={`px-4 py-1.5 border-b border-gray-200 text-xs flex items-center justify-between ${
-              reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-500"
+              reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-700"
             }`}>
               <span className="flex items-center gap-1.5">
                 {reconnecting && <RefreshCw className="h-3 w-3 animate-spin" />}
@@ -856,7 +856,7 @@ export default function AccesPhone({
                     <div className="text-sm font-semibold text-gray-900">
                       {callInfo.number}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-700">
                       {ringing
                         ? "Llamada entrante..."
                         : callInfo.direction === "incoming"
@@ -1047,14 +1047,14 @@ export default function AccesPhone({
               </h2>
               <button
                 onClick={() => setShowSettings(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Servidor WebSocket
                 </label>
                 <input
@@ -1068,7 +1068,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Extension
                 </label>
                 <input
@@ -1082,7 +1082,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Contrasena
                 </label>
                 <input
@@ -1095,7 +1095,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Dominio SIP
                 </label>
                 <input
@@ -1114,7 +1114,7 @@ export default function AccesPhone({
                 <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Video / Camaras</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   URL Proxy Camaras
                 </label>
                 <input
@@ -1128,7 +1128,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Refresh (ms)
                 </label>
                 <input

@@ -326,9 +326,9 @@ export default function UsuariosPage() {
             <UserCog className="h-7 w-7 text-blue-600" />
             Usuarios
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">
+          <p className="text-gray-700 mt-1 text-sm">
             Gestiona los usuarios del sistema.
-            <span className="block text-xs text-gray-400 mt-0.5">
+            <span className="block text-xs text-gray-600 mt-0.5">
               El usuario del sistema (acceso a ramas) es independiente del usuario del softphone (definido en el PBX).
               No todos los usuarios requieren acceso al softphone.
             </span>
@@ -360,7 +360,7 @@ export default function UsuariosPage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex gap-2 flex-1">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por nombre de usuario..."
@@ -381,7 +381,7 @@ export default function UsuariosPage() {
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
                 estatusFilter === filter
                   ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
+                  : "text-gray-700 hover:text-gray-700"
               }`}
             >
               {filter === "activos" ? "Activos" : filter === "baja" ? "Baja" : "Todos"}
@@ -421,14 +421,14 @@ export default function UsuariosPage() {
                 <tr>
                   <td colSpan={6} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : usuarios.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
-                    className="text-center py-12 text-gray-400 text-sm"
+                    className="text-center py-12 text-gray-600 text-sm"
                   >
                     No se encontraron usuarios
                   </td>
@@ -454,7 +454,7 @@ export default function UsuariosPage() {
                               {gd.grupo.nombre}
                             </span>
                           ))
-                        : <span className="text-gray-400 text-xs">Sin grupo</span>}
+                        : <span className="text-gray-600 text-xs">Sin grupo</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {formatDate(usr.ultimaSesion)}
@@ -474,7 +474,7 @@ export default function UsuariosPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => openEditModal(usr)}
-                          className="p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                          className="p-1.5 rounded-md text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
@@ -482,7 +482,7 @@ export default function UsuariosPage() {
                         {usr.estatusId === 1 && (
                           <button
                             onClick={() => openDeleteModal(usr)}
-                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-md text-gray-700 hover:text-red-600 hover:bg-red-50 transition"
                             title="Dar de baja"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -554,7 +554,7 @@ export default function UsuariosPage() {
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -598,7 +598,7 @@ export default function UsuariosPage() {
                     placeholder={editingId ? "Dejar vacio para no cambiar" : ""}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Minimo 6 caracteres</p>
+                  <p className="text-xs text-gray-600 mt-1">Minimo 6 caracteres</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

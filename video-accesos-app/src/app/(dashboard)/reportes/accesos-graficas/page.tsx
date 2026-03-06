@@ -165,7 +165,7 @@ export default function AccesosGraficasPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Accesos - Graficas</h1>
-          <p className="text-sm text-gray-500">Visualizacion grafica de registros de acceso</p>
+          <p className="text-sm text-gray-700">Visualizacion grafica de registros de acceso</p>
         </div>
       </div>
 
@@ -226,7 +226,7 @@ export default function AccesosGraficasPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="text-center py-12 text-gray-400">Cargando datos...</div>
+        <div className="text-center py-12 text-gray-600">Cargando datos...</div>
       )}
 
       {/* Graficas */}
@@ -234,7 +234,7 @@ export default function AccesosGraficasPage() {
         <div className="space-y-6">
           {/* Total */}
           <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
-            <p className="text-sm text-gray-500">Total de accesos en el periodo</p>
+            <p className="text-sm text-gray-700">Total de accesos en el periodo</p>
             <p className="text-4xl font-bold text-gray-900">{data.total.toLocaleString()}</p>
           </div>
 
@@ -245,7 +245,7 @@ export default function AccesosGraficasPage() {
                 Accesos por Tipo de Gestion
               </h3>
               {data.porTipoGestion.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">Sin datos</p>
+                <p className="text-sm text-gray-600 text-center py-8">Sin datos</p>
               ) : (
                 <div className="space-y-3">
                   {data.porTipoGestion.map((item, idx) => {
@@ -278,7 +278,7 @@ export default function AccesosGraficasPage() {
                 Accesos por Resultado
               </h3>
               {data.porEstatus.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">Sin datos</p>
+                <p className="text-sm text-gray-600 text-center py-8">Sin datos</p>
               ) : (
                 <div className="space-y-4">
                   {/* Barra apilada como representacion visual */}
@@ -338,7 +338,7 @@ export default function AccesosGraficasPage() {
               Accesos por Dia
             </h3>
             {data.porDia.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Sin datos</p>
+              <p className="text-sm text-gray-600 text-center py-8">Sin datos</p>
             ) : (
               <div className="overflow-x-auto">
                 <div className="flex items-end gap-1 min-w-fit" style={{ height: "200px" }}>
@@ -352,7 +352,7 @@ export default function AccesosGraficasPage() {
                         style={{ height: "100%" }}
                       >
                         {/* Valor */}
-                        <span className="text-[10px] text-gray-500 mb-1">
+                        <span className="text-[10px] text-gray-700 mb-1">
                           {item.count > 0 ? item.count : ""}
                         </span>
                         {/* Contenedor barra */}
@@ -364,7 +364,7 @@ export default function AccesosGraficasPage() {
                           />
                         </div>
                         {/* Fecha */}
-                        <span className="text-[9px] text-gray-400 mt-1 rotate-[-45deg] origin-top-left whitespace-nowrap">
+                        <span className="text-[9px] text-gray-600 mt-1 rotate-[-45deg] origin-top-left whitespace-nowrap">
                           {formatFechaCorta(item.fecha)}
                         </span>
                       </div>
@@ -381,7 +381,7 @@ export default function AccesosGraficasPage() {
               Distribucion por Hora
             </h3>
             {data.porHora.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Sin datos</p>
+              <p className="text-sm text-gray-600 text-center py-8">Sin datos</p>
             ) : (
               <div className="overflow-x-auto">
                 <div className="flex items-end gap-1 min-w-fit" style={{ height: "180px" }}>
@@ -395,7 +395,7 @@ export default function AccesosGraficasPage() {
                         style={{ height: "100%" }}
                       >
                         {/* Valor */}
-                        <span className="text-[10px] text-gray-500 mb-1">
+                        <span className="text-[10px] text-gray-700 mb-1">
                           {item.count > 0 ? item.count : ""}
                         </span>
                         {/* Contenedor barra */}
@@ -407,7 +407,7 @@ export default function AccesosGraficasPage() {
                           />
                         </div>
                         {/* Hora */}
-                        <span className="text-xs text-gray-500 mt-1">
+                        <span className="text-xs text-gray-700 mt-1">
                           {String(item.hora).padStart(2, "0")}
                         </span>
                       </div>

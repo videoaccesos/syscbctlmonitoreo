@@ -78,7 +78,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           Bienvenido, {session?.user?.name || "Operador"}
         </h1>
-        <p className="text-gray-500 mt-1">
+        <p className="text-gray-700 mt-1">
           Panel de control del sistema de accesos
         </p>
       </div>
@@ -144,7 +144,7 @@ export default function DashboardPage() {
           </h2>
         </div>
         {loading ? (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <div className="text-center py-8 text-gray-600 text-sm">
             Cargando...
           </div>
         ) : stats?.ultimosAccesos && stats.ultimosAccesos.length > 0 ? (
@@ -152,19 +152,19 @@ export default function DashboardPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Hora
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Privada
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Residencia
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Operador
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Estado
                   </th>
                 </tr>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
                       <span className="font-medium">
                         #{a.residencia?.nroCasa}
                       </span>{" "}
-                      <span className="text-gray-500">
+                      <span className="text-gray-700">
                         {a.residencia?.calle}
                       </span>
                     </td>
@@ -204,7 +204,7 @@ export default function DashboardPage() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <div className="text-center py-8 text-gray-600 text-sm">
             No hay registros de acceso para hoy
           </div>
         )}
@@ -230,7 +230,7 @@ function DashboardCard({
     <div className="bg-white rounded-lg border border-gray-200 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500">{title}</p>
+          <p className="text-sm text-gray-700">{title}</p>
           {value && (
             <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
           )}

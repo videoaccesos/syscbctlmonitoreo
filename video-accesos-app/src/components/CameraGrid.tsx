@@ -224,7 +224,7 @@ export default function CameraGrid({
   if (loading) {
     return (
       <div className={`rounded-lg border border-gray-200 bg-gray-50 p-4 ${compact ? "text-xs" : ""}`}>
-        <div className="flex items-center gap-2 text-gray-500">
+        <div className="flex items-center gap-2 text-gray-700">
           <RefreshCw className="h-4 w-4 animate-spin" />
           <span>Buscando camaras...</span>
         </div>
@@ -274,7 +274,7 @@ export default function CameraGrid({
             <span className="text-sm font-medium">
               {lookup.privada}
             </span>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-600">
               ({availableCams.length} cam{availableCams.length !== 1 ? "s" : ""})
             </span>
           </div>
@@ -343,7 +343,7 @@ export default function CameraGrid({
 
         {/* Refresh rate indicator */}
         <div className="bg-gray-800 border-t border-gray-700 px-3 py-1 flex items-center justify-between">
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px] text-gray-700">
             Refresh: {refreshMs}ms
           </span>
           {!paused && active && (

@@ -322,7 +322,7 @@ export default function EmpleadosPage() {
             <Users className="h-7 w-7 text-blue-600" />
             Empleados
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">
+          <p className="text-gray-700 mt-1 text-sm">
             Gestiona el catalogo de empleados del sistema
           </p>
         </div>
@@ -338,7 +338,7 @@ export default function EmpleadosPage() {
       {/* Search bar */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
           <input
             type="text"
             placeholder="Buscar por nombre, apellidos o nro. operador..."
@@ -386,14 +386,14 @@ export default function EmpleadosPage() {
                 <tr>
                   <td colSpan={7} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : empleados.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="text-center py-12 text-gray-400 text-sm"
+                    className="text-center py-12 text-gray-600 text-sm"
                   >
                     No se encontraron empleados
                   </td>
@@ -431,7 +431,7 @@ export default function EmpleadosPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => openEditModal(emp)}
-                          className="p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                          className="p-1.5 rounded-md text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
@@ -439,7 +439,7 @@ export default function EmpleadosPage() {
                         {emp.estatusId === 1 && (
                           <button
                             onClick={() => openDeleteModal(emp)}
-                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-md text-gray-700 hover:text-red-600 hover:bg-red-50 transition"
                             title="Dar de baja"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -511,7 +511,7 @@ export default function EmpleadosPage() {
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>

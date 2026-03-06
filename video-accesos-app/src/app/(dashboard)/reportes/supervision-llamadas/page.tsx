@@ -183,7 +183,7 @@ export default function SupervisionLlamadasPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Supervision de Llamadas</h1>
-          <p className="text-sm text-gray-500">Reporte de evaluacion de calidad en llamadas</p>
+          <p className="text-sm text-gray-700">Reporte de evaluacion de calidad en llamadas</p>
         </div>
       </div>
 
@@ -270,13 +270,13 @@ export default function SupervisionLlamadasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-400">
+                  <td colSpan={12} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : supervisiones.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-400">
+                  <td colSpan={12} className="text-center py-12 text-gray-600">
                     No se encontraron registros
                   </td>
                 </tr>

@@ -289,9 +289,9 @@ export default function GruposUsuariosPage() {
             <Users className="h-7 w-7 text-blue-600" />
             Grupos de Usuarios
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">
+          <p className="text-gray-700 mt-1 text-sm">
             Gestiona los grupos de usuarios y sus asignaciones.
-            <span className="block text-xs text-gray-400 mt-0.5">
+            <span className="block text-xs text-gray-600 mt-0.5">
               El grupo &quot;admin&quot; siempre tiene acceso total a todas las ramas por definición.
               Los permisos de cada grupo se configuran en Seguridad &gt; Permisos de Acceso.
             </span>
@@ -309,7 +309,7 @@ export default function GruposUsuariosPage() {
       {/* Search bar */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
           <input
             type="text"
             placeholder="Buscar por nombre de grupo..."
@@ -348,14 +348,14 @@ export default function GruposUsuariosPage() {
                 <tr>
                   <td colSpan={4} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : grupos.length === 0 ? (
                 <tr>
                   <td
                     colSpan={4}
-                    className="text-center py-12 text-gray-400 text-sm"
+                    className="text-center py-12 text-gray-600 text-sm"
                   >
                     No se encontraron grupos
                   </td>
@@ -371,7 +371,7 @@ export default function GruposUsuariosPage() {
                         {grupo._count.detalles} activo{grupo._count.detalles !== 1 ? "s" : ""}
                       </span>
                       {grupo._count.detallesTotal != null && grupo._count.detallesTotal !== grupo._count.detalles && (
-                        <span className="ml-1 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                        <span className="ml-1 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
                           {grupo._count.detallesTotal} total
                         </span>
                       )}
@@ -391,7 +391,7 @@ export default function GruposUsuariosPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => openEditModal(grupo)}
-                          className="p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                          className="p-1.5 rounded-md text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
@@ -399,7 +399,7 @@ export default function GruposUsuariosPage() {
                         {grupo.estatusId === 1 && (
                           <button
                             onClick={() => openDeleteModal(grupo)}
-                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-md text-gray-700 hover:text-red-600 hover:bg-red-50 transition"
                             title="Dar de baja"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -471,7 +471,7 @@ export default function GruposUsuariosPage() {
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -507,7 +507,7 @@ export default function GruposUsuariosPage() {
                 </label>
                 <div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto p-2 space-y-1">
                   {usuariosDisponibles.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">
+                    <p className="text-sm text-gray-600 text-center py-4">
                       No hay usuarios disponibles
                     </p>
                   ) : (
@@ -526,7 +526,7 @@ export default function GruposUsuariosPage() {
                           {usr.usuario}
                         </span>
                         {usr.empleado && (
-                          <span className="text-gray-500">
+                          <span className="text-gray-700">
                             - {usr.empleado.nombre} {usr.empleado.apePaterno}
                           </span>
                         )}
@@ -534,7 +534,7 @@ export default function GruposUsuariosPage() {
                     ))
                   )}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   {form.usuarioIds.length} usuario{form.usuarioIds.length !== 1 ? "s" : ""} seleccionado{form.usuarioIds.length !== 1 ? "s" : ""}
                 </p>
               </div>

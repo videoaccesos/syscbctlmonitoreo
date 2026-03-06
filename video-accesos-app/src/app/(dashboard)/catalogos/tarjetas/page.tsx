@@ -269,7 +269,7 @@ export default function TarjetasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tarjetas</h1>
-          <p className="text-sm text-gray-500">Administracion del catalogo de tarjetas de acceso</p>
+          <p className="text-sm text-gray-700">Administracion del catalogo de tarjetas de acceso</p>
         </div>
         <button
           onClick={openCreate}
@@ -285,7 +285,7 @@ export default function TarjetasPage() {
         {/* Busqueda */}
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por lectura..."
@@ -386,20 +386,20 @@ export default function TarjetasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     No se encontraron tarjetas
                   </td>
                 </tr>
               ) : (
                 items.map((item, idx) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-gray-700">
                       {(page - 1) * pageSize + idx + 1}
                     </td>
                     <td className="px-4 py-3 font-mono font-medium text-gray-900">
@@ -491,7 +491,7 @@ export default function TarjetasPage() {
                 {editing ? "Editar Tarjeta" : "Nueva Tarjeta"}
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 

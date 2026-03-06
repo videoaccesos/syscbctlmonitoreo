@@ -807,7 +807,7 @@ export default function RegistroAccesosPage() {
             <ClipboardList className="h-7 w-7 text-blue-600" />
             Registro de Accesos
           </h1>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-700 text-sm">
             Consola de monitoreo - Registro de accesos a privadas
           </p>
         </div>
@@ -819,7 +819,7 @@ export default function RegistroAccesosPage() {
               {formatTimer(timerSeconds)}
             </span>
           </div>
-          <div className="text-xs text-gray-500 text-right">
+          <div className="text-xs text-gray-700 text-right">
             <div>
               Ult: <span className="font-mono">{ultimaDuracion}</span>
             </div>
@@ -871,7 +871,7 @@ export default function RegistroAccesosPage() {
               setIncomingCallNumber("");
               setIncomingCallResidencia(null);
             }}
-            className="p-1 text-gray-400 hover:text-gray-600"
+            className="p-1 text-gray-600 hover:text-gray-600"
           >
             <X className="h-4 w-4" />
           </button>
@@ -946,7 +946,7 @@ export default function RegistroAccesosPage() {
           <div className="flex-1 p-4 space-y-3 border-r border-gray-200">
             {/* Operador */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Operador
               </label>
               <input
@@ -959,7 +959,7 @@ export default function RegistroAccesosPage() {
 
             {/* Privada */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Privada
               </label>
               <select
@@ -985,7 +985,7 @@ export default function RegistroAccesosPage() {
 
             {/* Residencia con autocomplete */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Residencia
               </label>
               {selectedResidencia ? (
@@ -1034,7 +1034,7 @@ export default function RegistroAccesosPage() {
                 </div>
               ) : (
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
                   <input
                     type="text"
                     placeholder={
@@ -1088,7 +1088,7 @@ export default function RegistroAccesosPage() {
                               </span>
                             )}
                             {r.interfon && (
-                              <span className="text-gray-400 text-xs ml-2">
+                              <span className="text-gray-600 text-xs ml-2">
                                 Int: {r.interfon}
                               </span>
                             )}
@@ -1104,7 +1104,7 @@ export default function RegistroAccesosPage() {
 
             {/* Solicitante con autocomplete */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Solicitante
               </label>
               {formSolicitanteNombre ? (
@@ -1126,7 +1126,7 @@ export default function RegistroAccesosPage() {
                 <div className="relative">
                   <div className="flex gap-1">
                     <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
                       <input
                         type="text"
                         placeholder={
@@ -1147,7 +1147,7 @@ export default function RegistroAccesosPage() {
                         setRegTipo("general");
                         setShowRegGeneral(true);
                       }}
-                      className="rounded-lg border border-gray-300 px-2 py-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
+                      className="rounded-lg border border-gray-300 px-2 py-1.5 text-gray-700 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
                       title="Registrar nueva persona"
                     >
                       <UserPlus className="h-4 w-4" />
@@ -1191,7 +1191,7 @@ export default function RegistroAccesosPage() {
 
             {/* Tipo de Gestion */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Tipo de Gestion
               </label>
               <select
@@ -1209,7 +1209,7 @@ export default function RegistroAccesosPage() {
 
             {/* Observaciones */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Observaciones
               </label>
               <textarea
@@ -1233,7 +1233,7 @@ export default function RegistroAccesosPage() {
                     className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
                       activeTab === "residentes"
                         ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
-                        : "text-gray-500 hover:text-gray-700"
+                        : "text-gray-700 hover:text-gray-700"
                     }`}
                   >
                     <Users className="h-4 w-4 inline mr-1" />
@@ -1244,7 +1244,7 @@ export default function RegistroAccesosPage() {
                     className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
                       activeTab === "visitantes"
                         ? "text-purple-600 border-b-2 border-purple-600 bg-purple-50/50"
-                        : "text-gray-500 hover:text-gray-700"
+                        : "text-gray-700 hover:text-gray-700"
                     }`}
                   >
                     <Users className="h-4 w-4 inline mr-1" />
@@ -1257,7 +1257,7 @@ export default function RegistroAccesosPage() {
                   {activeTab === "residentes" ? (
                     <div className="divide-y divide-gray-100">
                       {selectedResidencia.residentes.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-gray-400">
+                        <div className="p-4 text-center text-sm text-gray-600">
                           No hay residentes registrados
                         </div>
                       ) : (
@@ -1275,7 +1275,7 @@ export default function RegistroAccesosPage() {
                                 <div className="text-sm font-medium text-gray-900">
                                   {nombre}
                                 </div>
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-gray-700">
                                   {r.reportarAcceso === 1 && (
                                     <span className="text-green-600">
                                       Notificar
@@ -1303,7 +1303,7 @@ export default function RegistroAccesosPage() {
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {selectedResidencia.visitas.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-gray-400">
+                        <div className="p-4 text-center text-sm text-gray-600">
                           No hay visitantes registrados
                         </div>
                       ) : (
@@ -1323,7 +1323,7 @@ export default function RegistroAccesosPage() {
                                 <div className="text-sm font-medium text-gray-900">
                                   {nombre}
                                 </div>
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-gray-700">
                                   {v.observaciones && (
                                     <span className="text-amber-600">
                                       {v.observaciones.substring(0, 30)}
@@ -1355,7 +1355,7 @@ export default function RegistroAccesosPage() {
                             setRegTipo("visitante");
                             setShowRegGeneral(true);
                           }}
-                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-700 transition"
                         >
                           <UserPlus className="h-4 w-4" />
                           Agregar Visitante
@@ -1366,7 +1366,7 @@ export default function RegistroAccesosPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full p-8 text-center text-gray-400 text-sm">
+              <div className="flex items-center justify-center h-full p-8 text-center text-gray-600 text-sm">
                 <div>
                   <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
                   <p>Seleccione una residencia para ver residentes y visitantes</p>
@@ -1384,7 +1384,7 @@ export default function RegistroAccesosPage() {
         {/* Filtros */}
         <div className="border-b border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-2">
-            <Filter className="h-4 w-4 text-gray-500" />
+            <Filter className="h-4 w-4 text-gray-700" />
             <span className="text-xs font-medium text-gray-600">
               Historial de Accesos
             </span>
@@ -1414,7 +1414,7 @@ export default function RegistroAccesosPage() {
               }}
               className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             />
-            <span className="text-xs text-gray-400">a</span>
+            <span className="text-xs text-gray-600">a</span>
             <input
               type="date"
               value={fechaHasta}
@@ -1474,14 +1474,14 @@ export default function RegistroAccesosPage() {
                 <tr>
                   <td colSpan={8} className="text-center py-8">
                     <Loader2 className="h-5 w-5 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-xs mt-1">Cargando...</p>
+                    <p className="text-gray-600 text-xs mt-1">Cargando...</p>
                   </td>
                 </tr>
               ) : registros.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="text-center py-8 text-gray-400 text-sm"
+                    className="text-center py-8 text-gray-600 text-sm"
                   >
                     No se encontraron registros de acceso para el periodo
                     seleccionado
@@ -1503,7 +1503,7 @@ export default function RegistroAccesosPage() {
                       <span className="font-medium text-gray-900">
                         {reg.residencia?.nroCasa || "-"}
                       </span>
-                      <span className="text-gray-500 ml-1">
+                      <span className="text-gray-700 ml-1">
                         {reg.residencia?.calle || ""}
                       </span>
                     </td>
@@ -1529,7 +1529,7 @@ export default function RegistroAccesosPage() {
                     <td className="px-3 py-2 text-center">
                       <button
                         onClick={() => viewDetalle(reg.id)}
-                        className="p-1 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                        className="p-1 rounded-md text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition"
                         title="Ver detalle"
                       >
                         <Eye className="h-4 w-4" />
@@ -1594,7 +1594,7 @@ export default function RegistroAccesosPage() {
                   setShowDetalle(false);
                   setDetalle(null);
                 }}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1608,11 +1608,11 @@ export default function RegistroAccesosPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs font-medium text-gray-500">ID</p>
+                      <p className="text-xs font-medium text-gray-700">ID</p>
                       <p className="text-sm font-medium">#{detalle.id}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Fecha/Hora
                       </p>
                       <p className="text-sm">
@@ -1620,7 +1620,7 @@ export default function RegistroAccesosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Privada
                       </p>
                       <p className="text-sm">
@@ -1628,7 +1628,7 @@ export default function RegistroAccesosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Residencia
                       </p>
                       <p className="text-sm">
@@ -1637,7 +1637,7 @@ export default function RegistroAccesosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Solicitante
                       </p>
                       <p className="text-sm">
@@ -1645,7 +1645,7 @@ export default function RegistroAccesosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Tipo Gestion
                       </p>
                       <p className="text-sm">
@@ -1653,7 +1653,7 @@ export default function RegistroAccesosPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Estado
                       </p>
                       <span
@@ -1663,7 +1663,7 @@ export default function RegistroAccesosPage() {
                       </span>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Operador
                       </p>
                       <p className="text-sm">
@@ -1671,14 +1671,14 @@ export default function RegistroAccesosPage() {
                           ? `${detalle.empleado.nombre} ${detalle.empleado.apePaterno} ${detalle.empleado.apeMaterno}`
                           : "-"}
                         {detalle.empleado?.nroOperador && (
-                          <span className="text-xs text-gray-400 ml-1">
+                          <span className="text-xs text-gray-600 ml-1">
                             (Op. {detalle.empleado.nroOperador})
                           </span>
                         )}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500">
+                      <p className="text-xs font-medium text-gray-700">
                         Duracion
                       </p>
                       <p className="text-sm font-mono">
@@ -1688,7 +1688,7 @@ export default function RegistroAccesosPage() {
                   </div>
                   {detalle.observaciones && (
                     <div className="border-t border-gray-200 pt-4">
-                      <p className="text-xs font-medium text-gray-500 mb-1">
+                      <p className="text-xs font-medium text-gray-700 mb-1">
                         Observaciones
                       </p>
                       <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">
@@ -1698,7 +1698,7 @@ export default function RegistroAccesosPage() {
                   )}
                 </div>
               ) : (
-                <p className="text-center text-gray-400 py-8">
+                <p className="text-center text-gray-600 py-8">
                   No se pudo cargar el detalle
                 </p>
               )}
@@ -1745,7 +1745,7 @@ export default function RegistroAccesosPage() {
               </h2>
               <button
                 onClick={() => setShowRegGeneral(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>

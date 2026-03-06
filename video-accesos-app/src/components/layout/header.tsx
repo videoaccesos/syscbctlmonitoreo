@@ -14,7 +14,7 @@ export function Header() {
         </h2>
       </div>
       <div className="flex items-center gap-4">
-        <button className="relative text-gray-500 hover:text-gray-700 transition">
+        <button className="relative text-gray-700 hover:text-gray-700 transition">
           <Bell className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2 text-sm">
@@ -23,7 +23,7 @@ export function Header() {
           </div>
           <div>
             <p className="font-medium text-gray-700">{session?.user?.name}</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-600">
               Operador #{String(session?.user?.nroOperador || "N/A")}
             </p>
           </div>

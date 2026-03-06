@@ -269,10 +269,10 @@ export default function PermisosPage() {
           <KeyRound className="h-7 w-7 text-blue-600" />
           Permisos de Acceso
         </h1>
-        <p className="text-gray-500 mt-1 text-sm">
+        <p className="text-gray-700 mt-1 text-sm">
           Configura los permisos de acceso por grupo de usuarios.
           <br />
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-600">
             Nota: El grupo &quot;admin&quot; siempre tiene acceso total a todas las ramas por definición.
           </span>
         </p>
@@ -362,7 +362,7 @@ export default function PermisosPage() {
       {loadingPermisos ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-          <p className="text-gray-400 text-sm mt-2">Cargando permisos...</p>
+          <p className="text-gray-600 text-sm mt-2">Cargando permisos...</p>
         </div>
       ) : selectedGrupoId && procesos.length > 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -386,7 +386,7 @@ export default function PermisosPage() {
                   <div className="flex items-center gap-2 px-4 py-3 hover:bg-gray-50 transition">
                     <button
                       onClick={() => toggleProceso(proceso.id)}
-                      className="p-0.5 text-gray-400 hover:text-gray-600"
+                      className="p-0.5 text-gray-600 hover:text-gray-600"
                     >
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4" />
@@ -409,7 +409,7 @@ export default function PermisosPage() {
                       <span className="text-sm font-semibold text-gray-900">
                         {proceso.nombre}
                       </span>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-gray-600">
                         ({proceso.subprocesos.length} subproceso{proceso.subprocesos.length !== 1 ? "s" : ""})
                       </span>
                     </label>
@@ -433,7 +433,7 @@ export default function PermisosPage() {
                             {sub.nombre}
                           </span>
                           {sub.funcion && (
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-gray-600">
                               ({sub.funcion})
                             </span>
                           )}
@@ -448,14 +448,14 @@ export default function PermisosPage() {
         </div>
       ) : selectedGrupoId && procesos.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <p className="text-gray-400 text-sm">
+          <p className="text-gray-600 text-sm">
             No hay procesos configurados en el sistema
           </p>
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <KeyRound className="h-12 w-12 text-gray-300 mx-auto" />
-          <p className="text-gray-400 text-sm mt-3">
+          <KeyRound className="h-12 w-12 text-gray-500 mx-auto" />
+          <p className="text-gray-600 text-sm mt-3">
             Seleccione un grupo de usuario para ver y configurar sus permisos
           </p>
         </div>
