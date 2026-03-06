@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const crypt = require("unix-crypt-td-js");
 
 // GET /api/seguridad/usuarios - Listar usuarios con busqueda y paginacion
 export async function GET(request: NextRequest) {
@@ -111,11 +113,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Almacenar contrasena en texto plano (legacy MySQL 5.7, varchar(10))
+    // Hash con DES crypt compatible con legacy PHP: substr(crypt($pass, salt), 0, 10)
+    const saltChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./";
+    const salt = saltChars[Math.floor(Math.random() * saltChars.length)] + saltChars[Math.floor(Math.random() * saltChars.length)];
+    const hashedPassword = crypt(contrasena, salt).substring(0, 10);
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         usuario: usuario.trim(),
-        contrasena: contrasena,
+        contrasena: hashedPassword,
         empleadoId: body.empleadoId ? parseInt(body.empleadoId, 10) : null,
         privadaId: body.privadaId ? parseInt(body.privadaId, 10) : null,
         modificarFechas: body.modificarFechas || "N",
