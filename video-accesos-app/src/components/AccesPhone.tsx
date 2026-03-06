@@ -769,22 +769,45 @@ export default function AccesPhone({
     "*": [941, 1209], "0": [941, 1336], "#": [941, 1477],
   };
 
-  const playDtmfTone = useCallback((digit: string) => {
-    const freqs = DTMF_FREQS[digit];
-    if (!freqs) return;
+  const getDtmfContext = useCallback(async (): Promise<AudioContext | null> => {
     try {
       if (!dtmfCtxRef.current || dtmfCtxRef.current.state === "closed") {
-        dtmfCtxRef.current = new AudioContext();
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        dtmfCtxRef.current = new AC();
+        console.log("[DTMF] AudioContext creado, state:", dtmfCtxRef.current.state);
       }
       const ctx = dtmfCtxRef.current;
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "suspended") {
+        console.log("[DTMF] AudioContext suspendido, intentando resume...");
+        await ctx.resume();
+        console.log("[DTMF] AudioContext resume completado, state:", ctx.state);
+      }
+      return ctx;
+    } catch (err) {
+      console.error("[DTMF] Error creando/resumiendo AudioContext:", err);
+      return null;
+    }
+  }, []);
 
+  const playDtmfTone = useCallback(async (digit: string) => {
+    const freqs = DTMF_FREQS[digit];
+    if (!freqs) return;
+
+    const ctx = await getDtmfContext();
+    if (!ctx) {
+      console.warn("[DTMF] No se pudo obtener AudioContext para tono", digit);
+      return;
+    }
+
+    try {
       const gain = ctx.createGain();
-      gain.gain.value = 0.15;
+      gain.gain.value = 0.25;
       gain.connect(ctx.destination);
 
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
+      osc1.type = "sine";
+      osc2.type = "sine";
       osc1.frequency.value = freqs[0];
       osc2.frequency.value = freqs[1];
       osc1.connect(gain);
@@ -793,23 +816,25 @@ export default function AccesPhone({
       const now = ctx.currentTime;
       osc1.start(now);
       osc2.start(now);
-      osc1.stop(now + 0.15);
-      osc2.stop(now + 0.15);
+      osc1.stop(now + 0.2);
+      osc2.stop(now + 0.2);
 
       // Fade out to avoid click
-      gain.gain.setValueAtTime(0.15, now + 0.12);
-      gain.gain.linearRampToValueAtTime(0, now + 0.15);
-    } catch {
-      // Audio not available — ignore silently
+      gain.gain.setValueAtTime(0.25, now + 0.15);
+      gain.gain.linearRampToValueAtTime(0, now + 0.2);
+
+      console.log("[DTMF] Tono reproducido:", digit, freqs);
+    } catch (err) {
+      console.error("[DTMF] Error reproduciendo tono:", digit, err);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getDtmfContext]);
 
   // -----------------------------------------------------------
   // Dialpad handler
   // -----------------------------------------------------------
   const dialpadPress = (digit: string) => {
-    playDtmfTone(digit);
+    playDtmfTone(digit); // async but fire-and-forget
     setDialNumber((prev) => prev + digit);
     if (inCall && sessionRef.current) {
       sessionRef.current.sendDTMF(digit);
