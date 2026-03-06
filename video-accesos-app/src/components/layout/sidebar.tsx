@@ -5,16 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   Shield,
   Building2,
-  Home,
-  Users,
-  CreditCard,
   ClipboardList,
-  Wrench,
-  Phone,
-  DollarSign,
   BarChart3,
-  Settings,
-  UserCog,
   KeyRound,
   ChevronDown,
   LogOut,
@@ -30,10 +22,16 @@ interface NavItem {
   children?: { label: string; href: string }[];
 }
 
-const navigation: NavItem[] = [
+/** Menu completo del sistema. Se filtra segun permisos del usuario. */
+const fullNavigation: NavItem[] = [
   {
     label: "Inicio",
     href: "/",
+    icon: <Monitor className="h-5 w-5" />,
+  },
+  {
+    label: "Terminal de Monitoreo",
+    href: "/procesos/monitoristas",
     icon: <Monitor className="h-5 w-5" />,
   },
   {
@@ -55,6 +53,7 @@ const navigation: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
     children: [
       { label: "Registro de Accesos", href: "/procesos/registro-accesos" },
+      { label: "Consola Monitorista", href: "/procesos/monitoristas" },
       { label: "Asignación de Tarjetas", href: "/procesos/asignacion-tarjetas" },
       { label: "Órdenes de Servicio", href: "/procesos/ordenes-servicio" },
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
@@ -80,6 +79,8 @@ const navigation: NavItem[] = [
     ],
   },
 ];
+
+const navigation = fullNavigation;
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -108,8 +109,8 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      {/* Navigation - pb-80 reserves space at bottom for the floating softphone */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto pb-80">
         {navigation.map((item) => {
           if (item.href) {
             return (
@@ -171,18 +172,18 @@ export function Sidebar() {
             </div>
           );
         })}
-      </nav>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-slate-700">
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition"
-        >
-          <LogOut className="h-5 w-5" />
-          Cerrar Sesión
-        </button>
-      </div>
+        {/* Logout - inside scrollable nav so softphone doesn't cover it */}
+        <div className="mt-4 pt-3 border-t border-slate-700">
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition"
+          >
+            <LogOut className="h-5 w-5" />
+            Cerrar Sesión
+          </button>
+        </div>
+      </nav>
     </aside>
   );
 }
