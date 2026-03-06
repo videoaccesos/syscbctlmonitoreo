@@ -34,6 +34,7 @@ interface GrupoUsuario {
   estatusId: number;
   _count: {
     detalles: number;
+    detallesTotal?: number;
   };
 }
 
@@ -289,7 +290,11 @@ export default function GruposUsuariosPage() {
             Grupos de Usuarios
           </h1>
           <p className="text-gray-500 mt-1 text-sm">
-            Gestiona los grupos de usuarios y sus asignaciones
+            Gestiona los grupos de usuarios y sus asignaciones.
+            <span className="block text-xs text-gray-400 mt-0.5">
+              El grupo &quot;admin&quot; siempre tiene acceso total a todas las ramas por definición.
+              Los permisos de cada grupo se configuran en Seguridad &gt; Permisos de Acceso.
+            </span>
           </p>
         </div>
         <button
@@ -363,8 +368,13 @@ export default function GruposUsuariosPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-600/20 ring-inset">
-                        {grupo._count.detalles} usuario{grupo._count.detalles !== 1 ? "s" : ""}
+                        {grupo._count.detalles} activo{grupo._count.detalles !== 1 ? "s" : ""}
                       </span>
+                      {grupo._count.detallesTotal != null && grupo._count.detallesTotal !== grupo._count.detalles && (
+                        <span className="ml-1 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                          {grupo._count.detallesTotal} total
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {grupo.estatusId === 1 ? (

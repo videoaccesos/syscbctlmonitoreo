@@ -15,15 +15,19 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
+    const estatusFilter = searchParams.get("estatus") || "activos"; // activos | baja | todos
     const skip = (page - 1) * pageSize;
 
-    const where = {
-      ...(search
-        ? {
-            usuario: { contains: search },
-          }
-        : {}),
-    };
+    const where: Record<string, unknown> = {};
+    if (search) {
+      where.usuario = { contains: search };
+    }
+    if (estatusFilter === "activos") {
+      where.estatusId = 1;
+    } else if (estatusFilter === "baja") {
+      where.estatusId = 2;
+    }
+    // "todos" = sin filtro de estatus
 
     const [usuarios, total] = await Promise.all([
       prisma.usuario.findMany({

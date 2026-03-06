@@ -98,6 +98,51 @@ export const authOptions: NextAuthOptions = {
           console.error("[AUTH] Error en bitácora/update (login continúa):", err);
         }
 
+        // Registrar en log las ramas autorizadas del usuario
+        try {
+          const gruposDetalles = await prisma.grupoUsuarioDetalle.findMany({
+            where: { usuarioId: usuario.id },
+            include: {
+              grupo: {
+                include: {
+                  permisos: {
+                    include: {
+                      subproceso: {
+                        include: { proceso: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          const grupos = gruposDetalles.map((d) => d.grupo.nombre);
+          const isAdmin = gruposDetalles.some(
+            (d) => d.grupo.nombre.toLowerCase() === "admin" && d.grupo.estatusId === 1
+          );
+
+          if (isAdmin) {
+            console.log(
+              `[AUTH] LOGIN OK - Usuario: ${usuario.usuario} (ID=${usuario.id}) - ADMIN - Acceso total a todas las ramas. Grupos: [${grupos.join(", ")}]`
+            );
+          } else {
+            const ramasSet = new Set<string>();
+            gruposDetalles.forEach((d) => {
+              if (d.grupo.estatusId !== 1) return;
+              d.grupo.permisos.forEach((p) => {
+                ramasSet.add(p.subproceso.proceso.nombre);
+              });
+            });
+            const ramas = Array.from(ramasSet);
+            console.log(
+              `[AUTH] LOGIN OK - Usuario: ${usuario.usuario} (ID=${usuario.id}) - Grupos: [${grupos.join(", ")}] - Ramas autorizadas: [${ramas.join(", ")}]`
+            );
+          }
+        } catch (err) {
+          console.error("[AUTH] Error al registrar ramas autorizadas (login continúa):", err);
+        }
+
         return {
           id: String(usuario.id),
           name: usuario.empleado

@@ -13,7 +13,7 @@ import {
   Monitor,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface NavItem {
   label: string;
@@ -80,11 +80,70 @@ const fullNavigation: NavItem[] = [
   },
 ];
 
-const navigation = fullNavigation;
+interface PermisosResponse {
+  isAdmin: boolean;
+  grupos: { id: number; nombre: string; estatusId: number }[];
+  rutasAutorizadas: string[];
+  ramaNombres: string[];
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+  const [permisos, setPermisos] = useState<PermisosResponse | null>(null);
+
+  useEffect(() => {
+    fetch("/api/seguridad/mis-permisos")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: PermisosResponse | null) => {
+        if (data) {
+          setPermisos(data);
+          console.log(
+            `[Sidebar] Permisos cargados - Admin: ${data.isAdmin}, Grupos: [${data.grupos.map((g) => g.nombre).join(", ")}], Ramas: [${data.ramaNombres.join(", ")}]`
+          );
+        }
+      })
+      .catch(() => console.error("[Sidebar] Error al cargar permisos"));
+  }, []);
+
+  // Filtrar navegacion segun permisos
+  const navigation = (() => {
+    // Mientras cargan los permisos, solo mostrar Inicio
+    if (!permisos) {
+      return fullNavigation.filter((item) => item.label === "Inicio");
+    }
+
+    // Admin ve todo
+    if (permisos.isAdmin) {
+      return fullNavigation;
+    }
+
+    // Construir set de rutas autorizadas
+    const rutasAuth = new Set(permisos.rutasAutorizadas);
+
+    return fullNavigation
+      .map((item) => {
+        // Inicio siempre visible
+        if (item.label === "Inicio") return item;
+
+        // Items con href directo
+        if (item.href) {
+          return rutasAuth.has(item.href) ? item : null;
+        }
+
+        // Items con children: filtrar hijos
+        if (item.children) {
+          const filteredChildren = item.children.filter((child) =>
+            rutasAuth.has(child.href)
+          );
+          if (filteredChildren.length === 0) return null;
+          return { ...item, children: filteredChildren };
+        }
+
+        return null;
+      })
+      .filter(Boolean) as NavItem[];
+  })();
 
   const toggleMenu = (label: string) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));

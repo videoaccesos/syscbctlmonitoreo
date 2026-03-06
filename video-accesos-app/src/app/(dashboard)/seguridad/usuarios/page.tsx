@@ -80,6 +80,7 @@ export default function UsuariosPage() {
 
   // UI state
   const [search, setSearch] = useState("");
+  const [estatusFilter, setEstatusFilter] = useState<"activos" | "baja" | "todos">("activos");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -98,6 +99,7 @@ export default function UsuariosPage() {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        estatus: estatusFilter,
       });
       if (search) params.set("search", search);
 
@@ -112,7 +114,7 @@ export default function UsuariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, estatusFilter]);
 
   // -----------------------------------------------------------
   // Fetch empleados (for dropdown)
@@ -325,7 +327,11 @@ export default function UsuariosPage() {
             Usuarios
           </h1>
           <p className="text-gray-500 mt-1 text-sm">
-            Gestiona los usuarios del sistema
+            Gestiona los usuarios del sistema.
+            <span className="block text-xs text-gray-400 mt-0.5">
+              El usuario del sistema (acceso a ramas) es independiente del usuario del softphone (definido en el PBX).
+              No todos los usuarios requieren acceso al softphone.
+            </span>
           </p>
         </div>
         <button
@@ -337,22 +343,52 @@ export default function UsuariosPage() {
         </button>
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre de usuario..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-          />
+      {/* Info: Modelo de acceso */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+        <p className="font-medium mb-1">Modelo de acceso al sistema:</p>
+        <ol className="list-decimal list-inside space-y-0.5 text-xs text-blue-700">
+          <li><strong>Seguridad &gt; Usuarios</strong> &mdash; Se asigna usuario y contraseña al empleado para ingresar al sistema.</li>
+          <li><strong>Seguridad &gt; Grupos de Usuario</strong> &mdash; Se integra al usuario en uno o más grupos.</li>
+          <li><strong>Seguridad &gt; Permisos de Acceso</strong> &mdash; Se adjudican las ramas/módulos que cada grupo puede operar.</li>
+        </ol>
+        <p className="text-xs text-blue-600 mt-1">
+          El usuario del softphone se define en el PBX y es independiente del usuario del sistema.
+        </p>
+      </div>
+
+      {/* Search bar + status filter */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre de usuario..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+        </form>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          {(["activos", "baja", "todos"] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => { setEstatusFilter(filter); setPage(1); }}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                estatusFilter === filter
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {filter === "activos" ? "Activos" : filter === "baja" ? "Baja" : "Todos"}
+            </button>
+          ))}
         </div>
-      </form>
+      </div>
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -365,6 +401,9 @@ export default function UsuariosPage() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Empleado
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Grupos
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Ultima Sesion
@@ -380,7 +419,7 @@ export default function UsuariosPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12">
+                  <td colSpan={6} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
                     <p className="text-gray-400 text-sm mt-2">Cargando...</p>
                   </td>
@@ -388,7 +427,7 @@ export default function UsuariosPage() {
               ) : usuarios.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center py-12 text-gray-400 text-sm"
                   >
                     No se encontraron usuarios
@@ -404,6 +443,18 @@ export default function UsuariosPage() {
                       {usr.empleado
                         ? `${usr.empleado.nombre} ${usr.empleado.apePaterno} ${usr.empleado.apeMaterno}`
                         : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {usr.gruposDetalles && usr.gruposDetalles.length > 0
+                        ? usr.gruposDetalles.map((gd) => (
+                            <span
+                              key={gd.grupoUsuarioId}
+                              className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-purple-600/20 ring-inset mr-1 mb-0.5"
+                            >
+                              {gd.grupo.nombre}
+                            </span>
+                          ))
+                        : <span className="text-gray-400 text-xs">Sin grupo</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {formatDate(usr.ultimaSesion)}

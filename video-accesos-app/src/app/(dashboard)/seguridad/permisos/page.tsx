@@ -7,6 +7,7 @@ import {
   Save,
   ChevronRight,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ export default function PermisosPage() {
   const [loading, setLoading] = useState(false);
   const [loadingPermisos, setLoadingPermisos] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [error, setError] = useState("");
   const [expandedProcesos, setExpandedProcesos] = useState<
@@ -213,6 +215,33 @@ export default function PermisosPage() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    setError("");
+    setSuccessMsg("");
+    try {
+      const res = await fetch("/api/seguridad/sync-procesos", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Error al sincronizar catálogo");
+        return;
+      }
+      const data = await res.json();
+      setSuccessMsg(
+        `Catálogo sincronizado. Creados: ${data.creados.length}, Actualizados: ${data.actualizados.length}`
+      );
+      // Recargar permisos si hay grupo seleccionado
+      if (selectedGrupoId) {
+        fetchPermisos(selectedGrupoId);
+      }
+      setTimeout(() => setSuccessMsg(""), 5000);
+    } catch {
+      setError("Error de conexión al sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // -----------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------
@@ -241,13 +270,33 @@ export default function PermisosPage() {
           Permisos de Acceso
         </h1>
         <p className="text-gray-500 mt-1 text-sm">
-          Configura los permisos de acceso por grupo de usuarios
+          Configura los permisos de acceso por grupo de usuarios.
+          <br />
+          <span className="text-xs text-gray-400">
+            Nota: El grupo &quot;admin&quot; siempre tiene acceso total a todas las ramas por definición.
+          </span>
         </p>
+      </div>
+
+      {/* Sync catalog button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition"
+        >
+          {syncing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          Sincronizar Catálogo de Ramas
+        </button>
       </div>
 
       {/* Group selector */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 flex-wrap">
           <div className="flex-1 max-w-md">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Grupo de Usuario

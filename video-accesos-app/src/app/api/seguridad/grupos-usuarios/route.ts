@@ -29,8 +29,12 @@ export async function GET(request: NextRequest) {
       prisma.grupoUsuario.findMany({
         where,
         include: {
-          _count: {
-            select: { detalles: true },
+          detalles: {
+            include: {
+              usuario: {
+                select: { id: true, estatusId: true },
+              },
+            },
           },
         },
         orderBy: { nombre: "asc" },
@@ -40,8 +44,24 @@ export async function GET(request: NextRequest) {
       prisma.grupoUsuario.count({ where }),
     ]);
 
+    // Contar solo usuarios activos (estatusId=1) como integrantes reales
+    const gruposConConteo = grupos.map((g) => {
+      const totalDetalles = g.detalles.length;
+      const activosCount = g.detalles.filter(
+        (d) => d.usuario.estatusId === 1
+      ).length;
+      const { detalles: _, ...grupoSinDetalles } = g;
+      return {
+        ...grupoSinDetalles,
+        _count: {
+          detalles: activosCount,
+          detallesTotal: totalDetalles,
+        },
+      };
+    });
+
     return NextResponse.json({
-      data: grupos,
+      data: gruposConConteo,
       total,
       page,
       pageSize,
