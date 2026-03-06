@@ -924,35 +924,46 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Dialpad (when not in call) */}
-            {!inCall && !ringing && connected && (
+            {/* Dialpad - visible when connected (both idle and in-call for DTMF) */}
+            {connected && !ringing && (
               <div className="p-3">
-                <div className="flex gap-1 mb-2">
-                  <input
-                    type="text"
-                    placeholder="Numero..."
-                    value={dialNumber}
-                    onChange={(e) => setDialNumber(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") makeCall();
-                    }}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                  <button
-                    onClick={makeCall}
-                    disabled={!dialNumber}
-                    className="rounded-lg bg-green-600 px-3 py-1.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
-                  >
-                    <Phone className="h-4 w-4" />
-                  </button>
-                </div>
+                {/* Number input and call button - only when not in call */}
+                {!inCall && (
+                  <div className="flex gap-1 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Numero..."
+                      value={dialNumber}
+                      onChange={(e) => setDialNumber(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") makeCall();
+                      }}
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      onClick={makeCall}
+                      disabled={!dialNumber}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
+                    >
+                      <Phone className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                {/* DTMF label when in call */}
+                {inCall && (
+                  <p className="text-xs text-center text-blue-600 font-medium mb-1.5">Teclado DTMF</p>
+                )}
                 <div className="grid grid-cols-3 gap-1">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map(
                     (d) => (
                       <button
                         key={d}
                         onClick={() => dialpadPress(d)}
-                        className="rounded-lg bg-gray-100 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition"
+                        className={`rounded-lg py-2 text-sm font-medium transition ${
+                          inCall
+                            ? "bg-blue-50 text-blue-800 hover:bg-blue-100 active:bg-blue-200"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
                       >
                         {d}
                       </button>
