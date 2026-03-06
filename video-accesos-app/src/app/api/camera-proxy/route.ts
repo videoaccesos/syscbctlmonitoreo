@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import crypto from "crypto";
+
+const TAG = "camera-proxy";
 
 // GET /api/camera-proxy?telefono=XXX&cam=1
 // GET /api/camera-proxy?privada_id=N&cam=1
@@ -487,7 +490,7 @@ export async function GET(request: NextRequest) {
       dnsPorts[camIndex - 1] || dnsPorts[0] || ""
     );
 
-    console.log(`[camera-proxy] Privada: ${privada.descripcion} (ID:${privada.id}) | Cam ${camIndex} | URL: ${cameraUrl || "(vacia)"} | raw: ${rawVideoUrl} | dns: ${dnsHosts[camIndex - 1] || dnsHosts[0] || "(none)"} | puerto: ${dnsPorts[camIndex - 1] || dnsPorts[0] || "(none)"}`);
+    logger.info(TAG, `Privada: ${privada.descripcion} (ID:${privada.id}) | Cam ${camIndex} | URL: ${cameraUrl || "(vacia)"} | raw: ${rawVideoUrl} | dns: ${dnsHosts[camIndex - 1] || dnsHosts[0] || "(none)"} | puerto: ${dnsPorts[camIndex - 1] || dnsPorts[0] || "(none)"}`);
 
     if (!cameraUrl) {
       return new NextResponse(
@@ -504,7 +507,7 @@ export async function GET(request: NextRequest) {
 
     // Obtener credenciales
     const creds = findCredentials(cameraUrl, privada);
-    console.log(`[camera-proxy] Credenciales: user="${creds.user}" | pass="${creds.pass ? "***" : "(vacio)"}" `);
+    logger.info(TAG, `Credenciales: user="${creds.user}" | pass="${creds.pass ? "***" : "(vacio)"}"`);
 
     // Adquirir slot del semaforo para este host (evita saturar conexiones al DVR)
     const hostKey = getHostKey(cameraUrl);
@@ -518,7 +521,7 @@ export async function GET(request: NextRequest) {
       const elapsedMs = Date.now() - startMs;
 
       if (result.ok && result.data) {
-        console.log(`[camera-proxy] ✅ OK | Cam ${camIndex} | ${privada.descripcion} | ${result.data.length} bytes | ${elapsedMs}ms | Content-Type: ${result.contentType}`);
+        logger.info(TAG, `OK | Cam ${camIndex} | ${privada.descripcion} | ${result.data.length} bytes | ${elapsedMs}ms | Content-Type: ${result.contentType}`);
         return new NextResponse(new Uint8Array(result.data), {
           status: 200,
           headers: {
@@ -534,7 +537,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Error - devolver SVG placeholder
-      console.log(`[camera-proxy] ❌ FALLO | Cam ${camIndex} | ${privada.descripcion} | ${elapsedMs}ms | Status: ${result.status} | Error: ${result.error}`);
+      logger.warn(TAG, `FALLO | Cam ${camIndex} | ${privada.descripcion} | ${elapsedMs}ms | Status: ${result.status} | Error: ${result.error}`);
       return new NextResponse(
         noSignalSvg(
           `Camara ${camIndex} - ${privada.descripcion}`,
@@ -552,7 +555,7 @@ export async function GET(request: NextRequest) {
       releaseHostSlot(hostKey);
     }
   } catch (error) {
-    console.error("[camera-proxy] ❌ ERROR CRITICO:", error);
+    logger.error(TAG, "ERROR CRITICO", error);
     return new NextResponse(noSignalSvg("Error", "Error interno del servidor"), {
       status: 500,
       headers: { "Content-Type": "image/svg+xml" },

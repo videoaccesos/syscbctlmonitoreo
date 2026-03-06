@@ -63,7 +63,14 @@ export default function CameraGrid({
 
       const res = await fetch(`/api/camera-proxy/lookup?${params.toString()}`);
       if (!res.ok) {
-        setError("Error al buscar camaras");
+        let detail = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.detail) detail = errData.detail;
+          else if (errData.error) detail = errData.error;
+        } catch { /* ignore parse error */ }
+        setError(`Error al buscar camaras (${detail})`);
+        console.error("[CameraGrid] Lookup failed:", detail);
         return;
       }
 
@@ -71,9 +78,11 @@ export default function CameraGrid({
       if (mountedRef.current) {
         setLookup(data);
       }
-    } catch {
+    } catch (err) {
       if (mountedRef.current) {
-        setError("Error de conexion al buscar camaras");
+        const msg = err instanceof Error ? err.message : "desconocido";
+        setError(`Error de conexion al buscar camaras: ${msg}`);
+        console.error("[CameraGrid] Lookup connection error:", msg);
       }
     } finally {
       if (mountedRef.current) {

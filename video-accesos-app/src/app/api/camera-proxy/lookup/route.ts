@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
+
+const TAG = "camera-lookup";
 
 const privadaSelect = {
   id: true,
@@ -28,16 +31,23 @@ const privadaSelect = {
 // Busca la privada por telefono y devuelve las camaras configuradas (video_1, video_2, video_3)
 export async function GET(request: NextRequest) {
   try {
+    logger.info(TAG, "Inicio de busqueda de camaras", { url: request.url });
+
     const session = await getServerSession(authOptions);
     if (!session) {
+      logger.warn(TAG, "Solicitud sin sesion activa (401)");
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    logger.info(TAG, "Sesion activa", { user: session.user?.email || session.user?.name || "desconocido" });
 
     const { searchParams } = new URL(request.url);
     const telefono = searchParams.get("telefono");
     const privadaId = searchParams.get("privada_id");
 
+    logger.info(TAG, "Parametros de busqueda", { telefono, privadaId });
+
     if (!telefono && !privadaId) {
+      logger.warn(TAG, "Busqueda sin parametros (telefono ni privada_id)");
       return NextResponse.json(
         { error: "Se requiere telefono o privada_id" },
         { status: 400 }
@@ -48,10 +58,12 @@ export async function GET(request: NextRequest) {
 
     if (privadaId) {
       // Busqueda directa por ID
+      logger.info(TAG, `Buscando privada por ID: ${privadaId}`);
       privada = await prisma.privada.findFirst({
         where: { id: parseInt(privadaId), estatusId: { in: [1, 2] } },
         select: privadaSelect,
       });
+      logger.info(TAG, privada ? `Privada encontrada: ${privada.descripcion} (ID:${privada.id})` : `Privada ID ${privadaId} NO encontrada o inactiva`);
     } else if (telefono) {
       const cleanNumber = telefono.replace(/\D/g, "");
       const last10 = cleanNumber.length > 10 ? cleanNumber.slice(-10) : null;
@@ -95,6 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!privada) {
+      logger.warn(TAG, "Privada no encontrada", { telefono, privadaId });
       return NextResponse.json(
         { found: false, message: "No se encontro privada con ese telefono" },
         { status: 200 }
@@ -102,6 +115,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Construir lista de camaras disponibles (sin exponer URLs ni credenciales)
+    logger.info(TAG, `Privada ${privada.descripcion}: video1="${privada.video1}", video2="${privada.video2}", video3="${privada.video3}", dns1="${privada.dns1}", dns2="${privada.dns2}", dns3="${privada.dns3}"`);
     const cameras = [];
     if (privada.video1 && privada.video1.trim() !== "") {
       cameras.push({
@@ -125,6 +139,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas`, { privada_id: privada.id, privada: privada.descripcion, cameras });
+
     return NextResponse.json({
       found: true,
       privada_id: privada.id,
@@ -132,9 +148,11 @@ export async function GET(request: NextRequest) {
       cameras,
     });
   } catch (error) {
-    console.error("Error al buscar camaras por telefono:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errStack = error instanceof Error ? error.stack : undefined;
+    logger.error(TAG, "Error al buscar camaras", { message: errMsg, stack: errStack, telefono: request.url });
     return NextResponse.json(
-      { error: "Error al buscar camaras" },
+      { error: "Error al buscar camaras", detail: errMsg },
       { status: 500 }
     );
   }
