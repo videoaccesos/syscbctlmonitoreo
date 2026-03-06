@@ -758,9 +758,58 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
+  // DTMF tone generator (Web Audio API)
+  // -----------------------------------------------------------
+  const dtmfCtxRef = useRef<AudioContext | null>(null);
+
+  const DTMF_FREQS: Record<string, [number, number]> = {
+    "1": [697, 1209], "2": [697, 1336], "3": [697, 1477],
+    "4": [770, 1209], "5": [770, 1336], "6": [770, 1477],
+    "7": [852, 1209], "8": [852, 1336], "9": [852, 1477],
+    "*": [941, 1209], "0": [941, 1336], "#": [941, 1477],
+  };
+
+  const playDtmfTone = useCallback((digit: string) => {
+    const freqs = DTMF_FREQS[digit];
+    if (!freqs) return;
+    try {
+      if (!dtmfCtxRef.current || dtmfCtxRef.current.state === "closed") {
+        dtmfCtxRef.current = new AudioContext();
+      }
+      const ctx = dtmfCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+
+      const gain = ctx.createGain();
+      gain.gain.value = 0.15;
+      gain.connect(ctx.destination);
+
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      osc1.frequency.value = freqs[0];
+      osc2.frequency.value = freqs[1];
+      osc1.connect(gain);
+      osc2.connect(gain);
+
+      const now = ctx.currentTime;
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.15);
+      osc2.stop(now + 0.15);
+
+      // Fade out to avoid click
+      gain.gain.setValueAtTime(0.15, now + 0.12);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
+    } catch {
+      // Audio not available — ignore silently
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -----------------------------------------------------------
   // Dialpad handler
   // -----------------------------------------------------------
   const dialpadPress = (digit: string) => {
+    playDtmfTone(digit);
     setDialNumber((prev) => prev + digit);
     if (inCall && sessionRef.current) {
       sessionRef.current.sendDTMF(digit);
