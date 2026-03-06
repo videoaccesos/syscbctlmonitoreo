@@ -86,6 +86,12 @@ const fullNavigation: NavItem[] = [
  * Si el usuario no tiene permisos configurados (array vacio),
  * se muestra el menu completo para no bloquear el acceso durante
  * la primera configuracion (modo bootstrap).
+ *
+ * Reglas especiales:
+ * - Si tiene cualquier ruta /seguridad/*, se incluye /seguridad/permisos
+ *   automaticamente (para evitar que se bloquee la administracion de permisos).
+ * - Si tiene cualquier ruta /procesos/*, se incluye /procesos/monitoristas
+ *   automaticamente (la consola de monitoreo es parte integral de procesos).
  */
 function filterNavigation(
   items: NavItem[],
@@ -103,6 +109,18 @@ function filterNavigation(
   }
 
   const allowed = new Set(validRoutes);
+
+  // Si tiene acceso a cualquier ruta de /seguridad/*, incluir /seguridad/permisos
+  const tieneSeguridad = validRoutes.some((r) => r.startsWith("/seguridad/"));
+  if (tieneSeguridad) {
+    allowed.add("/seguridad/permisos");
+  }
+
+  // Si tiene acceso a cualquier ruta de /procesos/*, incluir /procesos/monitoristas
+  const tieneProcesos = validRoutes.some((r) => r.startsWith("/procesos/"));
+  if (tieneProcesos) {
+    allowed.add("/procesos/monitoristas");
+  }
 
   return items
     .map((item) => {

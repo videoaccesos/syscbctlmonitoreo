@@ -2,6 +2,27 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
 /**
+ * Expande las rutas permitidas con reglas implicitas:
+ * - Si tiene /seguridad/* -> incluir /seguridad/permisos (anti-lockout)
+ * - Si tiene /procesos/*  -> incluir /procesos/monitoristas
+ */
+function expandirRutas(allowedRoutes: string[]): string[] {
+  const expanded = new Set(allowedRoutes);
+
+  const tieneSeguridad = allowedRoutes.some((r) => r.startsWith("/seguridad/"));
+  if (tieneSeguridad) {
+    expanded.add("/seguridad/permisos");
+  }
+
+  const tieneProcesos = allowedRoutes.some((r) => r.startsWith("/procesos/"));
+  if (tieneProcesos) {
+    expanded.add("/procesos/monitoristas");
+  }
+
+  return Array.from(expanded);
+}
+
+/**
  * Verifica si una ruta esta permitida para el usuario segun sus allowedRoutes.
  * Retorna true si tiene acceso, false si no.
  */
@@ -19,7 +40,10 @@ function tieneAccesoARuta(allowedRoutes: string[], pathname: string): boolean {
     return true;
   }
 
-  return validRoutes.some(
+  // Expandir con rutas implicitas
+  const expandedRoutes = expandirRutas(validRoutes);
+
+  return expandedRoutes.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
 }
