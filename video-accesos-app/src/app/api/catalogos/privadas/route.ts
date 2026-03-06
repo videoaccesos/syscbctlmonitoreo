@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas - Listar privadas con busqueda y paginacion
@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado = verificarAcceso(session, "/catalogos/privadas");
+    if (denegado) return denegado;
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
@@ -76,6 +78,8 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado2 = verificarAcceso(session, "/catalogos/privadas");
+    if (denegado2) return denegado2;
 
     const body = await request.json();
 

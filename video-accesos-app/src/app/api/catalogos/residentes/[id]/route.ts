@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // PUT /api/catalogos/residentes/[id] - Actualizar residente
@@ -12,6 +12,8 @@ export async function PUT(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAcceso(session, "/catalogos/residentes");
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -61,6 +63,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado2 = verificarAcceso(session, "/catalogos/residentes");
+  if (denegado2) return denegado2;
 
   try {
     const { id } = await params;

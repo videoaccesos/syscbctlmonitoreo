@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/procesos/ordenes-servicio/[id] - Obtener orden con seguimientos
@@ -13,6 +13,8 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado = verificarAcceso(session, "/procesos/ordenes-servicio");
+    if (denegado) return denegado;
 
     const { id } = await params;
     const ordenId = parseInt(id, 10);
@@ -90,6 +92,8 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado2 = verificarAcceso(session, "/procesos/ordenes-servicio");
+    if (denegado2) return denegado2;
 
     const { id } = await params;
     const ordenId = parseInt(id, 10);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/empleados/[id] - Obtener un empleado por ID
@@ -12,6 +12,8 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAcceso(session, "/catalogos/empleados");
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -54,6 +56,8 @@ export async function PUT(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado2 = verificarAcceso(session, "/catalogos/empleados");
+  if (denegado2) return denegado2;
 
   try {
     const { id } = await params;
@@ -136,6 +140,8 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado3 = verificarAcceso(session, "/catalogos/empleados");
+  if (denegado3) return denegado3;
 
   try {
     const { id } = await params;
@@ -216,6 +222,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado4 = verificarAcceso(session, "/catalogos/empleados");
+  if (denegado4) return denegado4;
 
   try {
     const { id } = await params;

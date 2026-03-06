@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma, fixZeroDates } from "@/lib/prisma";
 
 // GET /api/catalogos/privadas/[id] - Obtener una privada por ID
@@ -13,6 +13,8 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado = verificarAcceso(session, "/catalogos/privadas");
+    if (denegado) return denegado;
 
     const { id } = await params;
     const privadaId = parseInt(id, 10);
@@ -55,6 +57,8 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado2 = verificarAcceso(session, "/catalogos/privadas");
+    if (denegado2) return denegado2;
 
     const { id } = await params;
     const privadaId = parseInt(id, 10);
@@ -167,6 +171,8 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado3 = verificarAcceso(session, "/catalogos/privadas");
+    if (denegado3) return denegado3;
 
     const { id } = await params;
     const privadaId = parseInt(id, 10);

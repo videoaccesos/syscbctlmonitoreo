@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // Generar un ID unico de 8 caracteres para residente
@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAcceso(session, "/catalogos/residentes");
+  if (denegado) return denegado;
 
   try {
     const body = await request.json();

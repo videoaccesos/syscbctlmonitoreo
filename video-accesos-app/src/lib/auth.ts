@@ -8,6 +8,48 @@ import { prisma } from "./prisma";
 const SEGURIDAD_ROUTES = ["/seguridad/usuarios", "/seguridad/grupos-usuarios", "/seguridad/permisos"];
 
 /**
+ * Verifica que el usuario tenga acceso a una ruta especifica.
+ * Retorna null si tiene acceso, o un NextResponse 403 si no.
+ *
+ * @param session - Sesion del usuario
+ * @param ruta - Ruta logica a verificar (ej: "/catalogos/empleados", "/procesos/registro-accesos")
+ *
+ * Reglas:
+ * - Si allowedRoutes esta vacio = modo bootstrap (nadie tiene permisos aun) → permitir
+ * - Si allowedRoutes contiene la ruta o un prefijo de la ruta → permitir
+ * - De lo contrario → 403 Prohibido
+ */
+export function verificarAcceso(session: Session, ruta: string): NextResponse | null {
+  const allowedRoutes = session.user?.allowedRoutes || [];
+
+  // Modo bootstrap: no hay permisos configurados, permitir todo
+  if (allowedRoutes.length === 0) {
+    return null;
+  }
+
+  // Solo considerar rutas Next.js validas (empiezan con "/")
+  const validRoutes = allowedRoutes.filter((r: string) => r.startsWith("/"));
+
+  // Si no quedan rutas validas despues de filtrar, modo bootstrap
+  if (validRoutes.length === 0) {
+    return null;
+  }
+
+  const tieneAcceso = validRoutes.some(
+    (r: string) => ruta === r || ruta.startsWith(r + "/")
+  );
+
+  if (!tieneAcceso) {
+    return NextResponse.json(
+      { error: "No tiene permisos para acceder a este recurso" },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
+
+/**
  * Verifica que el usuario tenga acceso al modulo de Seguridad.
  * Retorna null si tiene acceso, o un NextResponse 403 si no.
  *
@@ -59,10 +101,7 @@ export const authOptions: NextAuthOptions = {
         contrasena: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        console.log("[AUTH] authorize() llamado con usuario:", credentials?.usuario);
-
         if (!credentials?.usuario || !credentials?.contrasena) {
-          console.log("[AUTH] Credenciales vacías");
           return null;
         }
 
@@ -98,7 +137,6 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (!usuario) {
-          console.log("[AUTH] Usuario no encontrado:", credentials.usuario);
           return null;
         }
 
@@ -154,7 +192,6 @@ export const authOptions: NextAuthOptions = {
           }
 
           allowedRoutes = Array.from(routes);
-          console.log("[AUTH] Rutas permitidas para usuario", usuario.id, ":", allowedRoutes);
         } catch (err) {
           console.error("[AUTH] Error obteniendo permisos (login continúa):", err);
         }

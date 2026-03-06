@@ -170,29 +170,24 @@ Evaluacion de calidad de atencion del operador: saludo, identificacion de empres
 
 ### 5.1 Hallazgos CRITICOS
 
-#### C1. Contrasenas almacenadas en texto plano (CWE-256)
-**Archivo:** `api/seguridad/usuarios/route.ts`, lineas 110-114
+#### C1. ~~Contrasenas almacenadas en texto plano (CWE-256)~~ CORREGIDO
+**Archivo:** `api/seguridad/usuarios/route.ts`
 
-Los usuarios nuevos creados mediante la API v2 almacenan la contrasena **sin ningun hash**. Un acceso no autorizado a la base de datos expone inmediatamente todas las credenciales.
+~~Los usuarios nuevos creados mediante la API v2 almacenan la contrasena **sin ningun hash**.~~
 
-```typescript
-contrasena: contrasena,  // TEXTO PLANO
-```
+**Correccion:** La API v2 ahora usa DES crypt (compatible con legacy) para hashear contrasenas al crear/actualizar usuarios.
 
 #### C2. Hashing DES Crypt debil para autenticacion (CWE-328)
 **Archivo:** `lib/auth.ts`, lineas 8-16
 
 El sistema legacy usa DES crypt (algoritmo de los anos 70) con salt de 2 caracteres y truncamiento a 10 caracteres. Es trivialmente crackeable con GPUs modernas.
 
-#### C3. Hashes y salts de contrasena enviados a logs (CWE-532)
-**Archivo:** `lib/auth.ts`, lineas 69-72
+#### C3. ~~Hashes y salts de contrasena enviados a logs (CWE-532)~~ CORREGIDO
+**Archivo:** `lib/auth.ts`
 
-Cada intento de login registra en consola el hash almacenado, el salt y el hash calculado. En produccion esto es un riesgo grave.
+~~Cada intento de login registra en consola el hash almacenado, el salt y el hash calculado.~~
 
-```typescript
-console.log("[AUTH] Hash almacenado:", usuario.contrasena, ...);
-console.log("[AUTH] Salt:", salt, "Hash calculado:", hashCalculado, ...);
-```
+**Correccion:** Se eliminaron todos los `console.log` que exponían credenciales, hashes y rutas permitidas.
 
 #### C4. NEXTAUTH_SECRET con valor placeholder
 **Archivo:** `.env`
@@ -211,13 +206,14 @@ La configuracion SIP completa (incluyendo `sipPassword`) se serializa a `localSt
 #### A1. Politica de contrasenas extremadamente debil (CWE-521)
 Contrasenas limitadas a 6-10 caracteres sin requisitos de complejidad, dictado por la columna legacy `varchar(10)`.
 
-#### A2. Sin control de acceso basado en roles (RBAC) en la API (CWE-862)
-Todas las rutas API verifican unicamente la **existencia** de una sesion. No se verifica si el usuario tiene permisos para la operacion. Cualquier usuario autenticado puede:
-- Crear/modificar/eliminar otros usuarios (incluyendo admins)
-- Modificar permisos de cualquier grupo
-- Acceder a registros de todos los fraccionamientos
+#### A2. ~~Sin control de acceso basado en roles (RBAC) en la API (CWE-862)~~ CORREGIDO
+~~Todas las rutas API verifican unicamente la existencia de una sesion.~~
 
-El modelo de permisos existe en la BD (`PermisoAcceso`, `GrupoUsuario`) pero **nunca se aplica del lado del servidor**.
+**Correccion:** Se implemento RBAC en dos capas:
+1. **Middleware centralizado** (`middleware.ts`): Verifica permisos para TODAS las rutas API mapeando `/api/X` → `/X` contra `allowedRoutes` del usuario. Retorna 403 si no tiene acceso.
+2. **Defensa en profundidad** (`verificarAcceso()`): Cada handler de ruta API tambien verifica permisos individualmente como segunda capa de seguridad.
+
+El modelo de permisos de la BD (`PermisoAcceso`, `GrupoUsuario`) ahora se aplica en las 36+ rutas API del sistema.
 
 #### A3. Sin limitacion de tasa (rate limiting) en ningun endpoint (CWE-307)
 No hay proteccion contra ataques de fuerza bruta en login, creacion de usuarios, ni ningun endpoint.

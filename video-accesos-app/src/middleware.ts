@@ -1,40 +1,68 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
+/**
+ * Verifica si una ruta esta permitida para el usuario segun sus allowedRoutes.
+ * Retorna true si tiene acceso, false si no.
+ */
+function tieneAccesoARuta(allowedRoutes: string[], pathname: string): boolean {
+  // Modo bootstrap: no hay permisos configurados, permitir todo
+  if (allowedRoutes.length === 0) {
+    return true;
+  }
+
+  // Solo considerar rutas Next.js validas (empiezan con "/")
+  const validRoutes = allowedRoutes.filter((r) => r.startsWith("/"));
+
+  // Si no quedan rutas validas despues de filtrar, modo bootstrap
+  if (validRoutes.length === 0) {
+    return true;
+  }
+
+  return validRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  );
+}
+
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
-    // API routes and root always allowed for authenticated users
-    if (pathname.startsWith("/api/") || pathname === "/") {
+    // Root/dashboard siempre permitido para usuarios autenticados
+    if (pathname === "/") {
       return NextResponse.next();
     }
 
     const allowedRoutes = (token?.allowedRoutes as string[]) || [];
 
-    // If no permissions configured yet (empty array), allow everything
-    // to avoid locking out users during initial setup (bootstrap mode)
-    if (allowedRoutes.length === 0) {
+    // Rutas API: verificar permisos mapeando /api/X → /X
+    if (pathname.startsWith("/api/")) {
+      // /api/auth/* se excluye via matcher, pero por seguridad:
+      if (pathname.startsWith("/api/auth/")) {
+        return NextResponse.next();
+      }
+
+      // /api/dashboard siempre permitido para autenticados
+      if (pathname.startsWith("/api/dashboard")) {
+        return NextResponse.next();
+      }
+
+      // Mapear /api/catalogos/empleados → /catalogos/empleados
+      const rutaLogica = pathname.replace(/^\/api/, "");
+
+      if (!tieneAccesoARuta(allowedRoutes, rutaLogica)) {
+        return NextResponse.json(
+          { error: "No tiene permisos para acceder a este recurso" },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.next();
     }
 
-    // Only consider valid Next.js routes (must start with "/")
-    // This filters out legacy PHP function names like "listar", "editar", etc.
-    const validRoutes = allowedRoutes.filter((r) => r.startsWith("/"));
-
-    // If no valid routes remain after filtering, treat as bootstrap mode
-    if (validRoutes.length === 0) {
-      return NextResponse.next();
-    }
-
-    // Check if the current path matches any allowed route
-    const isAllowed = validRoutes.some(
-      (route) => pathname === route || pathname.startsWith(route + "/")
-    );
-
-    if (!isAllowed) {
-      // Redirect to home with an access denied indicator
+    // Rutas de pagina: verificar permisos
+    if (!tieneAccesoARuta(allowedRoutes, pathname)) {
       const url = req.nextUrl.clone();
       url.pathname = "/";
       url.searchParams.set("acceso", "denegado");

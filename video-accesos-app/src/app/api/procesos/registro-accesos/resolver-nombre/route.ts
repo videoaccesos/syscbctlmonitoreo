@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/procesos/registro-accesos/resolver-nombre?ids=id1,id2,id3
@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado = verificarAcceso(session, "/procesos/registro-accesos");
+    if (denegado) return denegado;
 
     const { searchParams } = new URL(request.url);
     const idsParam = searchParams.get("ids") || "";

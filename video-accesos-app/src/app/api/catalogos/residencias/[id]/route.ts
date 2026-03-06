@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/catalogos/residencias/[id] - Obtener residencia con residentes
@@ -12,6 +12,8 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado = verificarAcceso(session, "/catalogos/residencias");
+  if (denegado) return denegado;
 
   try {
     const { id } = await params;
@@ -54,6 +56,8 @@ export async function PUT(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado2 = verificarAcceso(session, "/catalogos/residencias");
+  if (denegado2) return denegado2;
 
   try {
     const { id } = await params;
@@ -127,6 +131,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const denegado3 = verificarAcceso(session, "/catalogos/residencias");
+  if (denegado3) return denegado3;
 
   try {
     const { id } = await params;

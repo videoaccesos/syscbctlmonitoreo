@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, verificarAcceso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function generarId(): string {
@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const denegado = verificarAcceso(session, "/procesos/registro-accesos");
+    if (denegado) return denegado;
 
     const body = await request.json();
     const { residenciaId, nombre, apePaterno, apeMaterno, telefono, celular, email, observaciones } = body;
