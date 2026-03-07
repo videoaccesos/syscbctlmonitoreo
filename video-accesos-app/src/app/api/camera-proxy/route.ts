@@ -7,6 +7,34 @@ import crypto from "crypto";
 
 const TAG = "camera-proxy";
 
+// ---------------------------------------------------------------------------
+// Request-level diagnostics - log timing of each step in the proxy pipeline
+// ---------------------------------------------------------------------------
+interface ProxyDiagEntry {
+  ts: number;
+  step: string;
+  detail?: string;
+}
+
+function createProxyDiag(reqId: string) {
+  const entries: ProxyDiagEntry[] = [];
+  const start = Date.now();
+  return {
+    log(step: string, detail?: string) {
+      entries.push({ ts: Date.now() - start, step, detail });
+      logger.debug(TAG, `[${reqId}] +${Date.now() - start}ms | ${step}${detail ? ` | ${detail}` : ""}`);
+    },
+    summary() {
+      return entries.map(e => `+${e.ts}ms ${e.step}${e.detail ? ` (${e.detail})` : ""}`).join(" -> ");
+    },
+    elapsed() {
+      return Date.now() - start;
+    },
+  };
+}
+
+let _proxyReqCounter = 0;
+
 // GET /api/camera-proxy?telefono=XXX&cam=1
 // GET /api/camera-proxy?privada_id=N&cam=1
 // Proxy que obtiene snapshots de camaras con autenticacion digest
@@ -206,8 +234,10 @@ async function fetchWithDigestAuth(
   user: string,
   pass: string,
   timeoutMs: number = 8000,
-  clientSignal?: AbortSignal
+  clientSignal?: AbortSignal,
+  diagFn?: (step: string, detail?: string) => void
 ): Promise<{ ok: boolean; data: Buffer | null; contentType: string; status: number; error?: string }> {
+  const dlog = diagFn || (() => {});
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -235,19 +265,23 @@ async function fetchWithDigestAuth(
     // --- Intentar con nonce en cache (1 solo request) ---
     const cached = hostKey ? digestNonceCache.get(hostKey) : undefined;
     if (cached && Date.now() - cached.timestamp < NONCE_CACHE_TTL) {
+      dlog("DIGEST_CACHE_HIT", `nc=${cached.nc + 1} host=${hostKey}`);
       cached.nc++;
       const authHeader = makeDigestHeader(
         user, pass, "GET", uri,
         cached.realm, cached.nonce, cached.qop, cached.opaque, cached.nc
       );
+      dlog("FETCH_CACHED_START");
       const resCached = await fetch(url, {
         headers: { ...fetchHeaders, Authorization: authHeader },
         signal: controller.signal,
       });
+      dlog("FETCH_CACHED_DONE", `status=${resCached.status}`);
 
       if (resCached.ok) {
         const buf = Buffer.from(await resCached.arrayBuffer());
         cached.timestamp = Date.now(); // refrescar TTL
+        dlog("CACHE_OK", `${buf.length} bytes`);
         return {
           ok: true, data: buf,
           contentType: resCached.headers.get("content-type") || "image/jpeg",
@@ -258,22 +292,29 @@ async function fetchWithDigestAuth(
       // Nonce expirado u otro error - consumir body para liberar conexion
       await resCached.arrayBuffer().catch(() => {});
       if (resCached.status === 401) {
+        dlog("NONCE_STALE", "cache invalidated");
         digestNonceCache.delete(hostKey); // nonce stale, caer al flujo completo
       } else {
+        dlog("CACHE_FAIL", `HTTP ${resCached.status}`);
         return { ok: false, data: null, contentType: "", status: resCached.status, error: `HTTP ${resCached.status}` };
       }
+    } else {
+      dlog("DIGEST_CACHE_MISS", hostKey);
     }
 
     // --- Flujo completo de 2 pasos (sin cache o nonce expirado) ---
     // Primer request - esperamos 401 con challenge
+    dlog("FETCH_CHALLENGE_START", url.substring(0, 120));
     const res1 = await fetch(url, {
       headers: fetchHeaders,
       signal: controller.signal,
     });
+    dlog("FETCH_CHALLENGE_DONE", `status=${res1.status}`);
 
     // Si responde 200 directamente (sin auth requerido)
     if (res1.ok) {
       const buf = Buffer.from(await res1.arrayBuffer());
+      dlog("NO_AUTH_NEEDED", `${buf.length} bytes`);
       return {
         ok: true, data: buf,
         contentType: res1.headers.get("content-type") || "image/jpeg",
@@ -283,14 +324,17 @@ async function fetchWithDigestAuth(
 
     if (res1.status !== 401) {
       await res1.arrayBuffer().catch(() => {}); // CRITICO: consumir body para liberar conexion
+      dlog("UNEXPECTED_STATUS", `HTTP ${res1.status}`);
       return { ok: false, data: null, contentType: "", status: res1.status, error: `HTTP ${res1.status}` };
     }
 
     const wwwAuth = res1.headers.get("www-authenticate") || "";
+    dlog("AUTH_CHALLENGE", wwwAuth.substring(0, 80));
     await res1.arrayBuffer().catch(() => {}); // CRITICO: consumir body del 401 para liberar conexion
 
     // Intentar Basic Auth si no es Digest
     if (!wwwAuth.toLowerCase().startsWith("digest")) {
+      dlog("BASIC_AUTH_ATTEMPT");
       const basicAuth = Buffer.from(`${user}:${pass}`).toString("base64");
       const res2 = await fetch(url, {
         headers: { ...fetchHeaders, Authorization: `Basic ${basicAuth}` },
@@ -318,10 +362,12 @@ async function fetchWithDigestAuth(
     const authHeader = makeDigestHeader(user, pass, "GET", uri, realm, nonce, qopRaw, opaque, nc);
 
     // Segundo request con credenciales digest
+    dlog("FETCH_DIGEST_START");
     const res3 = await fetch(url, {
       headers: { ...fetchHeaders, Authorization: authHeader },
       signal: controller.signal,
     });
+    dlog("FETCH_DIGEST_DONE", `status=${res3.status}`);
 
     if (res3.ok) {
       const buf = Buffer.from(await res3.arrayBuffer());
@@ -329,6 +375,7 @@ async function fetchWithDigestAuth(
       if (hostKey) {
         digestNonceCache.set(hostKey, { realm, nonce, qop: qopRaw, opaque, nc, timestamp: Date.now() });
       }
+      dlog("DIGEST_OK", `${buf.length} bytes, nonce cached`);
       return {
         ok: true, data: buf,
         contentType: res3.headers.get("content-type") || "image/jpeg",
@@ -337,10 +384,13 @@ async function fetchWithDigestAuth(
     }
 
     await res3.arrayBuffer().catch(() => {}); // consumir body para liberar conexion
+    dlog("DIGEST_FAIL", `HTTP ${res3.status}`);
     return { ok: false, data: null, contentType: "", status: res3.status, error: `Digest auth failed: HTTP ${res3.status}` };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return { ok: false, data: null, contentType: "", status: 0, error: message.includes("abort") ? "Timeout" : message };
+    const errorType = message.includes("abort") ? "Timeout" : message;
+    dlog("FETCH_EXCEPTION", `${errorType} (raw: ${message})`);
+    return { ok: false, data: null, contentType: "", status: 0, error: errorType };
   } finally {
     clearTimeout(timeout);
     if (clientSignal) {
@@ -361,19 +411,25 @@ function noSignalSvg(channel: string, errorMsg: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const reqId = `r${++_proxyReqCounter}`;
+  const diag = createProxyDiag(reqId);
+
   try {
+    diag.log("AUTH_CHECK");
     const session = await getServerSession(authOptions);
     if (!session) {
       logger.warn(TAG, "Solicitud sin sesion (401)");
       return new NextResponse("No autorizado", { status: 401 });
     }
+    diag.log("AUTH_OK");
 
     const { searchParams } = new URL(request.url);
     const telefono = searchParams.get("telefono");
     const privadaId = searchParams.get("privada_id");
     const camIndex = parseInt(searchParams.get("cam") || "1");
 
-    logger.debug(TAG, `Request: privada_id=${privadaId}, telefono=${telefono}, cam=${camIndex}`);
+    diag.log("PARAMS", `privada_id=${privadaId} tel=${telefono} cam=${camIndex}`);
+    logger.debug(TAG, `[${reqId}] Request: privada_id=${privadaId}, telefono=${telefono}, cam=${camIndex}`);
 
     if (!telefono && !privadaId) {
       return NextResponse.json(
@@ -514,17 +570,21 @@ export async function GET(request: NextRequest) {
 
     // Adquirir slot del semaforo para este host (evita saturar conexiones al DVR)
     const hostKey = getHostKey(cameraUrl);
+    diag.log("SEMAPHORE_WAIT", hostKey);
     await acquireHostSlot(hostKey);
+    diag.log("SEMAPHORE_ACQUIRED");
 
     try {
 
       // Fetch snapshot con digest auth (pasa signal del cliente para cancelar si el browser desconecta)
+      diag.log("FETCH_START", cameraUrl.substring(0, 120));
       const startMs = Date.now();
-      const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal);
+      const result = await fetchWithDigestAuth(cameraUrl, creds.user, creds.pass, 8000, request.signal, diag.log);
       const elapsedMs = Date.now() - startMs;
+      diag.log("FETCH_COMPLETE", `ok=${result.ok} status=${result.status} ${elapsedMs}ms`);
 
       if (result.ok && result.data) {
-        logger.info(TAG, `OK | Cam ${camIndex} | ${privada.descripcion} | ${result.data.length} bytes | ${elapsedMs}ms | Content-Type: ${result.contentType}`);
+        logger.info(TAG, `[${reqId}] OK | Cam ${camIndex} | ${privada.descripcion} | ${result.data.length} bytes | ${elapsedMs}ms | pipeline: ${diag.summary()}`);
         return new NextResponse(new Uint8Array(result.data), {
           status: 200,
           headers: {
@@ -540,7 +600,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Error - devolver SVG placeholder
-      logger.warn(TAG, `FALLO | Cam ${camIndex} | ${privada.descripcion} | ${elapsedMs}ms | Status: ${result.status} | Error: ${result.error}`);
+      logger.warn(TAG, `[${reqId}] FALLO | Cam ${camIndex} | ${privada.descripcion} | ${elapsedMs}ms | Status: ${result.status} | Error: ${result.error} | pipeline: ${diag.summary()}`);
       return new NextResponse(
         noSignalSvg(
           `Camara ${camIndex} - ${privada.descripcion}`,
@@ -558,7 +618,8 @@ export async function GET(request: NextRequest) {
       releaseHostSlot(hostKey);
     }
   } catch (error) {
-    logger.error(TAG, "ERROR CRITICO", error);
+    diag.log("CRITICAL_ERROR", error instanceof Error ? error.message : String(error));
+    logger.error(TAG, `[${reqId}] ERROR CRITICO | pipeline: ${diag.summary()}`, error);
     return new NextResponse(noSignalSvg("Error", "Error interno del servidor"), {
       status: 500,
       headers: { "Content-Type": "image/svg+xml" },

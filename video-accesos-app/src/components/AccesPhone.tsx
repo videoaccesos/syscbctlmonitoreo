@@ -27,6 +27,52 @@ const RECONNECT_MAX_DELAY = 30000; // 30 seconds max
 const RECONNECT_MAX_ATTEMPTS = 0;  // 0 = unlimited
 
 // ---------------------------------------------------------------------------
+// Diagnostics logger - agrega timestamps y se puede ver en consola
+// ---------------------------------------------------------------------------
+interface DiagEntry {
+  ts: string;
+  elapsed: number;
+  event: string;
+  detail?: string;
+}
+const _diagLog: DiagEntry[] = [];
+const _diagStart = Date.now();
+
+function diag(event: string, detail?: string) {
+  const entry: DiagEntry = {
+    ts: new Date().toISOString(),
+    elapsed: Date.now() - _diagStart,
+    event,
+    detail,
+  };
+  _diagLog.push(entry);
+  // Mantener maximo 200 entradas
+  if (_diagLog.length > 200) _diagLog.shift();
+  console.log(`[DIAG-SIP] +${entry.elapsed}ms | ${event}${detail ? ` | ${detail}` : ""}`);
+}
+
+// Exponer para acceso desde consola del browser: window.__sipDiag()
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sipDiag = () => {
+    console.table(_diagLog);
+    return _diagLog;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sipDiagSummary = () => {
+    const summary = {
+      totalEntries: _diagLog.length,
+      firstEvent: _diagLog[0]?.ts || "none",
+      lastEvent: _diagLog[_diagLog.length - 1]?.ts || "none",
+      totalElapsed: _diagLog.length > 0 ? `${_diagLog[_diagLog.length - 1].elapsed}ms` : "0ms",
+      events: _diagLog.map(e => `+${e.elapsed}ms ${e.event}`).join("\n"),
+    };
+    console.log(summary.events);
+    return summary;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -208,6 +254,7 @@ export default function AccesPhone({
   const setupSessionEvents = useCallback(
     (session: RTCSession, callerNumber: string) => {
       session.on("accepted", () => {
+        diag("SESSION_ACCEPTED", callerNumber);
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
         setInCall(true);
@@ -219,10 +266,12 @@ export default function AccesPhone({
       });
 
       session.on("confirmed", () => {
+        diag("SESSION_CONFIRMED", callerNumber);
         console.log("[AccesPhone] Session confirmed - audio should already be attached via peerconnection track event");
       });
 
       session.on("ended", (e) => {
+        diag("SESSION_ENDED", `cause=${e?.cause || "unknown"} number=${callerNumber}`);
         console.log("[AccesPhone] Session ended:", e?.cause || "unknown cause");
         cleanupCall();
         onCallEndedRef.current?.();
@@ -231,6 +280,8 @@ export default function AccesPhone({
       session.on("failed", (e) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const evt = e as any;
+        const failDetail = `cause=${evt?.cause} status=${evt?.message?.status_code} reason=${evt?.message?.reason_phrase} originator=${evt?.originator}`;
+        diag("SESSION_FAILED", failDetail);
         console.error("[AccesPhone] Session failed:", evt?.cause || "unknown cause");
         console.error("[AccesPhone] Session failed details:", {
           cause: evt?.cause,
@@ -239,6 +290,7 @@ export default function AccesPhone({
           originator: evt?.originator,
         });
         if (evt?.cause === "Internal Error" || evt?.cause === "internal error") {
+          diag("SESSION_INTERNAL_ERROR", "Posible problema SDP/WebRTC/media");
           console.error("[AccesPhone] INTERNAL ERROR - posible problema con SDP/WebRTC/media");
         }
         cleanupCall();
@@ -257,6 +309,7 @@ export default function AccesPhone({
         if (pc) {
           // Remote audio - matching working softphone implementation
           pc.addEventListener("track", (ev: RTCTrackEvent) => {
+            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length}`);
             console.log("[AccesPhone] Remote track received:", ev.track.kind);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
@@ -278,15 +331,36 @@ export default function AccesPhone({
           });
 
           pc.oniceconnectionstatechange = () => {
+            diag("ICE_STATE", pc.iceConnectionState);
             console.log("[AccesPhone] ICE connection state:", pc.iceConnectionState);
           };
 
           pc.onsignalingstatechange = () => {
+            diag("SIGNAL_STATE", pc.signalingState);
             console.log("[AccesPhone] Signaling state:", pc.signalingState);
           };
 
           pc.onconnectionstatechange = () => {
+            diag("CONN_STATE", pc.connectionState);
             console.log("[AccesPhone] Connection state:", pc.connectionState);
+          };
+
+          pc.onicecandidateerror = (ev) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ice = ev as any;
+            diag("ICE_CANDIDATE_ERROR", `errorCode=${ice.errorCode} url=${ice.url} errorText=${ice.errorText}`);
+          };
+
+          pc.onicecandidate = (ev) => {
+            if (ev.candidate) {
+              diag("ICE_CANDIDATE", `type=${ev.candidate.type} protocol=${ev.candidate.protocol} address=${ev.candidate.address}`);
+            } else {
+              diag("ICE_GATHERING_DONE");
+            }
+          };
+
+          pc.onicegatheringstatechange = () => {
+            diag("ICE_GATHERING_STATE", pc.iceGatheringState);
           };
         }
       });
@@ -384,20 +458,21 @@ export default function AccesPhone({
     manualDisconnectRef.current = false;
     setConnecting(true);
     setStatusText("Conectando...");
+    diag("CONNECT_START", `ext=${cfg.extension} ws=${cfg.wsServer}`);
 
     try {
       // Dynamic import to avoid SSR issues
-      console.log('[AccesPhone] Importando JsSIP...');
+      diag("JSSIP_IMPORT_START");
       const JsSIP = await import("jssip");
-      console.log('[AccesPhone] JsSIP importado OK');
+      diag("JSSIP_IMPORT_OK");
 
       // Enable JsSIP internal debug logging
       JsSIP.debug.enable('JsSIP:*');
 
-      console.log('[AccesPhone] Creando WebSocket hacia:', cfg.wsServer);
+      diag("WS_CREATE", cfg.wsServer);
       const socket = new JsSIP.WebSocketInterface(cfg.wsServer);
       const sipUri = `sip:${cfg.extension}@${cfg.sipDomain}`;
-      console.log('[AccesPhone] SIP URI:', sipUri);
+      diag("SIP_URI", sipUri);
 
       const ua = new JsSIP.UA({
         sockets: [socket],
@@ -410,11 +485,18 @@ export default function AccesPhone({
       });
 
       ua.on("connected", () => {
+        diag("WS_CONNECTED", "WebSocket transport abierto");
         console.log("[AccesPhone] WebSocket conectado");
         setStatusText("Conectado");
       });
 
-      ua.on("disconnected", () => {
+      ua.on("disconnected", (e) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const evt = e as any;
+        const reason = evt?.error ? `error=${evt.error}` : "clean";
+        const code = evt?.code || "";
+        const wsReason = evt?.reason || "";
+        diag("WS_DISCONNECTED", `manual=${manualDisconnectRef.current} reason=${reason} code=${code} wsReason=${wsReason}`);
         console.log("[AccesPhone] WebSocket desconectado, manual:", manualDisconnectRef.current);
         setConnected(false);
         setConnecting(false);
@@ -428,11 +510,13 @@ export default function AccesPhone({
         } else {
           // Auto-reconnect - read attempt from ref to avoid stale closure
           setStatusText("Conexion perdida");
+          diag("RECONNECT_TRIGGER", `attempt=${reconnectAttemptRef.current}`);
           scheduleReconnect(reconnectAttemptRef.current);
         }
       });
 
       ua.on("registered", () => {
+        diag("SIP_REGISTERED", `ext=${cfg.extension}`);
         console.log("[AccesPhone] SIP registrado exitosamente");
         setConnected(true);
         setConnecting(false);
@@ -443,12 +527,14 @@ export default function AccesPhone({
       });
 
       ua.on("unregistered", () => {
+        diag("SIP_UNREGISTERED");
         console.log("[AccesPhone] SIP des-registrado");
         setConnected(false);
         setStatusText("No registrado");
       });
 
       ua.on("registrationFailed", (e) => {
+        diag("SIP_REG_FAILED", `cause=${e.cause}`);
         console.error("[AccesPhone] Registro SIP fallido:", e.cause);
         setConnected(false);
         setConnecting(false);
@@ -462,6 +548,7 @@ export default function AccesPhone({
 
       ua.on("newRTCSession", (data: IncomingRTCSessionEvent | OutgoingRTCSessionEvent) => {
         const session = data.session;
+        diag("NEW_RTC_SESSION", `originator=${data.originator} direction=${session.direction}`);
         console.log("[AccesPhone] newRTCSession - originator:", data.originator, "direction:", session.direction);
 
         if (data.originator === "remote") {
@@ -498,15 +585,17 @@ export default function AccesPhone({
         }
       });
 
-      console.log('[AccesPhone] Llamando ua.start()...');
+      diag("UA_START");
       ua.start();
       uaRef.current = ua;
-      console.log('[AccesPhone] UA iniciado, esperando eventos de conexión...');
+      diag("UA_STARTED", "Esperando eventos WS...");
       setStatusText("Conectando WebSocket...");
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      diag("CONNECT_ERROR", errMsg);
       console.error("[AccesPhone] Error al conectar SIP:", err);
       setConnecting(false);
-      setStatusText(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusText(`Error: ${errMsg}`);
 
       // Schedule reconnect on connection error
       if (!manualDisconnectRef.current) {

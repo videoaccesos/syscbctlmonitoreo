@@ -2,7 +2,55 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2 } from "lucide-react";
+import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, AlertTriangle } from "lucide-react";
+
+// ---------------------------------------------------------------------------
+// Diagnostics logger - rastrea cada fetch de imagen con tiempos
+// ---------------------------------------------------------------------------
+interface CamDiagEntry {
+  ts: string;
+  elapsed: number;
+  cam: number;
+  event: string;
+  detail?: string;
+}
+const _camDiagLog: CamDiagEntry[] = [];
+const _camDiagStart = Date.now();
+
+function camDiag(cam: number, event: string, detail?: string) {
+  const entry: CamDiagEntry = {
+    ts: new Date().toISOString(),
+    elapsed: Date.now() - _camDiagStart,
+    cam,
+    event,
+    detail,
+  };
+  _camDiagLog.push(entry);
+  if (_camDiagLog.length > 300) _camDiagLog.shift();
+  console.log(`[DIAG-CAM] +${entry.elapsed}ms | cam${cam} | ${event}${detail ? ` | ${detail}` : ""}`);
+}
+
+// Exponer para consola del browser
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__camDiag = () => {
+    console.table(_camDiagLog);
+    return _camDiagLog;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__camDiagStats = () => {
+    const camStats: Record<number, { loads: number; errors: number; lastEvent: string; lastDetail?: string }> = {};
+    for (const e of _camDiagLog) {
+      if (!camStats[e.cam]) camStats[e.cam] = { loads: 0, errors: 0, lastEvent: "", lastDetail: "" };
+      if (e.event === "IMG_LOADED") camStats[e.cam].loads++;
+      if (e.event === "IMG_ERROR") camStats[e.cam].errors++;
+      camStats[e.cam].lastEvent = e.event;
+      camStats[e.cam].lastDetail = e.detail;
+    }
+    console.table(camStats);
+    return camStats;
+  };
+}
 
 interface CameraInfo {
   index: number;
@@ -143,6 +191,8 @@ export default function CameraGrid({
 
       let loadCount = 0;
       let errorCount = 0;
+      let consecutiveErrors = 0;
+      let lastLoadTime = 0;
 
       const refreshCamera = () => {
         const img = imgRefs.current.get(cam.index);
@@ -152,12 +202,17 @@ export default function CameraGrid({
         camParams.set("cam", String(cam.index));
         camParams.set("t", String(Date.now()));
 
+        const fetchStart = Date.now();
+
         // Programar siguiente refresh solo cuando esta imagen termine de cargar
         img.onload = () => {
           if (!mountedRef.current) return;
           loadCount++;
+          consecutiveErrors = 0;
+          const fetchDuration = Date.now() - fetchStart;
+          lastLoadTime = fetchDuration;
           if (loadCount <= 3 || loadCount % 50 === 0) {
-            console.log(`[CameraGrid] Cam ${cam.index} (${cam.alias}) loaded #${loadCount}, ${img.naturalWidth}x${img.naturalHeight}`);
+            camDiag(cam.index, "IMG_LOADED", `#${loadCount} ${img.naturalWidth}x${img.naturalHeight} ${fetchDuration}ms`);
           }
           const tid = setTimeout(refreshCamera, refreshMs);
           intervalsRef.current.set(cam.index, tid);
@@ -165,8 +220,13 @@ export default function CameraGrid({
         img.onerror = () => {
           if (!mountedRef.current) return;
           errorCount++;
-          if (errorCount <= 5 || errorCount % 20 === 0) {
-            console.error(`[CameraGrid] Cam ${cam.index} (${cam.alias}) error #${errorCount}, src=${img.src.substring(0, 120)}`);
+          consecutiveErrors++;
+          const fetchDuration = Date.now() - fetchStart;
+          if (errorCount <= 5 || errorCount % 20 === 0 || consecutiveErrors === 1) {
+            camDiag(cam.index, "IMG_ERROR", `#${errorCount} consecutive=${consecutiveErrors} ${fetchDuration}ms src=${img.src.substring(0, 120)}`);
+          }
+          if (consecutiveErrors >= 10 && consecutiveErrors % 10 === 0) {
+            camDiag(cam.index, "IMG_STUCK", `${consecutiveErrors} errores consecutivos - posible bloqueo de red/proxy`);
           }
           // En error, esperar mas para no saturar la camara/DVR
           const tid = setTimeout(refreshCamera, Math.max(refreshMs * 3, 3000));
@@ -175,12 +235,13 @@ export default function CameraGrid({
 
         const imgUrl = `${proxyBase}?${camParams.toString()}`;
         if (loadCount === 0) {
-          console.log(`[CameraGrid] Cam ${cam.index} (${cam.alias}) first fetch: ${imgUrl.substring(0, 120)}`);
+          camDiag(cam.index, "FIRST_FETCH", imgUrl.substring(0, 150));
         }
         img.src = imgUrl;
       };
 
       // Primer fetch inmediato
+      camDiag(cam.index, "START_REFRESH", `alias=${cam.alias} refreshMs=${refreshMs}`);
       refreshCamera();
     }
 
