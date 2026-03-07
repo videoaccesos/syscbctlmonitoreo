@@ -23,8 +23,8 @@ import {
   VideoOff,
   Plus,
   RotateCcw,
-  PanelRightOpen,
-  PanelRightClose,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 
 // Softphone minimo - requires browser APIs (WebRTC, WebSocket)
@@ -249,7 +249,7 @@ export default function MonitoristasPage() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Video/camera state - panel lateral derecho
+  // Video/camera state - panel lateral izquierdo
   const [showVideo, setShowVideo] = useState(false);
 
   // Form state
@@ -889,6 +889,11 @@ export default function MonitoristasPage() {
             <PhoneIncoming className="h-5 w-5 text-white" />
           </div>
           <div className="flex-1">
+            {incomingCallResidencia && (
+              <div className="text-lg font-extrabold text-emerald-800 leading-tight">
+                {incomingCallResidencia.privada.descripcion}
+              </div>
+            )}
             <div className="text-sm font-bold text-gray-900">
               Llamada entrante: <span className="font-mono">{incomingCallNumber}</span>
             </div>
@@ -899,9 +904,8 @@ export default function MonitoristasPage() {
               </div>
             )}
             {incomingCallResidencia && (
-              <div className="text-xs text-emerald-700 mt-0.5">
-                Identificado: <strong>{incomingCallResidencia.privada.descripcion}</strong>
-                {" - "}#{incomingCallResidencia.nroCasa} {incomingCallResidencia.calle}
+              <div className="text-sm text-emerald-700 mt-0.5">
+                #{incomingCallResidencia.nroCasa} {incomingCallResidencia.calle}
                 {incomingCallResidencia.observaciones && (
                   <span className="text-red-600 ml-2 font-semibold">
                     NOTA: {incomingCallResidencia.observaciones}
@@ -1700,34 +1704,34 @@ export default function MonitoristasPage() {
       />
 
       {/* ================================================================= */}
-      {/* CAMERA PANEL - right side sliding drawer                           */}
+      {/* CAMERA PANEL - left side sliding drawer                            */}
       {/* ================================================================= */}
       {(formPrivadaId || incomingCallNumber) && (
         <>
-          {/* Toggle tab on right edge - always visible, toggles open/close */}
+          {/* Toggle tab on left edge - always visible, toggles open/close */}
           <button
             onClick={() => setShowVideo((v) => !v)}
-            className={`fixed top-1/2 -translate-y-1/2 z-[41] bg-gray-900 text-white rounded-l-xl px-2 py-4 shadow-lg hover:bg-gray-800 transition-all group ${
-              showVideo ? "right-[340px]" : "right-0"
+            className={`fixed top-1/2 -translate-y-1/2 z-[41] bg-gray-900 text-white rounded-r-xl px-2 py-4 shadow-lg hover:bg-gray-800 transition-all group ${
+              showVideo ? "left-[340px]" : "left-0"
             }`}
             title={showVideo ? "Ocultar camaras (Esc)" : "Mostrar camaras"}
           >
             {showVideo ? (
-              <PanelRightClose className="h-5 w-5 mb-2" />
+              <PanelLeftClose className="h-5 w-5 mb-2" />
             ) : (
-              <PanelRightOpen className="h-5 w-5 mb-2" />
+              <PanelLeftOpen className="h-5 w-5 mb-2" />
             )}
             <Video className="h-5 w-5 text-orange-400" />
           </button>
 
           {/* Sliding panel */}
           <div
-            className={`fixed top-0 right-0 h-full z-[40] transition-transform duration-300 ease-in-out ${
-              showVideo ? "translate-x-0" : "translate-x-full"
+            className={`fixed top-0 left-0 h-full z-[40] transition-transform duration-300 ease-in-out ${
+              showVideo ? "translate-x-0" : "-translate-x-full"
             }`}
             style={{ width: 340 }}
           >
-            <div className="h-full bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col">
+            <div className="h-full bg-gray-900 border-r border-gray-700 shadow-2xl flex flex-col">
               {/* Panel header */}
               <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-700 bg-gray-800">
                 <div className="flex items-center gap-2 text-white">
@@ -1744,7 +1748,7 @@ export default function MonitoristasPage() {
                   className="p-1.5 rounded bg-gray-700 text-gray-500 hover:bg-gray-600 hover:text-white transition"
                   title="Ocultar camaras (Esc)"
                 >
-                  <PanelRightClose className="h-4 w-4" />
+                  <PanelLeftClose className="h-4 w-4" />
                 </button>
               </div>
 

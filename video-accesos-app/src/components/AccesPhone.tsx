@@ -1062,7 +1062,7 @@ export default function AccesPhone({
                   )}
                   <div className="min-w-0 flex-1">
                     {callInfo.callerLabel && (
-                      <div className="text-sm font-bold text-green-800 truncate">
+                      <div className="text-base font-extrabold text-green-800 truncate leading-tight">
                         {callInfo.callerLabel}
                       </div>
                     )}
