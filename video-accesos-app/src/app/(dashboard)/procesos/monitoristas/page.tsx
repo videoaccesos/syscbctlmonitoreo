@@ -835,7 +835,7 @@ export default function MonitoristasPage() {
   // Render
   // -----------------------------------------------------------
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 transition-all duration-300 ${showVideo ? "ml-[360px]" : ""}`}>
       {/* ================================================================= */}
       {/* HEADER + SOFTPHONE MINIMO                                          */}
       {/* ================================================================= */}
