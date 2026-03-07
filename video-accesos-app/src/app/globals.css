@@ -10,6 +10,12 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Grises más oscuros para mejor legibilidad en monitores */
+  --color-gray-400: #4b5563;   /* era #9ca3af → ahora equivale al antiguo gray-600 */
+  --color-gray-500: #374151;   /* era #6b7280 → ahora equivale al antiguo gray-700 */
+  --color-gray-600: #1f2937;   /* era #4b5563 → ahora equivale al antiguo gray-800 */
+  --color-gray-700: #111827;   /* era #374151 → ahora equivale al antiguo gray-900 */
 }
 
 @media (prefers-color-scheme: dark) {

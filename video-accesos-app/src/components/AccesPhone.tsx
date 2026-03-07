@@ -89,6 +89,7 @@ interface AccesPhoneConfig {
 
 interface CallInfo {
   number: string;
+  callerLabel?: string;
   direction: "incoming" | "outgoing";
   startTime: Date;
 }
@@ -565,6 +566,26 @@ export default function AccesPhone({
           });
           setExpanded(true);
 
+          // Lookup caller ID (privada/residencia) for visual identification
+          fetch(`/api/procesos/registro-accesos/buscar-por-telefono?telefono=${encodeURIComponent(callerNumber)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data?.found) {
+                let label = "";
+                if (data.matchLevel === "residencia" && data.data) {
+                  const r = data.data;
+                  label = `${r.privada?.descripcion || ""}${r.nroCasa ? ` - #${r.nroCasa}` : ""}${r.calle ? ` ${r.calle}` : ""}`;
+                } else if (data.privada) {
+                  label = data.privada.descripcion || "";
+                }
+                if (label) {
+                  setCallInfo(prev => prev ? { ...prev, callerLabel: label.trim() } : prev);
+                  diag("CALLER_ID_FOUND", `num=${callerNumber} label=${label.trim()}`);
+                }
+              }
+            })
+            .catch(() => { /* silently ignore lookup failures */ });
+
           // Notify parent about incoming call
           onIncomingCallRef.current?.(callerNumber);
 
@@ -1015,7 +1036,12 @@ export default function AccesPhone({
                   ) : (
                     <PhoneOutgoing className="h-5 w-5 text-blue-600" />
                   )}
-                  <div>
+                  <div className="min-w-0 flex-1">
+                    {callInfo.callerLabel && (
+                      <div className="text-sm font-bold text-green-800 truncate">
+                        {callInfo.callerLabel}
+                      </div>
+                    )}
                     <div className="text-sm font-semibold text-gray-900">
                       {callInfo.number}
                     </div>
