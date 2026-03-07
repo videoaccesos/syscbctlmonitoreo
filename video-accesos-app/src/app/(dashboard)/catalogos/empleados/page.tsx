@@ -102,6 +102,7 @@ export default function EmpleadosPage() {
 
   // UI state
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"activos" | "bajas" | "todos">("activos");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -122,6 +123,7 @@ export default function EmpleadosPage() {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        estatus: statusFilter,
       });
       if (search) params.set("search", search);
 
@@ -136,7 +138,7 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   // -----------------------------------------------------------
   // Fetch puestos (for dropdown)
@@ -335,9 +337,9 @@ export default function EmpleadosPage() {
         </button>
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1 max-w-md">
+      {/* Search bar + status filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
           <input
             type="text"
@@ -349,8 +351,28 @@ export default function EmpleadosPage() {
             }}
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
+        </form>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+          {([
+            { value: "activos", label: "Activos" },
+            { value: "todos", label: "Todos" },
+            { value: "bajas", label: "Bajas" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { setStatusFilter(opt.value); setPage(1); }}
+              className={`px-3 py-2 font-medium transition ${
+                statusFilter === opt.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
-      </form>
+      </div>
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">

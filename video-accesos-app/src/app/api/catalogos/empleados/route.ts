@@ -13,22 +13,29 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
+    const estatus = searchParams.get("estatus") || "activos";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
     const skip = (page - 1) * pageSize;
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { nombre: { contains: search } },
-              { apePaterno: { contains: search } },
-              { apeMaterno: { contains: search } },
-              { nroOperador: { contains: search } },
-            ],
-          }
-        : {}),
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {};
+
+    if (estatus === "activos") {
+      where.estatusId = 1;
+    } else if (estatus === "bajas") {
+      where.estatusId = { not: 1 };
+    }
+    // estatus === "todos" → sin filtro
+
+    if (search) {
+      where.OR = [
+        { nombre: { contains: search } },
+        { apePaterno: { contains: search } },
+        { apeMaterno: { contains: search } },
+        { nroOperador: { contains: search } },
+      ];
+    }
 
     const [empleados, total] = await Promise.all([
       prisma.empleado.findMany({
@@ -102,9 +109,9 @@ export async function POST(request: NextRequest) {
         permisoAdministrador: body.permisoAdministrador || 0,
         permisoEncargadoAdministracion: body.permisoEncargadoAdministracion || 0,
         permisoSupervisor: body.permisoSupervisor || 0,
-        fechaBaja: new Date(),
+        fechaBaja: null,
         motivoBaja: "",
-        usuarioModId: (session.user as Record<string, unknown>)?.usuarioId as number ?? 0,
+        usuarioModId: Number((session.user as Record<string, unknown>)?.usuarioId) || 0,
         estatusId: 1,
       },
       include: { puesto: true },
