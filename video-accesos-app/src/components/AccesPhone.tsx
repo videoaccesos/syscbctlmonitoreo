@@ -688,19 +688,17 @@ export default function AccesPhone({
       console.warn("[AccesPhone] Microphone unavailable:", micErr);
       console.log("[AccesPhone] Creating silent audio stream as fallback (listen-only mode)");
 
-      // Create a silent audio stream so the call can still connect
+      // Create a proper silent audio stream compatible with SIP/WebRTC
       const ctx = new AudioContext();
       const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 0; // True silence via gain node
       const dst = ctx.createMediaStreamDestination();
-      oscillator.connect(dst);
+      oscillator.connect(gainNode);
+      gainNode.connect(dst);
       oscillator.start();
-      // Immediately stop to produce silence
-      const silentStream = dst.stream;
-      silentStream.getAudioTracks().forEach((t) => {
-        t.enabled = false; // muted silent track
-      });
       console.log("[AccesPhone] Silent fallback stream created - call will be LISTEN-ONLY");
-      return silentStream;
+      return dst.stream;
     }
   }, []);
 
@@ -714,12 +712,22 @@ export default function AccesPhone({
       console.log("[AccesPhone] Session status:", sessionRef.current.status);
       console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
 
+      // Check if session is still in a state that can be answered
+      // JsSIP status 4 = STATUS_WAITING_FOR_ANSWER
+      if (sessionRef.current.status !== 4) {
+        console.warn("[AccesPhone] Session not in WAITING_FOR_ANSWER state, status:", sessionRef.current.status);
+      }
+
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
+        rtcAnswerConstraints: {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false,
+        },
       });
       console.log("[AccesPhone] answer() called successfully");
     } catch (err) {
@@ -763,14 +771,21 @@ export default function AccesPhone({
   }, [speakerOn]);
 
   const makeCall = useCallback(async () => {
-    if (!dialNumber || !connected || !uaRef.current) return;
+    if (!dialNumber || !connected || !uaRef.current) {
+      console.warn("[AccesPhone] makeCall blocked - dialNumber:", dialNumber, "connected:", connected, "ua:", !!uaRef.current);
+      return;
+    }
 
     try {
       console.log("[AccesPhone] Preparing outgoing call to:", dialNumber);
+      diag("OUTGOING_CALL_START", `target=${dialNumber}`);
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
-      const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
+      const targetUri = `sip:${dialNumber}@${config.sipDomain}`;
+      console.log("[AccesPhone] Calling URI:", targetUri);
+
+      const session = uaRef.current.call(targetUri, {
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
         rtcOfferConstraints: {
@@ -779,6 +794,12 @@ export default function AccesPhone({
         },
       });
 
+      if (!session) {
+        console.error("[AccesPhone] ua.call() returned null/undefined");
+        setStatusText("Error: no se pudo iniciar llamada");
+        return;
+      }
+
       sessionRef.current = session;
       setCallInfo({
         number: dialNumber,
@@ -786,14 +807,17 @@ export default function AccesPhone({
         startTime: new Date(),
       });
       setInCall(true);
+      setExpanded(true);
       setDialNumber("");
 
       setupSessionEvents(session, dialNumber);
+      console.log("[AccesPhone] Outgoing call initiated successfully");
     } catch (err) {
       console.error("[AccesPhone] Error starting call:", err);
       setStatusText("Error al iniciar llamada");
+      cleanupCall();
     }
-  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback]);
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, cleanupCall]);
 
   // -----------------------------------------------------------
   // Settings
