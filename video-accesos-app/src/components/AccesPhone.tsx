@@ -174,6 +174,7 @@ export default function AccesPhone({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
+  const answeringRef = useRef(false);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -235,6 +236,7 @@ export default function AccesPhone({
     setCallInfo(null);
     setMuted(false);
     sessionRef.current = null;
+    answeringRef.current = false;
     // Stop local media stream tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -707,16 +709,22 @@ export default function AccesPhone({
       console.warn("[AccesPhone] No session to answer");
       return;
     }
+
+    // Prevent multiple simultaneous answer attempts
+    if (answeringRef.current) {
+      console.log("[AccesPhone] Already answering, ignoring duplicate call");
+      return;
+    }
+
+    // Only answer if session is waiting (status 4 = STATUS_WAITING_FOR_ANSWER)
+    if (sessionRef.current.status !== 4) {
+      console.warn("[AccesPhone] Session not in WAITING_FOR_ANSWER state, status:", sessionRef.current.status);
+      return;
+    }
+
+    answeringRef.current = true;
     try {
       console.log("[AccesPhone] Attempting to answer call...");
-      console.log("[AccesPhone] Session status:", sessionRef.current.status);
-      console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
-
-      // Check if session is still in a state that can be answered
-      // JsSIP status 4 = STATUS_WAITING_FOR_ANSWER
-      if (sessionRef.current.status !== 4) {
-        console.warn("[AccesPhone] Session not in WAITING_FOR_ANSWER state, status:", sessionRef.current.status);
-      }
 
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
@@ -724,14 +732,20 @@ export default function AccesPhone({
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
-        rtcAnswerConstraints: {
+        rtcOfferConstraints: {
           offerToReceiveAudio: true,
           offerToReceiveVideo: false,
+        },
+        pcConfig: {
+          iceServers: [
+            { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+          ],
         },
       });
       console.log("[AccesPhone] answer() called successfully");
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
+      answeringRef.current = false;
     }
   }, [acquireMicOrFallback]);
 
@@ -791,6 +805,11 @@ export default function AccesPhone({
         rtcOfferConstraints: {
           offerToReceiveAudio: true,
           offerToReceiveVideo: false,
+        },
+        pcConfig: {
+          iceServers: [
+            { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+          ],
         },
       });
 
