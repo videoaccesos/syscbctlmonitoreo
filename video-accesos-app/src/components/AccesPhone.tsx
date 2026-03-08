@@ -83,6 +83,9 @@ interface AccesPhoneConfig {
   sipDomain: string;
   displayName: string;
   micDeviceId: string; // "" = default del navegador
+  turnServer: string;  // e.g. "turn:accessbotpbx.info:3478"
+  turnUser: string;
+  turnPassword: string;
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -109,6 +112,9 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
   micDeviceId: "",
+  turnServer: "",
+  turnUser: "",
+  turnPassword: "",
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -669,6 +675,25 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
+  // Helper: build ICE servers list from config (STUN + optional TURN)
+  const getIceServers = useCallback((): RTCIceServer[] => {
+    const servers: RTCIceServer[] = [
+      { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+    ];
+    const cfg = configRef.current;
+    if (cfg.turnServer) {
+      servers.push({
+        urls: [cfg.turnServer],
+        username: cfg.turnUser || undefined,
+        credential: cfg.turnPassword || undefined,
+      });
+      console.log("[AccesPhone] TURN server configured:", cfg.turnServer);
+    } else {
+      console.warn("[AccesPhone] No TURN server configured - may fail behind restrictive NAT");
+    }
+    return servers;
+  }, []);
+
   // Helper: try to get microphone, fallback to silent stream if not available
   const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
     // First, enumerate devices for diagnostics
@@ -750,9 +775,7 @@ export default function AccesPhone({
           offerToReceiveVideo: false,
         },
         pcConfig: {
-          iceServers: [
-            { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-          ],
+          iceServers: getIceServers(),
         },
       });
       console.log("[AccesPhone] answer() called successfully with provided stream");
@@ -760,7 +783,7 @@ export default function AccesPhone({
       console.error("[AccesPhone] Error answering call:", err);
       answeringRef.current = false;
     }
-  }, [acquireMicOrFallback]);
+  }, [acquireMicOrFallback, getIceServers]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
@@ -820,9 +843,7 @@ export default function AccesPhone({
           offerToReceiveVideo: false,
         },
         pcConfig: {
-          iceServers: [
-            { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-          ],
+          iceServers: getIceServers(),
         },
       });
 
@@ -849,7 +870,7 @@ export default function AccesPhone({
       setStatusText("Error al iniciar llamada");
       cleanupCall();
     }
-  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, cleanupCall]);
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, getIceServers, cleanupCall]);
 
   // -----------------------------------------------------------
   // Settings
@@ -1362,6 +1383,56 @@ export default function AccesPhone({
                   placeholder="accessbotpbx.info"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
+              </div>
+
+              {/* Separador - TURN/ICE */}
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">TURN Server (NAT)</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Servidor TURN
+                </label>
+                <input
+                  type="text"
+                  value={config.turnServer}
+                  onChange={(e) =>
+                    setConfig({ ...config, turnServer: e.target.value })
+                  }
+                  placeholder="turn:accessbotpbx.info:3478"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Requerido para audio a traves de NAT
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Usuario TURN
+                  </label>
+                  <input
+                    type="text"
+                    value={config.turnUser}
+                    onChange={(e) =>
+                      setConfig({ ...config, turnUser: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Password TURN
+                  </label>
+                  <input
+                    type="password"
+                    value={config.turnPassword}
+                    onChange={(e) =>
+                      setConfig({ ...config, turnPassword: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
               </div>
 
               {/* Separador - Audio */}
