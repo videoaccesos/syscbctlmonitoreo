@@ -641,8 +641,58 @@ export default function RegistroAccesosPage() {
       setError("Seleccione un tipo de gestion (no puede ser 'No concluida').");
       return;
     }
-    if (!formSolicitanteId) {
-      setError("Seleccione un solicitante.");
+
+    // Si no se selecciono un solicitante del autocompletado pero hay texto escrito,
+    // crear automaticamente un registro de visitante con ese nombre
+    let solicitanteId = formSolicitanteId;
+    let solicitanteNombre = formSolicitanteNombre;
+
+    if (!solicitanteId && solicitanteSearch.trim()) {
+      const partes = solicitanteSearch.trim().split(/\s+/);
+      const nombre = partes[0] || "";
+      const apePaterno = partes[1] || "";
+      const apeMaterno = partes.slice(2).join(" ") || "";
+
+      try {
+        const res = await fetch(
+          "/api/procesos/registro-accesos/registrar-visitante",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              residenciaId: selectedResidencia.id,
+              nombre,
+              apePaterno,
+              apeMaterno,
+              telefono: "",
+              celular: "",
+              email: "",
+              observaciones: "",
+            }),
+          }
+        );
+
+        if (!res.ok) {
+          const data = await res.json();
+          setError(
+            data.error || "Error al registrar visitante automaticamente"
+          );
+          return;
+        }
+
+        const data = await res.json();
+        solicitanteId = data.id;
+        solicitanteNombre = data.nombre;
+        // Actualizar estado para reflejar la seleccion
+        selectSolicitante(solicitanteId, solicitanteNombre);
+      } catch {
+        setError("Error de conexion al registrar visitante");
+        return;
+      }
+    }
+
+    if (!solicitanteId) {
+      setError("Seleccione un solicitante o escriba un nombre.");
       return;
     }
 
@@ -669,7 +719,7 @@ export default function RegistroAccesosPage() {
         privadaId: formPrivadaId,
         residenciaId: selectedResidencia.id,
         tipoGestionId: formTipoGestionId,
-        solicitanteId: formSolicitanteId,
+        solicitanteId,
         estatusId,
         usuarioId,
         observaciones: formObservaciones || null,
@@ -692,14 +742,14 @@ export default function RegistroAccesosPage() {
       setUltimaDuracion(duracion);
       const estatusLabel = getEstatusLabel(estatusId);
       setSuccessMsg(
-        `Registro guardado: ${estatusLabel} - ${formSolicitanteNombre}`
+        `Registro guardado: ${estatusLabel} - ${solicitanteNombre}`
       );
 
       // Cache del nombre
       setNombresCache((prev) => ({
         ...prev,
-        [formSolicitanteId]: {
-          nombre: formSolicitanteNombre,
+        [solicitanteId]: {
+          nombre: solicitanteNombre,
           tipo: "?",
         },
       }));
