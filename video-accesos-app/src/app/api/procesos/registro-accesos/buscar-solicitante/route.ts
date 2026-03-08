@@ -14,8 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") || "";
-    const residenciaId = searchParams.get("residenciaId");
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     if (!q || q.length < 1) {
       return NextResponse.json({ data: [] });
@@ -30,21 +29,40 @@ export async function GET(request: NextRequest) {
       observaciones: string;
     }> = [];
 
-    // 1. Buscar en residentes
-    const residenteWhere: Record<string, unknown> = {
-      estatusId: 1,
-      OR: [
-        { nombre: { contains: q } },
-        { apePaterno: { contains: q } },
-        { apeMaterno: { contains: q } },
-      ],
-    };
-    if (residenciaId) {
-      residenteWhere.residenciaId = parseInt(residenciaId, 10);
-    }
+    // Separar el texto de búsqueda en palabras para buscar cada una
+    const palabras = q.trim().split(/\s+/).filter(Boolean);
 
+    // Construir condición: cada palabra debe coincidir en al menos un campo
+    const buildSearchCondition = (words: string[]) => {
+      if (words.length <= 1) {
+        return {
+          OR: [
+            { nombre: { contains: q } },
+            { apePaterno: { contains: q } },
+            { apeMaterno: { contains: q } },
+          ],
+        };
+      }
+      // Para múltiples palabras: cada palabra debe estar en algún campo (AND de ORs)
+      return {
+        AND: words.map((word) => ({
+          OR: [
+            { nombre: { contains: word } },
+            { apePaterno: { contains: word } },
+            { apeMaterno: { contains: word } },
+          ],
+        })),
+      };
+    };
+
+    const searchCondition = buildSearchCondition(palabras);
+
+    // 1. Buscar en residentes (sin filtro de residencia - es solo autocompletado)
     const residentes = await prisma.residente.findMany({
-      where: residenteWhere,
+      where: {
+        estatusId: 1,
+        ...searchCondition,
+      },
       select: {
         id: true,
         nombre: true,
@@ -67,21 +85,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 2. Buscar en visitantes
-    const visitanteWhere: Record<string, unknown> = {
-      estatusId: 1,
-      OR: [
-        { nombre: { contains: q } },
-        { apePaterno: { contains: q } },
-        { apeMaterno: { contains: q } },
-      ],
-    };
-    if (residenciaId) {
-      visitanteWhere.residenciaId = parseInt(residenciaId, 10);
-    }
-
+    // 2. Buscar en visitantes (sin filtro de residencia - es solo autocompletado)
     const visitantes = await prisma.visita.findMany({
-      where: visitanteWhere,
+      where: {
+        estatusId: 1,
+        ...searchCondition,
+      },
       select: {
         id: true,
         nombre: true,
@@ -110,11 +119,7 @@ export async function GET(request: NextRequest) {
       const generales = await prisma.registroGeneral.findMany({
         where: {
           estatusId: 1,
-          OR: [
-            { nombre: { contains: q } },
-            { apePaterno: { contains: q } },
-            { apeMaterno: { contains: q } },
-          ],
+          ...searchCondition,
         },
         select: {
           id: true,

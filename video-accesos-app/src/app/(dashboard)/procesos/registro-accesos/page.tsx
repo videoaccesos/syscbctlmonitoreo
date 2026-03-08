@@ -459,9 +459,6 @@ export default function RegistroAccesosPage() {
       setSolicitanteSearching(true);
       try {
         const params = new URLSearchParams({ q });
-        if (selectedResidencia) {
-          params.set("residenciaId", String(selectedResidencia.id));
-        }
         const res = await fetch(
           `/api/procesos/registro-accesos/buscar-solicitante?${params}`
         );
@@ -475,7 +472,7 @@ export default function RegistroAccesosPage() {
         setSolicitanteSearching(false);
       }
     },
-    [selectedResidencia]
+    []
   );
 
   // Debounce solicitante search
