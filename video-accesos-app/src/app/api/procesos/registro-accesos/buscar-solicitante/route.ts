@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/procesos/registro-accesos/buscar-solicitante
-// Busca solicitantes en las 3 tablas: residentes, visitantes y registros generales
+// Busca solicitantes en visitantes y registros generales
+// Los residentes NO se incluyen aquí: el monitorista los coteja
+// desde la sección de residentes de la residencia seleccionada
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,7 +25,7 @@ export async function GET(request: NextRequest) {
     const results: Array<{
       id: string;
       nombre: string;
-      tipo: "R" | "V" | "G";
+      tipo: "V" | "G";
       tipoLabel: string;
       celular: string;
       observaciones: string;
@@ -57,35 +59,7 @@ export async function GET(request: NextRequest) {
 
     const searchCondition = buildSearchCondition(palabras);
 
-    // 1. Buscar en residentes (sin filtro de residencia - es solo autocompletado)
-    const residentes = await prisma.residente.findMany({
-      where: {
-        estatusId: 1,
-        ...searchCondition,
-      },
-      select: {
-        id: true,
-        nombre: true,
-        apePaterno: true,
-        apeMaterno: true,
-        celular: true,
-      },
-      take: limit,
-      orderBy: { apePaterno: "asc" },
-    });
-
-    for (const r of residentes) {
-      results.push({
-        id: r.id,
-        nombre: `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim(),
-        tipo: "R",
-        tipoLabel: "Residente",
-        celular: r.celular || "",
-        observaciones: "",
-      });
-    }
-
-    // 2. Buscar en visitantes (sin filtro de residencia - es solo autocompletado)
+    // 1. Buscar en visitantes (sin filtro de residencia - es solo autocompletado)
     const visitantes = await prisma.visita.findMany({
       where: {
         estatusId: 1,
@@ -114,7 +88,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Buscar en registros generales (tabla puede no existir aun)
+    // 2. Buscar en registros generales (tabla puede no existir aun)
     try {
       const generales = await prisma.registroGeneral.findMany({
         where: {

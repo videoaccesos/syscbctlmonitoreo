@@ -868,13 +868,11 @@ export default function MonitoristasPage() {
     const cached = nombresCache[solicitanteId];
     if (cached) {
       const prefix =
-        cached.tipo === "R"
-          ? "R"
-          : cached.tipo === "V"
-            ? "V"
-            : cached.tipo === "G"
-              ? "G"
-              : "";
+        cached.tipo === "V"
+          ? "V"
+          : cached.tipo === "G"
+            ? "G"
+            : "";
       return prefix ? `[${prefix}] ${cached.nombre}` : cached.nombre;
     }
     return solicitanteId;
@@ -1272,11 +1270,9 @@ export default function MonitoristasPage() {
                         >
                           <span
                             className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold mr-1.5 ${
-                              s.tipo === "R"
-                                ? "bg-blue-100 text-blue-700"
-                                : s.tipo === "V"
-                                  ? "bg-purple-100 text-purple-700"
-                                  : "bg-gray-100 text-gray-700"
+                              s.tipo === "V"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-gray-100 text-gray-700"
                             }`}
                           >
                             {s.tipoLabel}
