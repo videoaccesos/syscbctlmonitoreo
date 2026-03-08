@@ -201,12 +201,13 @@ syscbctlmonitoreo/
         |   |   |-- layout.tsx     # Layout con sidebar + header
         |   |   |-- page.tsx       # Dashboard principal
         |   |   |-- catalogos/     # Paginas de catalogos (8 modulos)
-        |   |   |-- procesos/      # Paginas de procesos (5 modulos)
+        |   |   |-- procesos/      # Paginas de procesos (6 modulos)
         |   |   |-- reportes/      # Paginas de reportes (3 modulos)
         |   |   +-- seguridad/     # Paginas de seguridad (3 modulos)
         |   +-- api/               # API Routes (endpoints REST)
         |       |-- auth/          # Autenticacion NextAuth
         |       |-- dashboard/     # Estadisticas dashboard
+        |       |-- camera-proxy/  # Proxy de camaras IP (snapshot, lookup, diag)
         |       |-- catalogos/     # APIs de catalogos
         |       |-- procesos/      # APIs de procesos
         |       |-- reportes/      # APIs de reportes
@@ -220,6 +221,7 @@ syscbctlmonitoreo/
         |       +-- providers.tsx  # SessionProvider de NextAuth
         |-- lib/
         |   |-- auth.ts           # Configuracion NextAuth + DES crypt
+        |   |-- logger.ts         # Logger del servidor con rotacion de archivos
         |   +-- prisma.ts         # Singleton del cliente Prisma
         +-- types/
             +-- next-auth.d.ts    # Extensiones de tipo para NextAuth
@@ -279,7 +281,7 @@ El layout principal (`(dashboard)/layout.tsx`) consta de:
 1. **Sidebar** (`sidebar.tsx`): Menu lateral con navegacion jerarquica
    - Inicio (Dashboard)
    - Catalogos (8 submenus)
-   - Procesos (5 submenus)
+   - Procesos (6 submenus)
    - Reportes (3 submenus)
    - Seguridad (3 submenus)
    - Cerrar Sesion
@@ -311,6 +313,7 @@ El layout principal (`(dashboard)/layout.tsx`) consta de:
 | Asignacion de Tarjetas | `/procesos/asignacion-tarjetas` | Asignar tarjetas RFID a residentes |
 | Ordenes de Servicio | `/procesos/ordenes-servicio` | Mantenimiento tecnico |
 | Supervision de Llamadas | `/procesos/supervision-llamadas` | Evaluacion de calidad |
+| Monitoristas | `/procesos/monitoristas` | Gestion de operadores/monitoristas |
 | Gastos | `/procesos/gastos` | Control de gastos por privada |
 
 #### Reportes (Consulta y analisis)
@@ -691,6 +694,27 @@ Cada catalogo implementa el patron CRUD estandar:
 | GET/POST | `/api/seguridad/usuarios` | CRUD de usuarios |
 | GET/POST | `/api/seguridad/grupos-usuarios` | CRUD de grupos |
 | GET | `/api/seguridad/permisos` | Gestion de permisos |
+| GET | `/api/seguridad/mis-permisos` | Permisos del usuario autenticado |
+| POST | `/api/seguridad/sync-procesos` | Sincronizacion de procesos/menu |
+
+### Camera Proxy (Sistema de Videovigilancia)
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/camera-proxy` | Proxy de snapshot de camara IP con autenticacion HTTP Digest |
+| GET | `/api/camera-proxy/lookup` | Descubrimiento de camaras por telefono o privada_id |
+| GET | `/api/camera-proxy/diag` | Diagnosticos del sistema de camaras (memoria, version Node) |
+
+**Parametros de `/api/camera-proxy`:**
+- `telefono` o `privada_id` - Identifica la privada
+- `cam` - Indice de camara (1, 2 o 3)
+
+**Caracteristicas del proxy:**
+- Autenticacion HTTP Digest con cache de nonce (60s TTL)
+- Semaforo por host (max 2 concurrentes) para evitar saturar el DVR
+- Placeholder SVG en caso de error ("Sin senal")
+- Soporte de cancelacion por desconexion del cliente
+- Diagnosticos por request (auth, fetch, retry)
 
 ---
 
@@ -785,6 +809,22 @@ El softphone implementa reconexion automatica con backoff exponencial:
 - **Enumeracion de dispositivos:** Antes de adquirir el microfono, se enumeran todos los dispositivos de audio y se registran en consola para diagnostico
 - **Fallback silencioso:** Si el microfono no esta disponible, se genera un stream silencioso con `AudioContext` para mantener la llamada funcional
 - **ICE/STUN:** No se configuran servidores ICE/STUN explicitamente en las opciones de llamada; se usan los defaults del navegador y del PBX
+
+### CameraGrid - Visualizacion de Camaras
+
+**Archivo:** `src/components/CameraGrid.tsx`
+
+Componente React que muestra un grid de hasta 3 camaras IP por privada, obteniendo snapshots via el proxy `/api/camera-proxy`.
+
+**Caracteristicas:**
+- Refresco automatico configurable (default 500ms)
+- Navegacion entre camaras disponibles
+- Vista a pantalla completa (fullscreen) por camara
+- Placeholder SVG cuando no hay senal
+- Deteccion automatica de camaras disponibles via `/api/camera-proxy/lookup`
+- **Sistema de diagnosticos** accesible desde consola:
+  - `window.__camDiag()` - Log completo de eventos de camara con timestamps
+  - Registra hasta 300 entradas por camara (fetch, error, timeout, etc.)
 
 ---
 
