@@ -765,17 +765,12 @@ export default function AccesPhone({
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
-      // mediaConstraints must be false when providing our own mediaStream,
-      // otherwise JsSIP calls getUserMedia internally (fails on HTTP)
       sessionRef.current.answer({
-        mediaConstraints: { audio: false, video: false },
+        mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
-        rtcOfferConstraints: {
+        rtcAnswerConstraints: {
           offerToReceiveAudio: true,
           offerToReceiveVideo: false,
-        },
-        pcConfig: {
-          iceServers: getIceServers(),
         },
       });
       console.log("[AccesPhone] answer() called successfully with provided stream");
@@ -783,7 +778,7 @@ export default function AccesPhone({
       console.error("[AccesPhone] Error answering call:", err);
       answeringRef.current = false;
     }
-  }, [acquireMicOrFallback, getIceServers]);
+  }, [acquireMicOrFallback]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
@@ -836,14 +831,11 @@ export default function AccesPhone({
       console.log("[AccesPhone] Calling URI:", targetUri);
 
       const session = uaRef.current.call(targetUri, {
-        mediaConstraints: { audio: false, video: false },
+        mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
         rtcOfferConstraints: {
           offerToReceiveAudio: true,
           offerToReceiveVideo: false,
-        },
-        pcConfig: {
-          iceServers: getIceServers(),
         },
       });
 
@@ -870,7 +862,7 @@ export default function AccesPhone({
       setStatusText("Error al iniciar llamada");
       cleanupCall();
     }
-  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, getIceServers, cleanupCall]);
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, cleanupCall]);
 
   // -----------------------------------------------------------
   // Settings
