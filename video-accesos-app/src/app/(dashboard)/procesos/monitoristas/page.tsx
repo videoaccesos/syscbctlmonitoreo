@@ -647,7 +647,7 @@ export default function MonitoristasPage() {
   const selectSolicitante = (id: string, nombre: string) => {
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombre);
-    setSolicitanteSearch("");
+    setSolicitanteSearch(nombre);
     setSolicitanteResults([]);
   };
 
@@ -1213,23 +1213,7 @@ export default function MonitoristasPage() {
               <label className="block text-xs font-semibold text-gray-700 mb-1 uppercase tracking-wide">
                 Solicitante
               </label>
-              {formSolicitanteNombre ? (
-                <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-emerald-800 truncate">
-                    {formSolicitanteNombre}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setFormSolicitanteId("");
-                      setFormSolicitanteNombre("");
-                    }}
-                    className="text-emerald-400 hover:text-emerald-600 ml-2 flex-shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
+              <div className="relative">
                   <div className="flex gap-1.5">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" />
@@ -1241,9 +1225,21 @@ export default function MonitoristasPage() {
                             : "Seleccione residencia"
                         }
                         value={solicitanteSearch}
-                        onChange={(e) => setSolicitanteSearch(e.target.value)}
+                        onChange={(e) => {
+                          setSolicitanteSearch(e.target.value);
+                          // Si el usuario edita el texto, limpiar el ID seleccionado
+                          // para que al guardar se cree un nuevo visitante con el nombre editado
+                          if (formSolicitanteId) {
+                            setFormSolicitanteId("");
+                            setFormSolicitanteNombre("");
+                          }
+                        }}
                         disabled={!selectedResidencia}
-                        className="w-full rounded-xl border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:bg-gray-100 disabled:text-gray-600 transition"
+                        className={`w-full rounded-xl border py-2 pl-9 pr-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:bg-gray-100 disabled:text-gray-600 transition ${
+                          formSolicitanteId
+                            ? "border-emerald-300 bg-emerald-50"
+                            : "border-gray-300"
+                        }`}
                       />
                     </div>
                     <button
@@ -1291,7 +1287,6 @@ export default function MonitoristasPage() {
                     </div>
                   )}
                 </div>
-              )}
             </div>
 
             {/* Observaciones */}

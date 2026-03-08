@@ -620,7 +620,7 @@ export default function RegistroAccesosPage() {
   const selectSolicitante = (id: string, nombre: string) => {
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombre);
-    setSolicitanteSearch("");
+    setSolicitanteSearch(nombre);
     setSolicitanteResults([]);
   };
 
@@ -1168,23 +1168,7 @@ export default function RegistroAccesosPage() {
               <label className="block text-xs font-medium text-gray-700 mb-0.5">
                 Solicitante
               </label>
-              {formSolicitanteNombre ? (
-                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-green-800">
-                    {formSolicitanteNombre}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setFormSolicitanteId("");
-                      setFormSolicitanteNombre("");
-                    }}
-                    className="text-green-400 hover:text-green-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
+              <div className="relative">
                   <div className="flex gap-1">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
@@ -1196,9 +1180,19 @@ export default function RegistroAccesosPage() {
                             : "Seleccione primero una residencia"
                         }
                         value={solicitanteSearch}
-                        onChange={(e) => setSolicitanteSearch(e.target.value)}
+                        onChange={(e) => {
+                          setSolicitanteSearch(e.target.value);
+                          if (formSolicitanteId) {
+                            setFormSolicitanteId("");
+                            setFormSolicitanteNombre("");
+                          }
+                        }}
                         disabled={!selectedResidencia}
-                        className="w-full rounded-lg border border-gray-300 py-1.5 pl-9 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+                        className={`w-full rounded-lg border py-1.5 pl-9 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 ${
+                          formSolicitanteId
+                            ? "border-green-300 bg-green-50"
+                            : "border-gray-300"
+                        }`}
                       />
                     </div>
                     <button
@@ -1247,7 +1241,6 @@ export default function RegistroAccesosPage() {
                     </div>
                   )}
                 </div>
-              )}
             </div>
 
             {/* Tipo de Gestion */}
