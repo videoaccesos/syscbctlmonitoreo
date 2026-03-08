@@ -82,6 +82,7 @@ interface AccesPhoneConfig {
   sipPassword: string;
   sipDomain: string;
   displayName: string;
+  micDeviceId: string; // "" = default del navegador
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -107,6 +108,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipPassword: "",
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
+  micDeviceId: "",
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -163,6 +165,9 @@ export default function AccesPhone({
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
+
+  // Available microphones for settings selector
+  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
 
   // Refs
   const uaRef = useRef<UA | null>(null);
@@ -681,10 +686,16 @@ export default function AccesPhone({
       console.warn("[AccesPhone] Could not enumerate devices:", enumErr);
     }
 
-    // Try to get real microphone
+    // Try to get real microphone (use selected device if configured)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      console.log("[AccesPhone] Microphone acquired OK");
+      const selectedMic = configRef.current.micDeviceId;
+      const audioConstraints: MediaTrackConstraints | boolean = selectedMic
+        ? { deviceId: { exact: selectedMic } }
+        : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      // Log which device was actually picked
+      const usedTrack = stream.getAudioTracks()[0];
+      console.log("[AccesPhone] Microphone acquired OK:", usedTrack?.label || "unknown", "settings:", JSON.stringify(usedTrack?.getSettings?.()));
       return stream;
     } catch (micErr) {
       console.warn("[AccesPhone] Microphone unavailable:", micErr);
@@ -1024,7 +1035,13 @@ export default function AccesPhone({
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => {
+                    setShowSettings(true);
+                    // Enumerate microphones when settings open
+                    navigator.mediaDevices.enumerateDevices()
+                      .then(devices => setAvailableMics(devices.filter(d => d.kind === "audioinput")))
+                      .catch(() => {});
+                  }}
                   className="p-1 rounded-md hover:bg-gray-700 transition"
                   title="Configuracion"
                 >
@@ -1339,6 +1356,33 @@ export default function AccesPhone({
                   placeholder="accessbotpbx.info"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
+              </div>
+
+              {/* Separador - Audio */}
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Audio</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Microfono
+                </label>
+                <select
+                  value={config.micDeviceId}
+                  onChange={(e) =>
+                    setConfig({ ...config, micDeviceId: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Default del navegador</option>
+                  {availableMics.map((mic) => (
+                    <option key={mic.deviceId} value={mic.deviceId}>
+                      {mic.label || `Mic ${mic.deviceId.substring(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Evite &quot;Stereo Mix&quot; - no es un microfono real
+                </p>
               </div>
 
               {/* Separador - Configuracion de Video */}
