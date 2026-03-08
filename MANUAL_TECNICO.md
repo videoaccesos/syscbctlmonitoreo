@@ -1,7 +1,7 @@
 # Manual Tecnico - Sistema de Control de Acceso y Videomonitoreo (Video Accesos)
 
-**Version:** 2.0
-**Fecha:** Febrero 2026
+**Version:** 2.1
+**Fecha:** Marzo 2026
 **Nombre del proyecto:** syscbctlmonitoreo / Video Accesos
 **Repositorio:** videoaccesos/syscbctlmonitoreo
 
@@ -86,7 +86,8 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 | Autenticacion | NextAuth.js 4 (JWT) | Login con credenciales legacy DES crypt |
 | Softphone | JsSIP 3.13 + WebRTC | Comunicacion SIP integrada en el navegador |
 | PBX | Asterisk/FreePBX | Central telefonica SIP (servidor externo) |
-| Camaras | IP Cameras + Proxy HTTP | Videovigilancia en accesos de privadas |
+| Camaras | IP Cameras + Proxy PHP (`camera_proxy.php`) | Videovigilancia en accesos de privadas |
+| CameraGrid | React component + diagnosticos | Grid de visualizacion de camaras con refresco automatico |
 | Legacy v1 | PHP/CodeIgniter + Apache | Sistema original (en coexistencia) |
 
 ---
@@ -126,7 +127,7 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 - **PBX:** `accessbotpbx.info` (Asterisk/FreePBX)
 - **Protocolo:** SIP sobre WebSocket (WSS puerto 8089)
 - **Codec:** WebRTC (SRTP)
-- **STUN servers:** Google STUN (`stun.l.google.com:19302`)
+- **ICE/STUN:** Defaults del navegador (no se configuran servidores ICE explicitamente)
 
 ---
 
@@ -212,6 +213,7 @@ syscbctlmonitoreo/
         |       +-- seguridad/     # APIs de seguridad
         |-- components/
         |   |-- AccesPhone.tsx     # Softphone SIP/WebRTC integrado
+        |   |-- CameraGrid.tsx     # Grid de camaras IP con proxy y diagnosticos
         |   +-- layout/
         |       |-- sidebar.tsx    # Barra lateral de navegacion
         |       |-- header.tsx     # Encabezado con info de usuario
@@ -718,7 +720,9 @@ Cada catalogo implementa el patron CRUD estandar:
                                                +---------------+
 ```
 
-### Configuracion SIP
+### Configuracion SIP (AccesPhoneConfig)
+
+La configuracion se almacena en `localStorage` bajo la clave `accesphone_config`.
 
 | Parametro | Valor Default | Descripcion |
 |---|---|---|
@@ -726,7 +730,11 @@ Cada catalogo implementa el patron CRUD estandar:
 | `sipDomain` | `accessbotpbx.info` | Dominio SIP |
 | `extension` | *(configurado por operador)* | Numero de extension (ej: 1001) |
 | `sipPassword` | *(configurado por operador)* | Contrasena SIP |
-| `displayName` | *(nombre del operador)* | Nombre para CallerID |
+| `displayName` | `Monitoreo` | Nombre para CallerID |
+| `micDeviceId` | `""` (default del navegador) | ID del dispositivo de microfono seleccionado |
+| `cameraProxyUrl` | `camera_proxy.php` | URL del proxy PHP para imagenes de camaras |
+| `cameraRefreshMs` | `500` | Intervalo de refresco de imagen de camara (ms) |
+| `videoAutoOnCall` | `true` | Mostrar video automaticamente al iniciar/recibir llamada |
 
 ### Funcionalidades del Softphone
 
@@ -736,9 +744,17 @@ Cada catalogo implementa el patron CRUD estandar:
 4. **Control de audio:**
    - Mute/Unmute de microfono
    - Control de volumen del altavoz
+   - **Selector de microfono:** Lista de dispositivos de audio disponibles en el panel de configuracion, evitando seleccionar dispositivos no validos como "Stereo Mix"
 5. **Identificacion de llamadas:** Al recibir una llamada, busca automaticamente la residencia por `telefono_interfon` via API
-6. **Panel de configuracion:** El operador puede ajustar extension, contrasena, servidor, etc.
-7. **Integracion con video:** Opcion de mostrar automaticamente el feed de camara al recibir/realizar llamada
+6. **Panel de configuracion:** Organizado en secciones:
+   - **SIP:** Extension, password, servidor WebSocket, dominio SIP
+   - **Audio:** Selector de microfono con lista de dispositivos disponibles
+   - **Video/Camaras:** URL proxy camaras, intervalo de refresco, video automatico en llamadas
+7. **Integracion con video:** Opcion de mostrar automaticamente el feed de camara al recibir/realizar llamada, usando proxy PHP (`camera_proxy.php`) para obtener imagenes de camaras IP
+8. **Sistema de diagnosticos:** Herramientas de debugging accesibles desde la consola del navegador:
+   - `window.__sipDiag()` - Muestra tabla completa de eventos diagnosticos
+   - `window.__sipDiagSummary()` - Resumen con timeline de eventos
+   - Registra hasta 200 entradas con timestamps y tiempos relativos
 
 ### Auto-Reconexion
 
@@ -765,10 +781,10 @@ El softphone implementa reconexion automatica con backoff exponencial:
 ### Manejo de Audio
 
 - **Pre-adquisicion de stream:** Antes de contestar o llamar, se solicita `getUserMedia()` para evitar errores `NotReadableError`
+- **Seleccion de microfono:** Si el operador configuro un `micDeviceId`, se usa `{ deviceId: { exact: id } }` como constraint; de lo contrario se usa el microfono default del navegador
+- **Enumeracion de dispositivos:** Antes de adquirir el microfono, se enumeran todos los dispositivos de audio y se registran en consola para diagnostico
 - **Fallback silencioso:** Si el microfono no esta disponible, se genera un stream silencioso con `AudioContext` para mantener la llamada funcional
-- **Servidores ICE/STUN configurados:**
-  - `stun:stun.l.google.com:19302`
-  - `stun:stun1.l.google.com:19302`
+- **ICE/STUN:** No se configuran servidores ICE/STUN explicitamente en las opciones de llamada; se usan los defaults del navegador y del PBX
 
 ---
 
@@ -1047,8 +1063,12 @@ npm run db:pull
 | 2025-2026 | Desarrollo de modulos CRUD, reportes y graficas |
 | Febrero 2026 | Comunicacion SIP funcional entre extensiones |
 | Febrero 2026 | Documentacion tecnica completa (este manual) |
+| Marzo 2026 | Selector de microfono en panel de configuracion del softphone |
+| Marzo 2026 | Sistema de diagnosticos SIP (`window.__sipDiag()`) |
+| Marzo 2026 | Eliminacion de configuracion TURN Server (no necesaria) |
+| Marzo 2026 | Actualizacion de documentacion tecnica v2.1 |
 
 ---
 
 *Este manual fue generado como parte del desarrollo del sistema Video Accesos v2.*
-*Ultima actualizacion: 28 de febrero de 2026.*
+*Ultima actualizacion: 8 de marzo de 2026.*
