@@ -740,8 +740,10 @@ export default function AccesPhone({
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
+      // mediaConstraints must be false when providing our own mediaStream,
+      // otherwise JsSIP calls getUserMedia internally (fails on HTTP)
       sessionRef.current.answer({
-        mediaConstraints: { audio: true, video: false },
+        mediaConstraints: { audio: false, video: false },
         mediaStream: stream,
         rtcOfferConstraints: {
           offerToReceiveAudio: true,
@@ -753,7 +755,7 @@ export default function AccesPhone({
           ],
         },
       });
-      console.log("[AccesPhone] answer() called successfully");
+      console.log("[AccesPhone] answer() called successfully with provided stream");
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
       answeringRef.current = false;
@@ -811,7 +813,7 @@ export default function AccesPhone({
       console.log("[AccesPhone] Calling URI:", targetUri);
 
       const session = uaRef.current.call(targetUri, {
-        mediaConstraints: { audio: true, video: false },
+        mediaConstraints: { audio: false, video: false },
         mediaStream: stream,
         rtcOfferConstraints: {
           offerToReceiveAudio: true,
