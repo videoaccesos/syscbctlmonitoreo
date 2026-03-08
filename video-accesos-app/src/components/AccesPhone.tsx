@@ -673,7 +673,7 @@ export default function AccesPhone({
   const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
     // First, enumerate devices for diagnostics
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      const devices = await navigator.mediaDevices?.enumerateDevices();
       const audioInputs = devices.filter((d) => d.kind === "audioinput");
       console.log("[AccesPhone] Audio input devices found:", audioInputs.length);
       audioInputs.forEach((d, i) => {
@@ -1038,9 +1038,13 @@ export default function AccesPhone({
                   onClick={() => {
                     setShowSettings(true);
                     // Enumerate microphones when settings open
-                    navigator.mediaDevices.enumerateDevices()
-                      .then(devices => setAvailableMics(devices.filter(d => d.kind === "audioinput")))
-                      .catch(() => {});
+                    if (navigator.mediaDevices?.enumerateDevices) {
+                      navigator.mediaDevices.enumerateDevices()
+                        .then(devices => setAvailableMics(devices.filter(d => d.kind === "audioinput")))
+                        .catch(() => {});
+                    } else {
+                      console.warn("[AccesPhone] mediaDevices no disponible (requiere HTTPS)");
+                    }
                   }}
                   className="p-1 rounded-md hover:bg-gray-700 transition"
                   title="Configuracion"
