@@ -323,9 +323,11 @@ export default function AccesPhone({
           console.log("[AccesPhone] SDP patched with ICE credentials");
         }
 
-        // Fix 2: Strip codecs Asterisk doesn't support from outgoing offers
+        // Fix 2: Strip codecs Asterisk doesn't support from LOCAL outgoing offers only
         // Chrome includes opus/red/CN and SAVPF which causes Asterisk to reject with 488
-        if (e?.type === "offer" && e?.sdp && e.sdp.includes("opus")) {
+        // IMPORTANT: Only apply to outgoing calls (session.direction === "outgoing")
+        // For incoming calls, the offer SDP comes from Asterisk and must NOT be modified
+        if (e?.type === "offer" && e?.sdp && session.direction === "outgoing" && e.sdp.includes("opus")) {
           console.log("[AccesPhone] Stripping non-Asterisk codecs from outgoing SDP");
           let sdp = e.sdp as string;
           // Change SAVPF to SAVP (Asterisk expects SAVP)
