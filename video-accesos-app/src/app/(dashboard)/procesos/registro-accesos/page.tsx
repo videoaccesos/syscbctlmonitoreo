@@ -618,9 +618,10 @@ export default function RegistroAccesosPage() {
   }, []);
 
   const selectSolicitante = (id: string, nombre: string) => {
+    const nombreUpper = nombre.toUpperCase();
     setFormSolicitanteId(id);
-    setFormSolicitanteNombre(nombre);
-    setSolicitanteSearch(nombre);
+    setFormSolicitanteNombre(nombreUpper);
+    setSolicitanteSearch(nombreUpper);
     setSolicitanteResults([]);
   };
 
@@ -648,7 +649,7 @@ export default function RegistroAccesosPage() {
     let solicitanteNombre = formSolicitanteNombre;
 
     if (!solicitanteId && solicitanteSearch.trim()) {
-      const partes = solicitanteSearch.trim().split(/\s+/);
+      const partes = solicitanteSearch.trim().toUpperCase().split(/\s+/);
       const nombre = partes[0] || "";
       const apePaterno = partes[1] || "";
       const apeMaterno = partes.slice(2).join(" ") || "";
@@ -1179,7 +1180,7 @@ export default function RegistroAccesosPage() {
                         }
                         value={solicitanteSearch}
                         onChange={(e) => {
-                          setSolicitanteSearch(e.target.value);
+                          setSolicitanteSearch(e.target.value.toUpperCase());
                           if (formSolicitanteId) {
                             setFormSolicitanteId("");
                             setFormSolicitanteNombre("");
@@ -1188,20 +1189,18 @@ export default function RegistroAccesosPage() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            if (solicitanteResults.length > 0) {
-                              // Select first result from dropdown
-                              const first = solicitanteResults[0];
-                              selectSolicitante(first.id, first.nombre);
-                            } else if (solicitanteSearch.trim()) {
-                              // Confirm typed text as solicitante name
-                              // guardarAcceso will auto-create the visitor
+                            const texto = solicitanteSearch.trim().toUpperCase();
+                            if (texto) {
+                              // Confirmar el texto escrito como nuevo solicitante
+                              setSolicitanteSearch(texto);
                               setSolicitanteResults([]);
                               setFormSolicitanteId("__nuevo__");
-                              setFormSolicitanteNombre(solicitanteSearch.trim());
+                              setFormSolicitanteNombre(texto);
                             }
                           }
                         }}
                         disabled={!selectedResidencia}
+                        style={{ textTransform: "uppercase" }}
                         className={`w-full rounded-lg border py-1.5 pl-9 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 ${
                           formSolicitanteId
                             ? "border-green-300 bg-green-50"
@@ -1850,21 +1849,24 @@ export default function RegistroAccesosPage() {
                   type="text"
                   placeholder="Nombre *"
                   value={regNombre}
-                  onChange={(e) => setRegNombre(e.target.value)}
+                  onChange={(e) => setRegNombre(e.target.value.toUpperCase())}
+                  style={{ textTransform: "uppercase" }}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
                 <input
                   type="text"
                   placeholder="Ap. Paterno"
                   value={regApePaterno}
-                  onChange={(e) => setRegApePaterno(e.target.value)}
+                  onChange={(e) => setRegApePaterno(e.target.value.toUpperCase())}
+                  style={{ textTransform: "uppercase" }}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
                 <input
                   type="text"
                   placeholder="Ap. Materno"
                   value={regApeMaterno}
-                  onChange={(e) => setRegApeMaterno(e.target.value)}
+                  onChange={(e) => setRegApeMaterno(e.target.value.toUpperCase())}
+                  style={{ textTransform: "uppercase" }}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
               </div>
