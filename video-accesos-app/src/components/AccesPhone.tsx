@@ -282,6 +282,7 @@ export default function AccesPhone({
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
+      remoteAudioRef.current.muted = false; // Reset mute for next call
     }
   }, []);
 
@@ -298,6 +299,11 @@ export default function AccesPhone({
         if (ringtoneRef.current) {
           ringtoneRef.current.pause();
           ringtoneRef.current.currentTime = 0;
+        }
+        // Unmute remote audio now that the call is answered
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.muted = false;
+          remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
         }
         onCallAnsweredRef.current?.(callerNumber);
       });
@@ -696,10 +702,20 @@ export default function AccesPhone({
             console.error("[AccesPhone] getUserMedia FAILED:", e);
           });
 
+          // Mute remote audio while ringing to prevent PBX early media
+          // (Asterisk ringback tone) from playing over our custom ringtone
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.muted = true;
+          }
+
           // Auto-answer or play ringtone
           if (autoAnswerRef.current) {
             console.log("[AccesPhone] Auto-answer enabled, answering immediately");
             diag("AUTO_ANSWER", `num=${callerNumber}`);
+            // Unmute remote audio for auto-answer
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.muted = false;
+            }
             // Small delay to let UI update with caller info
             setTimeout(() => answerCallRef.current(), 300);
           } else {
