@@ -228,6 +228,15 @@ export default function AccesPhone({
     setConfig(loadConfig());
   }, []);
 
+  // Reload ringtone audio element when ringtone selection changes
+  useEffect(() => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.src = `/sounds/${config.ringtone || "ringtone-classic.wav"}`;
+      ringtoneRef.current.load();
+      console.log("[AccesPhone] Ringtone changed to:", config.ringtone);
+    }
+  }, [config.ringtone]);
+
   // Call duration timer
   useEffect(() => {
     if (inCall) {
@@ -947,20 +956,34 @@ export default function AccesPhone({
   // Settings
   // -----------------------------------------------------------
   const saveSettings = () => {
-    console.log('[AccesPhone] saveSettings - guardando y conectando...');
+    console.log('[AccesPhone] saveSettings - guardando configuración...');
+    // Check if SIP-related settings changed (require reconnect)
+    const prev = configRef.current;
+    const sipChanged =
+      prev.wsServer !== config.wsServer ||
+      prev.extension !== config.extension ||
+      prev.sipPassword !== config.sipPassword ||
+      prev.sipDomain !== config.sipDomain ||
+      prev.displayName !== config.displayName ||
+      prev.micDeviceId !== config.micDeviceId;
+
     saveConfigToStorage(config);
-    // Also update the ref immediately so reconnect sees the new config
     configRef.current = config;
     setShowSettings(false);
-    // Always reconnect after saving (like the original "Guardar y Conectar")
-    if (uaRef.current) {
-      disconnectSIP();
+
+    // Only reconnect SIP if SIP-related settings changed
+    if (sipChanged) {
+      console.log('[AccesPhone] SIP settings changed, reconnecting...');
+      if (uaRef.current) {
+        disconnectSIP();
+      }
+      setTimeout(() => {
+        console.log('[AccesPhone] saveSettings timeout - llamando connectSIP()');
+        connectSIP();
+      }, 500);
+    } else {
+      console.log('[AccesPhone] Only non-SIP settings changed (ringtone/camera), no reconnect needed');
     }
-    // Use connectSIP() which properly resets manualDisconnectRef and cancelReconnect
-    setTimeout(() => {
-      console.log('[AccesPhone] saveSettings timeout - llamando connectSIP()');
-      connectSIP();
-    }, 500);
   };
 
   // Auto-connect on mount if credentials are saved
