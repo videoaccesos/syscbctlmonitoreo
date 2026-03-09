@@ -275,7 +275,6 @@ export default function RegistroAccesosPage() {
   const [solicitanteResults, setSolicitanteResults] = useState<
     SolicitanteResult[]
   >([]);
-  const [selectedSolicitanteData, setSelectedSolicitanteData] = useState<SolicitanteResult | null>(null);
   const [solicitanteSearching, setSolicitanteSearching] = useState(false);
   const solicitanteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -529,7 +528,6 @@ export default function RegistroAccesosPage() {
     setFormObservaciones("");
     setSolicitanteSearch("");
     setSolicitanteResults([]);
-    setSelectedSolicitanteData(null);
     setTimerRunning(false);
     setTimerSeconds(0);
     setError("");
@@ -622,13 +620,12 @@ export default function RegistroAccesosPage() {
     // Don't clear the form - let the operator finish the registro
   }, []);
 
-  const selectSolicitante = (id: string, nombre: string, solicitanteData?: SolicitanteResult) => {
+  const selectSolicitante = (id: string, nombre: string) => {
     const nombreUpper = nombre.toUpperCase();
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombreUpper);
     setSolicitanteSearch(nombreUpper);
     setSolicitanteResults([]);
-    setSelectedSolicitanteData(solicitanteData || null);
   };
 
   // Guardar acceso con un estatus especifico
@@ -1205,33 +1202,18 @@ export default function RegistroAccesosPage() {
                       type="button"
                       disabled={!selectedResidencia}
                       onClick={() => {
-                        // Pre-fill modal: use stored solicitante data or split the search text
-                        const data = selectedSolicitanteData;
-                        let n = "", ap = "", am = "";
-                        if (data) {
-                          n = (data.nombrePila || "").toUpperCase();
-                          ap = (data.apePaterno || "").toUpperCase();
-                          am = (data.apeMaterno || "").toUpperCase();
-                        }
-                        // If no separated data or fields are empty, split from search text
-                        if (!n && solicitanteSearch.trim()) {
-                          const partes = solicitanteSearch.trim().toUpperCase().split(/\s+/);
-                          n = partes[0] || "";
-                          ap = partes[1] || "";
-                          am = partes.slice(2).join(" ") || "";
-                        }
-                        console.log("[Solicitante] Pre-fill modal:", { n, ap, am, data, search: solicitanteSearch });
-                        setRegNombre(n);
-                        setRegApePaterno(ap);
-                        setRegApeMaterno(am);
+                        // Tomar el texto visible del campo de busqueda y dividirlo
+                        const texto = solicitanteSearch.trim().toUpperCase();
+                        const partes = texto.split(/\s+/);
+                        setRegNombre(partes[0] || "");
+                        setRegApePaterno(partes[1] || "");
+                        setRegApeMaterno(partes.slice(2).join(" ") || "");
                         setRegTelefono("");
                         setRegCelular("");
                         setRegEmail("");
                         setRegObservaciones("");
-                        // Clear selection so user registers as new
                         setFormSolicitanteId("");
                         setFormSolicitanteNombre("");
-                        setSelectedSolicitanteData(null);
                         setSolicitanteResults([]);
                         setRegTipo("visitante");
                         setShowRegGeneral(true);
@@ -1255,7 +1237,7 @@ export default function RegistroAccesosPage() {
                         <button
                           key={`${s.tipo}-${s.id}`}
                           type="button"
-                          onClick={() => selectSolicitante(s.id, s.nombre, s)}
+                          onClick={() => selectSolicitante(s.id, s.nombre)}
                           className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
                         >
                           <span
