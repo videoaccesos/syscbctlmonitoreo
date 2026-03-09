@@ -18,6 +18,9 @@ import {
   ChevronDown,
   RefreshCw,
   Play,
+  BellOff,
+  Zap,
+  LogOut,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -166,6 +169,17 @@ export default function AccesPhone({
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
+  const [dndActive, setDndActive] = useState(false);
+  const [autoAnswerActive, setAutoAnswerActive] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").autoAnswer || false; } catch { return false; }
+  });
+  const dndRef = useRef(false);
+  const autoAnswerRef = useRef(false);
+
+  // Keep refs in sync to avoid stale closures in SIP event handlers
+  useEffect(() => { dndRef.current = dndActive; }, [dndActive]);
+  useEffect(() => { autoAnswerRef.current = autoAnswerActive; }, [autoAnswerActive]);
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -624,6 +638,14 @@ export default function AccesPhone({
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
           console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
 
+          // DND: reject immediately
+          if (dndRef.current) {
+            console.log("[AccesPhone] DND active, rejecting call from:", callerNumber);
+            diag("DND_REJECT", `num=${callerNumber}`);
+            session.terminate({ status_code: 486, reason_phrase: "Busy Here" });
+            return;
+          }
+
           sessionRef.current = session;
           setRinging(true);
           setCallInfo({
@@ -666,7 +688,7 @@ export default function AccesPhone({
           });
 
           // Auto-answer or play ringtone
-          if (configRef.current.autoAnswer) {
+          if (autoAnswerRef.current) {
             console.log("[AccesPhone] Auto-answer enabled, answering immediately");
             diag("AUTO_ANSWER", `num=${callerNumber}`);
             // Small delay to let UI update with caller info
@@ -1298,15 +1320,51 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Connect/Disconnect button */}
+            {/* Action buttons: DND / AA / Disconnect */}
             <div className="px-3 pb-3">
               {connected ? (
-                <button
-                  onClick={disconnectSIP}
-                  className="w-full rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition"
-                >
-                  Desconectar
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {/* DND button */}
+                  <button
+                    onClick={() => {
+                      setDndActive(!dndActive);
+                      if (!dndActive) setAutoAnswerActive(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
+                      dndActive
+                        ? "bg-red-600 border-red-600 text-white"
+                        : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                    }`}
+                    title="No Disponible - rechaza llamadas entrantes"
+                  >
+                    <BellOff className="h-3.5 w-3.5" />
+                    DND
+                  </button>
+                  {/* AA button */}
+                  <button
+                    onClick={() => {
+                      setAutoAnswerActive(!autoAnswerActive);
+                      if (!autoAnswerActive) setDndActive(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
+                      autoAnswerActive
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                    }`}
+                    title="Auto Answer - contesta automaticamente"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    AA
+                  </button>
+                  {/* Disconnect button */}
+                  <button
+                    onClick={disconnectSIP}
+                    className="flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
+                    title="Desconectar SIP"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ) : reconnecting ? (
                 <button
                   onClick={() => {
@@ -1339,13 +1397,21 @@ export default function AccesPhone({
               ? "bg-green-500 animate-bounce"
               : inCall
                 ? "bg-blue-600"
-                : connected
-                  ? "bg-green-600"
-                  : "bg-gray-700"
+                : dndActive
+                  ? "bg-red-600"
+                  : autoAnswerActive
+                    ? "bg-blue-500"
+                    : connected
+                      ? "bg-green-600"
+                      : "bg-gray-700"
           } text-white hover:scale-105`}
         >
           {ringing ? (
             <PhoneIncoming className="h-6 w-6" />
+          ) : dndActive ? (
+            <BellOff className="h-6 w-6" />
+          ) : autoAnswerActive ? (
+            <Zap className="h-6 w-6" />
           ) : (
             <Phone className="h-6 w-6" />
           )}
@@ -1490,26 +1556,6 @@ export default function AccesPhone({
                   </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="autoAnswer"
-                  checked={config.autoAnswer || false}
-                  onChange={(e) =>
-                    setConfig({ ...config, autoAnswer: e.target.checked })
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="autoAnswer" className="text-sm text-gray-700">
-                  Contestar automaticamente
-                </label>
-              </div>
-              {config.autoAnswer && (
-                <p className="text-[10px] text-amber-600 -mt-1">
-                  Las llamadas se contestaran sin timbrar
-                </p>
-              )}
 
               {/* Separador - Configuracion de Video */}
               <div className="border-t border-gray-200 pt-3 mt-3">
