@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
     const results: Array<{
       id: string;
       nombre: string;
+      nombrePila: string;
+      apePaterno: string;
+      apeMaterno: string;
       tipo: "V" | "G";
       tipoLabel: string;
       celular: string;
@@ -81,6 +84,9 @@ export async function GET(request: NextRequest) {
       results.push({
         id: v.id,
         nombre: `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim(),
+        nombrePila: v.nombre || "",
+        apePaterno: v.apePaterno || "",
+        apeMaterno: v.apeMaterno || "",
         tipo: "V",
         tipoLabel: "Visitante",
         celular: v.celular || "",
@@ -111,6 +117,9 @@ export async function GET(request: NextRequest) {
         results.push({
           id: g.id,
           nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
+          nombrePila: g.nombre || "",
+          apePaterno: g.apePaterno || "",
+          apeMaterno: g.apeMaterno || "",
           tipo: "G",
           tipoLabel: "General",
           celular: g.celular || "",

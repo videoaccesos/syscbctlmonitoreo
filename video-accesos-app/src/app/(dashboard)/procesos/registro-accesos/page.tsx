@@ -107,6 +107,9 @@ interface RegistroAcceso {
 interface SolicitanteResult {
   id: string;
   nombre: string;
+  nombrePila: string;
+  apePaterno: string;
+  apeMaterno: string;
   tipo: "R" | "V" | "G";
   tipoLabel: string;
   celular: string;
@@ -272,6 +275,7 @@ export default function RegistroAccesosPage() {
   const [solicitanteResults, setSolicitanteResults] = useState<
     SolicitanteResult[]
   >([]);
+  const [selectedSolicitanteData, setSelectedSolicitanteData] = useState<SolicitanteResult | null>(null);
   const [solicitanteSearching, setSolicitanteSearching] = useState(false);
   const solicitanteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -525,6 +529,7 @@ export default function RegistroAccesosPage() {
     setFormObservaciones("");
     setSolicitanteSearch("");
     setSolicitanteResults([]);
+    setSelectedSolicitanteData(null);
     setTimerRunning(false);
     setTimerSeconds(0);
     setError("");
@@ -617,12 +622,13 @@ export default function RegistroAccesosPage() {
     // Don't clear the form - let the operator finish the registro
   }, []);
 
-  const selectSolicitante = (id: string, nombre: string) => {
+  const selectSolicitante = (id: string, nombre: string, solicitanteData?: SolicitanteResult) => {
     const nombreUpper = nombre.toUpperCase();
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombreUpper);
     setSolicitanteSearch(nombreUpper);
     setSolicitanteResults([]);
+    setSelectedSolicitanteData(solicitanteData || null);
   };
 
   // Guardar acceso con un estatus especifico
@@ -645,7 +651,7 @@ export default function RegistroAccesosPage() {
 
     // Si no se selecciono un solicitante del autocompletado pero hay texto escrito,
     // crear automaticamente un registro de visitante con ese nombre
-    let solicitanteId = formSolicitanteId === "__nuevo__" ? "" : formSolicitanteId;
+    let solicitanteId = formSolicitanteId;
     let solicitanteNombre = formSolicitanteNombre;
 
     if (!solicitanteId && solicitanteSearch.trim()) {
@@ -1186,19 +1192,6 @@ export default function RegistroAccesosPage() {
                             setFormSolicitanteNombre("");
                           }
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            const texto = solicitanteSearch.trim().toUpperCase();
-                            if (texto) {
-                              // Confirmar el texto escrito como nuevo solicitante
-                              setSolicitanteSearch(texto);
-                              setSolicitanteResults([]);
-                              setFormSolicitanteId("__nuevo__");
-                              setFormSolicitanteNombre(texto);
-                            }
-                          }
-                        }}
                         disabled={!selectedResidencia}
                         style={{ textTransform: "uppercase" }}
                         className={`w-full rounded-lg border py-1.5 pl-9 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-100 ${
@@ -1212,11 +1205,28 @@ export default function RegistroAccesosPage() {
                       type="button"
                       disabled={!selectedResidencia}
                       onClick={() => {
-                        setRegTipo("general");
+                        // Pre-fill modal with selected solicitante data or typed text
+                        if (selectedSolicitanteData) {
+                          setRegNombre(selectedSolicitanteData.nombrePila.toUpperCase());
+                          setRegApePaterno(selectedSolicitanteData.apePaterno.toUpperCase());
+                          setRegApeMaterno(selectedSolicitanteData.apeMaterno.toUpperCase());
+                        } else if (solicitanteSearch.trim()) {
+                          // Pre-fill from typed text
+                          const partes = solicitanteSearch.trim().toUpperCase().split(/\s+/);
+                          setRegNombre(partes[0] || "");
+                          setRegApePaterno(partes[1] || "");
+                          setRegApeMaterno(partes.slice(2).join(" ") || "");
+                        }
+                        // Clear selection so user registers as new
+                        setFormSolicitanteId("");
+                        setFormSolicitanteNombre("");
+                        setSelectedSolicitanteData(null);
+                        setSolicitanteResults([]);
+                        setRegTipo("visitante");
                         setShowRegGeneral(true);
                       }}
                       className="rounded-lg border border-gray-300 px-2 py-1.5 text-gray-700 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
-                      title="Registrar nueva persona"
+                      title="Registrar nueva persona (precarga datos del solicitante seleccionado)"
                     >
                       <UserPlus className="h-4 w-4" />
                     </button>
@@ -1234,7 +1244,7 @@ export default function RegistroAccesosPage() {
                         <button
                           key={`${s.tipo}-${s.id}`}
                           type="button"
-                          onClick={() => selectSolicitante(s.id, s.nombre)}
+                          onClick={() => selectSolicitante(s.id, s.nombre, s)}
                           className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
                         >
                           <span
