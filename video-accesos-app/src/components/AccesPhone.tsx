@@ -17,6 +17,7 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
+  Play,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,7 @@ interface AccesPhoneConfig {
   sipDomain: string;
   displayName: string;
   micDeviceId: string; // "" = default del navegador
+  ringtone: string; // ringtone file name
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -109,6 +111,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
   micDeviceId: "",
+  ringtone: "ringtone-classic.wav",
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -1072,7 +1075,7 @@ export default function AccesPhone({
       {/* Hidden audio elements - matching working softphone */}
       <audio ref={remoteAudioRef} autoPlay />
       <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
-      <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
+      <audio ref={ringtoneRef} src={`/sounds/${config.ringtone || "ringtone-classic.wav"}`} preload="auto" />
 
       {/* Floating phone widget */}
       <div className="fixed bottom-4 right-4 z-50">
@@ -1440,6 +1443,36 @@ export default function AccesPhone({
                 <p className="text-[10px] text-gray-500 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
                 </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Tono de timbre
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={config.ringtone || "ringtone-classic.wav"}
+                    onChange={(e) =>
+                      setConfig({ ...config, ringtone: e.target.value })
+                    }
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="ringtone-classic.wav">Clasico (telefono fijo)</option>
+                    <option value="ringtone-euro.wav">Europeo (doble timbre)</option>
+                    <option value="ringtone-digital.wav">Digital (melodico)</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const preview = new Audio(`/sounds/${config.ringtone || "ringtone-classic.wav"}`);
+                      preview.play().catch(() => {});
+                      setTimeout(() => { preview.pause(); preview.currentTime = 0; }, 3000);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-gray-600 hover:bg-gray-50 transition"
+                    title="Escuchar tono"
+                  >
+                    <Play className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Separador - Configuracion de Video */}
