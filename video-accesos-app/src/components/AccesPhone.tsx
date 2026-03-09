@@ -162,6 +162,7 @@ export default function AccesPhone({
   const [inCall, setInCall] = useState(false);
   const [callInfo, setCallInfo] = useState<CallInfo | null>(null);
   const [ringing, setRinging] = useState(false);
+  const ringingRef = useRef(false);
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
@@ -267,6 +268,7 @@ export default function AccesPhone({
   const cleanupCall = useCallback(() => {
     setInCall(false);
     setRinging(false);
+    ringingRef.current = false;
     setCallInfo(null);
     setMuted(false);
     sessionRef.current = null;
@@ -282,7 +284,6 @@ export default function AccesPhone({
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
-      remoteAudioRef.current.muted = false; // Reset mute for next call
     }
   }, []);
 
@@ -295,15 +296,16 @@ export default function AccesPhone({
         diag("SESSION_ACCEPTED", callerNumber);
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
+        ringingRef.current = false;
         setInCall(true);
         if (ringtoneRef.current) {
           ringtoneRef.current.pause();
           ringtoneRef.current.currentTime = 0;
         }
-        // Unmute remote audio now that the call is answered
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.muted = false;
+        // Now play remote audio that was deferred during ringing
+        if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
           remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+          remoteAudioRef.current.play().catch(() => {});
         }
         onCallAnsweredRef.current?.(callerNumber);
       });
@@ -404,25 +406,34 @@ export default function AccesPhone({
         console.log("[AccesPhone] PeerConnection created");
         const pc = e.peerconnection;
         if (pc) {
-          // Remote audio - matching working softphone implementation
+          // Remote audio - attach stream but only play if NOT ringing
+          // During ringing, Asterisk sends early media (ringback tone) that
+          // would play over our custom ringtone. We attach the stream but
+          // defer .play() until the call is accepted.
           pc.addEventListener("track", (ev: RTCTrackEvent) => {
-            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length}`);
-            console.log("[AccesPhone] Remote track received:", ev.track.kind);
+            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length} ringing=${ringingRef.current}`);
+            console.log("[AccesPhone] Remote track received:", ev.track.kind, "ringing:", ringingRef.current);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
-              remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
-              remoteAudioRef.current.play().catch(() => {});
+              if (!ringingRef.current) {
+                // Not ringing (outgoing call or already answered) - play immediately
+                remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+                remoteAudioRef.current.play().catch(() => {});
+              }
+              // If ringing, stream is attached but NOT played - will play on "accepted"
             }
           });
 
           // Backwards compatibility for older browsers
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pc.addEventListener("addstream", (ev: any) => {
-            console.log("[AccesPhone] addstream event received");
+            console.log("[AccesPhone] addstream event received, ringing:", ringingRef.current);
             if (ev.stream && ev.stream.getAudioTracks().length > 0) {
               if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = ev.stream;
-                remoteAudioRef.current.play().catch(() => {});
+                if (!ringingRef.current) {
+                  remoteAudioRef.current.play().catch(() => {});
+                }
               }
             }
           });
@@ -663,6 +674,7 @@ export default function AccesPhone({
 
           sessionRef.current = session;
           setRinging(true);
+          ringingRef.current = true;
           setCallInfo({
             number: callerNumber,
             direction: "incoming",
@@ -702,20 +714,10 @@ export default function AccesPhone({
             console.error("[AccesPhone] getUserMedia FAILED:", e);
           });
 
-          // Mute remote audio while ringing to prevent PBX early media
-          // (Asterisk ringback tone) from playing over our custom ringtone
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.muted = true;
-          }
-
           // Auto-answer or play ringtone
           if (autoAnswerRef.current) {
             console.log("[AccesPhone] Auto-answer enabled, answering immediately");
             diag("AUTO_ANSWER", `num=${callerNumber}`);
-            // Unmute remote audio for auto-answer
-            if (remoteAudioRef.current) {
-              remoteAudioRef.current.muted = false;
-            }
             // Small delay to let UI update with caller info
             setTimeout(() => answerCallRef.current(), 300);
           } else {
@@ -1150,7 +1152,7 @@ export default function AccesPhone({
   return (
     <>
       {/* Hidden audio elements - matching working softphone */}
-      <audio ref={remoteAudioRef} autoPlay />
+      <audio ref={remoteAudioRef} />
       <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
       <audio ref={ringtoneRef} src={`/sounds/${config.ringtone || "ringtone-phone.wav"}`} preload="auto" />
 
