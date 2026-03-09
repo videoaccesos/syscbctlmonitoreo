@@ -305,10 +305,23 @@ export default function AccesPhone({
         onCallEndedRef.current?.();
       });
 
-      // Log SDP events for debugging
+      // Intercept SDP to fix missing ICE credentials (some Asterisk configs
+      // send SDP without ice-ufrag/ice-pwd which newer Chrome versions reject)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       session.on("sdp", (e: any) => {
         console.log("[AccesPhone] SDP event:", e?.type, "\n", e?.sdp?.substring(0, 500));
+        if (e?.type === "offer" && e?.sdp && !e.sdp.includes("a=ice-ufrag:")) {
+          console.warn("[AccesPhone] SDP missing ice-ufrag/ice-pwd, injecting dummy ICE credentials");
+          const iceAttrs = "a=ice-ufrag:astk\r\na=ice-pwd:asteriskasteriskasterisk\r\n";
+          // Insert ICE credentials at session level (before first m= line)
+          const mLineIndex = e.sdp.indexOf("\r\nm=");
+          if (mLineIndex !== -1) {
+            e.sdp = e.sdp.slice(0, mLineIndex) + "\r\n" + iceAttrs.trimEnd() + e.sdp.slice(mLineIndex);
+          } else {
+            e.sdp = e.sdp + iceAttrs;
+          }
+          console.log("[AccesPhone] SDP patched with ICE credentials");
+        }
       });
 
       session.on("peerconnection", (e) => {
