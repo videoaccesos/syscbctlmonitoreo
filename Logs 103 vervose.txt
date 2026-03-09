@@ -1,0 +1,273 @@
+[accessbot@accessbotpbx ~]$ tail -3000 /var/log/asterisk/full | grep -B2 -A2 "200 OK\|INVITE sip\|m=audio\|a=candidate\|a=fingerprint\|a=ice-ufrag\|103-0000\|answered\|OFFE\|ANSWE" > /tmp/pjsip_debug.txt
+[accessbot@accessbotpbx ~]$ cat /tmp/pjsip_debug.txt
+[2026-02-27 12:32:21] VERBOSE[2762178][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762178][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0102@from-queue-00012919;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762178][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0102@from-queue-00012919;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762178][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0102@from-queue-00012919;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762178][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0102@from-queue-00012919;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762180][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762180][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0103@from-queue-0001291a;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762180][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0103@from-queue-0001291a;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762180][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0103@from-queue-0001291a;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762180][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0103@from-queue-0001291a;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762182][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762182][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0104@from-queue-0001291b;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762182][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0104@from-queue-0001291b;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762182][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0104@from-queue-0001291b;2", "Returned from dial-one with nothing to call and DIALSTATUS: BUSY") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762182][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0104@from-queue-0001291b;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762184][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762184][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0105@from-queue-0001291c;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762184][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0105@from-queue-0001291c;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762184][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0105@from-queue-0001291c;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762184][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0105@from-queue-0001291c;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762186][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762186][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0106@from-queue-0001291d;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762186][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0106@from-queue-0001291d;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762186][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0106@from-queue-0001291d;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762186][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0106@from-queue-0001291d;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762188][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762188][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0107@from-queue-0001291e;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762188][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0107@from-queue-0001291e;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762188][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0107@from-queue-0001291e;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762188][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0107@from-queue-0001291e;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762190][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762190][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0108@from-queue-0001291f;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762190][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0108@from-queue-0001291f;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762190][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0108@from-queue-0001291f;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762190][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0108@from-queue-0001291f;2", "") in new stack
+--
+[2026-02-27 12:32:21] VERBOSE[2762191][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:21] VERBOSE[2762191][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0101@from-queue-00012920;2", "") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762191][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0101@from-queue-00012920;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762191][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0101@from-queue-00012920;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:21] VERBOSE[2762191][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0101@from-queue-00012920;2", "") in new stack
+--
+[2026-02-27 12:32:31] VERBOSE[456347] netsock2.c: Using SIP RTP Audio CoS mark 5
+[2026-02-27 12:32:31] VERBOSE[456347] res_pjsip_logger.c: <--- Transmitting SIP request (1055 bytes) to UDP:189.195.176.85:1024 --->
+INVITE sip:0100@189.195.176.85:1024;ob SIP/2.0
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport;branch=z9hG4bKPj0edf1cf6-de18-4531-80a4-444c13d7ae6f
+From: "6678422386" <sip:6678422386@160.153.176.90>;tag=69f85f1f-6a04-424e-8535-3a41ae956e95
+--
+c=IN IP4 160.153.176.90
+t=0 0
+m=audio 10212 RTP/AVP 0 9 8 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:9 G722/8000
+--
+[2026-02-27 12:32:32] VERBOSE[2762212][C-00002681] file.c: <Local/01010@from-queue-00012922;2> Playing 'silence/1.ulaw' (language 'en')
+[2026-02-27 12:32:32] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP request (1046 bytes) from UDP:201.165.120.5:5090 --->
+INVITE sip:777@160.153.176.90 SIP/2.0
+Via: SIP/2.0/UDP 192.168.1.59:5090;branch=z9hG4bK802771024;rport
+From: "Estancia 5" <sip:1000@160.153.176.90>;tag=1546536206
+--
+c=IN IP4 192.168.1.59
+t=0 0
+m=audio 5074 RTP/AVP 0 8 9 18 101
+a=sendrecv
+a=rtpmap:0 PCMU/8000
+--
+
+[2026-02-27 12:32:32] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP request (1316 bytes) from UDP:201.165.120.5:5090 --->
+INVITE sip:777@160.153.176.90 SIP/2.0
+Via: SIP/2.0/UDP 192.168.1.59:5090;branch=z9hG4bK1990668070;rport
+From: "Estancia 5" <sip:1000@160.153.176.90>;tag=1546536206
+--
+c=IN IP4 192.168.1.59
+t=0 0
+m=audio 5074 RTP/AVP 0 8 9 18 101
+a=sendrecv
+a=rtpmap:0 PCMU/8000
+--
+[2026-02-27 12:32:33] VERBOSE[2762212][C-00002681] file.c: <Local/01010@from-queue-00012922;2> Playing 'cannot-complete-as-dialed.ulaw' (language 'en')
+[2026-02-27 12:32:33] VERBOSE[119108] res_pjsip_logger.c: <--- Transmitting SIP response (872 bytes) to UDP:201.165.120.5:5090 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 192.168.1.59:5090;rport=5090;received=201.165.120.5;branch=z9hG4bK1990668070
+Call-ID: 1936835847-5090-3387@BJC.BGI.B.FJ
+--
+c=IN IP4 160.153.176.90
+t=0 0
+m=audio 13256 RTP/AVP 0 9 8 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:9 G722/8000
+--
+[2026-02-27 12:32:33] VERBOSE[2762217][C-00002682] bridge_channel.c: Channel PJSIP/1000-00005795 joined 'simple_bridge' stasis-bridge <0001298b-ab45-4b32-91ee-3783499527fe>
+[2026-02-27 12:32:33] VERBOSE[2762219] dial.c: Called 127.0.0.1:39164/c(ulaw)
+[2026-02-27 12:32:33] VERBOSE[2762219] dial.c: UnicastRTP/127.0.0.1:39164-0x7f87a008b0c0 answered
+[2026-02-27 12:32:33] VERBOSE[2762219] ari/resource_channels.c: Launching Stasis(gptivr,1772220752.174762) on UnicastRTP/127.0.0.1:39164-0x7f87a008b0c0
+[2026-02-27 12:32:33] VERBOSE[2762221] bridge_channel.c: Channel UnicastRTP/127.0.0.1:39164-0x7f87a008b0c0 joined 'simple_bridge' stasis-bridge <0001298b-ab45-4b32-91ee-3783499527fe>
+--
+
+[2026-02-27 12:32:33] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (594 bytes) from UDP:201.165.120.5:5090 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;branch=z9hG4bKPj08624527-cc0e-4923-b818-73e04a88898d
+From: <sip:777@160.153.176.90>;tag=f3e2c73e-ca4a-4a17-b284-5e13788a0a5e
+--
+
+[2026-02-27 12:32:34] VERBOSE[456347] res_pjsip_logger.c: <--- Transmitting SIP response (376 bytes) to UDP:51.161.71.224:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 51.161.71.224:5060;rport=5060;received=51.161.71.224;branch=z9hG4bK1ddf4e8c49e3473a
+Call-ID: c759ffe2563616c6c04e79d80@51.161.71.224
+--
+[2026-02-27 12:32:34] VERBOSE[2762023][C-00002680] app_mixmonitor.c: End MixMonitor Recording Local/0104@from-queue-00012916;2
+[2026-02-27 12:32:34] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (392 bytes) from UDP:177.228.99.199:56538 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;received=160.153.176.90;branch=z9hG4bKPje1c5dce3-3c36-4a4c-8653-96daba940cb1
+Call-ID: 4b3d2f80-22de-4897-a94e-4e946bab6ff3
+--
+[2026-02-27 12:32:35] VERBOSE[119108] res_pjsip_registrar.c: Added contact 'sip:0107@189.186.48.246:63838;ob' to AOR '0107' with expiration of 300 seconds
+[2026-02-27 12:32:35] VERBOSE[119108] res_pjsip_logger.c: <--- Transmitting SIP response (529 bytes) to UDP:189.186.48.246:63838 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 189.186.48.246:63838;rport=63838;received=189.186.48.246;branch=z9hG4bKPjbe47baf64aaf4b80bd714d43b25eba9c
+Call-ID: efe2091c5d6e4b48b2f75594c23fab24
+--
+
+[2026-02-27 12:32:35] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (842 bytes) from UDP:189.186.48.246:63838 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;received=160.153.176.90;branch=z9hG4bKPj840bf5e0-bd12-48c1-a82b-f9bb7c7605e5
+Call-ID: e6ab068d-6d05-4ef2-8478-f066cc3f5869
+--
+
+[2026-02-27 12:32:36] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (506 bytes) from UDP:187.149.77.98:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;branch=z9hG4bKPj6057988d-7bbf-4491-a728-1f685fefa25d
+From: <sip:HT813_Trunk@160.153.176.90>;tag=bb4d977d-64cf-408e-bd0c-3cbab4217d64
+--
+
+[2026-02-27 12:32:38] VERBOSE[119108] res_pjsip_logger.c: <--- Transmitting SIP response (823 bytes) to UDP:187.149.77.98:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 187.149.77.98:5062;rport=5062;received=187.149.77.98;branch=z9hG4bK353189554
+Call-ID: 548922158-5062-48170@BJC.BGI.B.GD
+--
+[2026-02-27 12:32:39] VERBOSE[2762222][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:39] VERBOSE[2762222][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0102@from-queue-00012923;2", "") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762222][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0102@from-queue-00012923;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762222][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0102@from-queue-00012923;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762222][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0102@from-queue-00012923;2", "") in new stack
+--
+[2026-02-27 12:32:39] VERBOSE[2762224][C-00002681] pbx_builtins.c: Goto (macro-dial-one,s,60)
+[2026-02-27 12:32:39] VERBOSE[2762224][C-00002681] pbx.c: Executing [s@macro-dial-one:60] NoOp("Local/0103@from-queue-00012924;2", "") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762224][C-00002681] pbx.c: Executing [s@macro-dial-one:61] ExecIf("Local/0103@from-queue-00012924;2", "0?Set(DIALSTATUS=NOANSWER)") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762224][C-00002681] pbx.c: Executing [s@macro-dial-one:62] NoOp("Local/0103@from-queue-00012924;2", "Returned from dial-one with nothing to call and DIALSTATUS: CHANUNAVAIL") in new stack
+[2026-02-27 12:32:39] VERBOSE[2762224][C-00002681] pbx.c: Executing [s@macro-dial-one:63] Return("Local/0103@from-queue-00012924;2", "") in new stack
+--
+[2026-02-27 12:32:39] VERBOSE[119108] netsock2.c: Using SIP RTP Audio CoS mark 5
+[2026-02-27 12:32:39] VERBOSE[119108] res_pjsip_logger.c: <--- Transmitting SIP request (1060 bytes) to UDP:177.228.99.199:56538 --->
+INVITE sip:0104@177.228.99.199:56538;ob SIP/2.0
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport;branch=z9hG4bKPjada53a25-884b-4532-a95d-86330dcde3ce
+From: "6678422386" <sip:6678422386@160.153.176.90>;tag=34d7e3c4-aa77-4887-8820-9356ef90c00b
+--
+c=IN IP4 160.153.176.90
+t=0 0
+m=audio 12394 RTP/AVP 0 9 8 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:9 G722/8000
+--
+
+[2026-02-27 12:32:39] VERBOSE[119108] res_pjsip_logger.c: <--- Received SIP response (485 bytes) from WSS:189.195.176.85:52243 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/WSS 160.153.176.90:8089;rport;branch=z9hG4bKPjd4ba06d1-4f62-41a5-8594-65022d6c436c;alias
+To: <sip:8fe67ftd@189.195.176.85>;tag=1lh4gil38i
+--
+[2026-02-27 12:32:42] VERBOSE[2762231] manager.c: Manager 'admin' logged off from 127.0.0.1
+[2026-02-27 12:32:43] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (1004 bytes) from UDP:177.228.99.199:56538 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;received=160.153.176.90;branch=z9hG4bKPjada53a25-884b-4532-a95d-86330dcde3ce
+Call-ID: 3388f2df-1610-4fa9-9666-853e145ec30a
+--
+t=0 0
+a=X-nat:0
+m=audio 4016 RTP/AVP 0 101
+c=IN IP4 192.168.100.10
+b=TIAS:64000
+--
+
+
+[2026-02-27 12:32:43] VERBOSE[2762226][C-00002681] app_dial.c: PJSIP/0104-00005796 answered Local/0104@from-queue-00012925;2
+[2026-02-27 12:32:43] VERBOSE[2762226][C-00002681] app_stack.c: PJSIP/0104-00005796 Internal Gosub(macro-auto-blkvm,s,1) start
+[2026-02-27 12:32:43] VERBOSE[2762226][C-00002681] pbx.c: Executing [s@macro-auto-blkvm:1] ExecIf("PJSIP/0104-00005796", "1?Set(CDR(recordingfile)=external-0104-6678422386-20260227-123239-1772220759.174769.wav)") in new stack
+--
+[2026-02-27 12:32:43] VERBOSE[2762226][C-00002681] app_stack.c: Spawn extension (from-internal, , 1) exited non-zero on 'PJSIP/0104-00005796'
+[2026-02-27 12:32:43] VERBOSE[2762226][C-00002681] app_stack.c: PJSIP/0104-00005796 Internal Gosub(macro-auto-blkvm,s,1) complete GOSUB_RETVAL=
+[2026-02-27 12:32:43] VERBOSE[2762149][C-00002681] app_queue.c: Local/0104@from-queue-00012925;1 answered PJSIP/Troncal_Principal-00005792
+[2026-02-27 12:32:43] VERBOSE[2762149][C-00002681] res_musiconhold.c: Stopped music on hold on PJSIP/Troncal_Principal-00005792
+[2026-02-27 12:32:43] VERBOSE[2762238][C-00002681] bridge_channel.c: Channel PJSIP/0104-00005796 joined 'simple_bridge' basic-bridge <7d99bbbe-03ee-44ea-a0ce-2037c1a1c8a5>
+--
+[2026-02-27 12:32:43] VERBOSE[2762241] manager.c: Manager 'admin' logged off from 127.0.0.1
+[2026-02-27 12:32:44] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP request (943 bytes) from UDP:189.195.176.85:1024 --->
+INVITE sip:103@160.153.176.90 SIP/2.0
+Via: SIP/2.0/UDP 189.195.176.85:1024;rport;branch=z9hG4bKPjb52947448f2648389659365467c8a10f
+Max-Forwards: 70
+--
+t=0 0
+a=X-nat:0
+m=audio 4070 RTP/AVP 0 101
+c=IN IP4 189.195.176.85
+b=TIAS:64000
+--
+
+[2026-02-27 12:32:44] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP request (1236 bytes) from UDP:189.195.176.85:1024 --->
+INVITE sip:103@160.153.176.90 SIP/2.0
+Via: SIP/2.0/UDP 189.195.176.85:1024;rport;branch=z9hG4bKPj168c54bb2a6649c5bb4fbc77e615673a
+Max-Forwards: 70
+--
+t=0 0
+a=X-nat:0
+m=audio 4070 RTP/AVP 0 101
+c=IN IP4 189.195.176.85
+b=TIAS:64000
+--
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@macro-dial-one:55] Gosub("PJSIP/0100-00005797", "dialOne-with-exten,103,1()") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [103@dialOne-with-exten:1] Dial("PJSIP/0100-00005797", "PJSIP/103/sip:8fe67ftd@189.195.176.85:52243;transport=ws;x-ast-orig-host=mh2amumragk5.invalid:0,,Hhb(func-apply-sipheaders^s^1)") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] app_stack.c: PJSIP/103-00005798 Internal Gosub(func-apply-sipheaders,s,1) start
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:1] NoOp("PJSIP/103-00005798", "Applying SIP Headers to channel PJSIP/103-00005798") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:2] Set("PJSIP/103-00005798", "Dchan=103-00005798") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:3] Set("PJSIP/103-00005798", "TECH=PJSIP") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:4] Set("PJSIP/103-00005798", "SIPHEADERKEYS=") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:5] While("PJSIP/103-00005798", "0") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] app_while.c: Jumping to priority 11
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] pbx.c: Executing [s@func-apply-sipheaders:12] Return("PJSIP/103-00005798", "") in new stack
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] app_stack.c: Spawn extension (from-internal, 103, 1) exited non-zero on 'PJSIP/103-00005798'
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] app_stack.c: PJSIP/103-00005798 Internal Gosub(func-apply-sipheaders,s,1) complete GOSUB_RETVAL=
+[2026-02-27 12:32:44] VERBOSE[456347] netsock2.c: Using SIP RTP Audio TOS bits 184
+[2026-02-27 12:32:44] VERBOSE[456347] netsock2.c: Using SIP RTP Audio CoS mark 5
+[2026-02-27 12:32:44] VERBOSE[456347] res_pjsip_logger.c: <--- Transmitting SIP request (1609 bytes) to WSS:189.195.176.85:52243 --->
+INVITE sip:8fe67ftd@189.195.176.85:52243;transport=ws SIP/2.0
+Via: SIP/2.0/WSS 160.153.176.90:8089;rport;branch=z9hG4bKPja8322603-a191-4f41-b3d4-923f00ab917f;alias
+From: "operador supervisor" <sip:0100@accessbotpbx.info>;tag=f6fdccee-a4f4-4575-93be-78c4f697641e
+--
+t=0 0
+a=group:BUNDLE audio-0
+m=audio 19060 UDP/TLS/RTP/SAVPF 0 8 107 101 102
+a=connection:new
+a=setup:actpass
+a=fingerprint:SHA-256 95:3D:90:05:67:6F:B8:EC:2E:DB:D0:5D:8B:2F:6D:F4:15:04:FC:B7:6B:A5:55:28:18:5D:BA:DD:4C:B2:2E:09
+a=ice-ufrag:07ec846d7bb3b0e9247eba9f4a8db911
+a=ice-pwd:599cef6775fccdac5b49502f57cb40e5
+a=candidate:Ha099b05a 1 UDP 2130706431 160.153.176.90 19060 typ host
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+--
+
+
+[2026-02-27 12:32:44] VERBOSE[2762248][C-00002683] app_dial.c: PJSIP/103-00005798 is ringing
+[2026-02-27 12:32:44] VERBOSE[119108] res_pjsip_logger.c: <--- Transmitting SIP response (611 bytes) to UDP:189.195.176.85:1024 --->
+SIP/2.0 180 Ringing
+--
+
+[2026-02-27 12:32:47] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (805 bytes) from UDP:189.195.176.85:1024 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;received=160.153.176.90;branch=z9hG4bKPj3afd0676-5f1f-45c7-bb20-5e1d7eda746d
+Call-ID: 0368f293-af2f-48b5-a038-4b79213a22c2
+--
+
+[2026-02-27 12:32:48] VERBOSE[78471] res_pjsip_logger.c: <--- Received SIP response (803 bytes) from UDP:177.228.99.199:56538 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 160.153.176.90:5060;rport=5060;received=160.153.176.90;branch=z9hG4bKPj04e71624-c5df-4426-b53e-05258f1497dc
+Call-ID: 2ae8c2bb-e453-4528-b064-31f74a7f9951
+[accessbot@accessbotpbx ~]$
