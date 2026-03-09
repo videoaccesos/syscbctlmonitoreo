@@ -115,7 +115,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
   micDeviceId: "",
-  ringtone: "ringtone-classic.wav",
+  ringtone: "ringtone-phone.wav",
   autoAnswer: false,
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
@@ -231,7 +231,7 @@ export default function AccesPhone({
   // Reload ringtone audio element when ringtone selection changes
   useEffect(() => {
     if (ringtoneRef.current) {
-      ringtoneRef.current.src = `/sounds/${config.ringtone || "ringtone-classic.wav"}`;
+      ringtoneRef.current.src = `/sounds/${config.ringtone || "ringtone-phone.wav"}`;
       ringtoneRef.current.load();
       console.log("[AccesPhone] Ringtone changed to:", config.ringtone);
     }
@@ -1136,7 +1136,7 @@ export default function AccesPhone({
       {/* Hidden audio elements - matching working softphone */}
       <audio ref={remoteAudioRef} autoPlay />
       <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
-      <audio ref={ringtoneRef} src={`/sounds/${config.ringtone || "ringtone-classic.wav"}`} preload="auto" />
+      <audio ref={ringtoneRef} src={`/sounds/${config.ringtone || "ringtone-phone.wav"}`} preload="auto" />
 
       {/* Floating phone widget */}
       <div className="fixed bottom-4 right-4 z-50">
@@ -1555,12 +1555,13 @@ export default function AccesPhone({
                 </label>
                 <div className="flex items-center gap-2">
                   <select
-                    value={config.ringtone || "ringtone-classic.wav"}
+                    value={config.ringtone || "ringtone-phone.wav"}
                     onChange={(e) =>
                       setConfig({ ...config, ringtone: e.target.value })
                     }
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   >
+                    <option value="ringtone-phone.wav">Telefono clasico</option>
                     <option value="ringtone-classic.wav">Ding-Dong (campana)</option>
                     <option value="ringtone-euro.wav">Beep-Beep (tono corto)</option>
                     <option value="ringtone-digital.wav">Melodico (suave)</option>
@@ -1568,7 +1569,7 @@ export default function AccesPhone({
                   <button
                     type="button"
                     onClick={() => {
-                      const preview = new Audio(`/sounds/${config.ringtone || "ringtone-classic.wav"}`);
+                      const preview = new Audio(`/sounds/${config.ringtone || "ringtone-phone.wav"}`);
                       preview.play().catch(() => {});
                       setTimeout(() => { preview.pause(); preview.currentTime = 0; }, 3000);
                     }}
