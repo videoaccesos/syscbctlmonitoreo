@@ -305,15 +305,15 @@ export default function AccesPhone({
         onCallEndedRef.current?.();
       });
 
-      // Intercept SDP to fix missing ICE credentials (some Asterisk configs
-      // send SDP without ice-ufrag/ice-pwd which newer Chrome versions reject)
+      // Intercept SDP to fix compatibility issues with Asterisk/FreePBX
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       session.on("sdp", (e: any) => {
         console.log("[AccesPhone] SDP event:", e?.type, "\n", e?.sdp?.substring(0, 500));
+
+        // Fix 1: Inject missing ICE credentials in remote offers (Asterisk omits them)
         if (e?.type === "offer" && e?.sdp && !e.sdp.includes("a=ice-ufrag:")) {
           console.warn("[AccesPhone] SDP missing ice-ufrag/ice-pwd, injecting dummy ICE credentials");
           const iceAttrs = "a=ice-ufrag:astk\r\na=ice-pwd:asteriskasteriskasterisk\r\n";
-          // Insert ICE credentials at session level (before first m= line)
           const mLineIndex = e.sdp.indexOf("\r\nm=");
           if (mLineIndex !== -1) {
             e.sdp = e.sdp.slice(0, mLineIndex) + "\r\n" + iceAttrs.trimEnd() + e.sdp.slice(mLineIndex);
@@ -321,6 +321,45 @@ export default function AccesPhone({
             e.sdp = e.sdp + iceAttrs;
           }
           console.log("[AccesPhone] SDP patched with ICE credentials");
+        }
+
+        // Fix 2: Strip codecs Asterisk doesn't support from outgoing offers
+        // Chrome includes opus/red/CN and SAVPF which causes Asterisk to reject with 488
+        if (e?.type === "offer" && e?.sdp && e.sdp.includes("opus")) {
+          console.log("[AccesPhone] Stripping non-Asterisk codecs from outgoing SDP");
+          let sdp = e.sdp as string;
+          // Change SAVPF to SAVP (Asterisk expects SAVP)
+          sdp = sdp.replace(/UDP\/TLS\/RTP\/SAVPF/g, "UDP/TLS/RTP/SAVP");
+          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event(101)
+          sdp = sdp.replace(
+            /m=audio (\d+) UDP\/TLS\/RTP\/SAVP [^\r\n]+/,
+            "m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 101"
+          );
+          // Remove rtpmap/fmtp/rtcp-fb lines for codecs we stripped
+          const lines = sdp.split("\r\n");
+          const filtered = lines.filter((line) => {
+            // Remove opus, red, CN codec lines
+            if (/^a=rtpmap:\d+ (opus|red|CN)\//.test(line)) return false;
+            if (/^a=fmtp:\d+ (minptime|111)/.test(line)) return false;
+            if (/^a=rtcp-fb:/.test(line)) return false;
+            if (/^a=rtpmap:\d+ telephone-event\/48000/.test(line)) return false;
+            // Remove extmap-allow-mixed (not supported by all Asterisk versions)
+            if (line === "a=extmap-allow-mixed") return false;
+            // Remove rtcp-rsize (not supported by Asterisk SRTP)
+            if (line === "a=rtcp-rsize") return false;
+            // Remove extmap lines (Asterisk may not support these header extensions)
+            if (/^a=extmap:/.test(line)) return false;
+            return true;
+          });
+          // Ensure telephone-event/8000 with payload 101 is present
+          if (!filtered.some((l) => l.includes("telephone-event/8000"))) {
+            const midIdx = filtered.findIndex((l) => l.startsWith("a=mid:"));
+            if (midIdx !== -1) {
+              filtered.splice(midIdx, 0, "a=rtpmap:101 telephone-event/8000", "a=fmtp:101 0-16");
+            }
+          }
+          e.sdp = filtered.join("\r\n");
+          console.log("[AccesPhone] SDP cleaned for Asterisk compatibility");
         }
       });
 
@@ -753,6 +792,14 @@ export default function AccesPhone({
 
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
+
+      // Check session is still valid after async mic acquisition
+      if (!sessionRef.current || sessionRef.current.status !== 4) {
+        console.warn("[AccesPhone] Session no longer valid after mic acquisition, status:", sessionRef.current?.status);
+        stream.getTracks().forEach((t) => t.stop());
+        answeringRef.current = false;
+        return;
+      }
 
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
