@@ -43,7 +43,7 @@ export default function LoginPage() {
               <Shield className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Video Accesos</h1>
-            <p className="text-gray-500 text-sm mt-1">
+            <p className="text-gray-900 text-sm mt-1">
               Sistema de Control de Acceso
             </p>
           </div>
@@ -53,7 +53,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="usuario"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                className="block text-sm font-medium text-gray-900 mb-1"
               >
                 Usuario
               </label>
@@ -72,7 +72,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="contrasena"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                className="block text-sm font-medium text-gray-900 mb-1"
               >
                 Contraseña
               </label>

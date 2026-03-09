@@ -1468,7 +1468,7 @@ export default function AccesPhone({
             </div>
             <div className="p-6 space-y-3 overflow-y-auto flex-1">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Servidor WebSocket
                 </label>
                 <input
@@ -1482,7 +1482,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Extension
                 </label>
                 <input
@@ -1496,7 +1496,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Contrasena
                 </label>
                 <input
@@ -1509,7 +1509,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Dominio SIP
                 </label>
                 <input
@@ -1525,10 +1525,10 @@ export default function AccesPhone({
 
               {/* Separador - Audio */}
               <div className="border-t border-gray-200 pt-3 mt-3">
-                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Audio</p>
+                <p className="text-xs font-semibold text-gray-900 mb-2 uppercase tracking-wide">Audio</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Microfono
                 </label>
                 <select
@@ -1545,12 +1545,12 @@ export default function AccesPhone({
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-500 mt-1">
+                <p className="text-[10px] text-gray-700 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Tono de timbre
                 </label>
                 <div className="flex items-center gap-2">
@@ -1583,10 +1583,10 @@ export default function AccesPhone({
 
               {/* Separador - Configuracion de Video */}
               <div className="border-t border-gray-200 pt-3 mt-3">
-                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Video / Camaras</p>
+                <p className="text-xs font-semibold text-gray-900 mb-2 uppercase tracking-wide">Video / Camaras</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   URL Proxy Camaras
                 </label>
                 <input
@@ -1600,7 +1600,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Refresh (ms)
                 </label>
                 <input
@@ -1625,7 +1625,7 @@ export default function AccesPhone({
                   }
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="videoAutoOnCall" className="text-sm text-gray-700">
+                <label htmlFor="videoAutoOnCall" className="text-sm text-gray-900">
                   Video automatico en llamadas
                 </label>
               </div>
@@ -1633,7 +1633,7 @@ export default function AccesPhone({
             <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
               <button
                 onClick={() => setShowSettings(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
               >
                 Cancelar
               </button>
