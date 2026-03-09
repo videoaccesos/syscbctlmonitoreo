@@ -1205,18 +1205,29 @@ export default function RegistroAccesosPage() {
                       type="button"
                       disabled={!selectedResidencia}
                       onClick={() => {
-                        // Pre-fill modal with selected solicitante data or typed text
-                        if (selectedSolicitanteData) {
-                          setRegNombre(selectedSolicitanteData.nombrePila.toUpperCase());
-                          setRegApePaterno(selectedSolicitanteData.apePaterno.toUpperCase());
-                          setRegApeMaterno(selectedSolicitanteData.apeMaterno.toUpperCase());
-                        } else if (solicitanteSearch.trim()) {
-                          // Pre-fill from typed text
-                          const partes = solicitanteSearch.trim().toUpperCase().split(/\s+/);
-                          setRegNombre(partes[0] || "");
-                          setRegApePaterno(partes[1] || "");
-                          setRegApeMaterno(partes.slice(2).join(" ") || "");
+                        // Pre-fill modal: use stored solicitante data or split the search text
+                        const data = selectedSolicitanteData;
+                        let n = "", ap = "", am = "";
+                        if (data) {
+                          n = (data.nombrePila || "").toUpperCase();
+                          ap = (data.apePaterno || "").toUpperCase();
+                          am = (data.apeMaterno || "").toUpperCase();
                         }
+                        // If no separated data or fields are empty, split from search text
+                        if (!n && solicitanteSearch.trim()) {
+                          const partes = solicitanteSearch.trim().toUpperCase().split(/\s+/);
+                          n = partes[0] || "";
+                          ap = partes[1] || "";
+                          am = partes.slice(2).join(" ") || "";
+                        }
+                        console.log("[Solicitante] Pre-fill modal:", { n, ap, am, data, search: solicitanteSearch });
+                        setRegNombre(n);
+                        setRegApePaterno(ap);
+                        setRegApeMaterno(am);
+                        setRegTelefono("");
+                        setRegCelular("");
+                        setRegEmail("");
+                        setRegObservaciones("");
                         // Clear selection so user registers as new
                         setFormSolicitanteId("");
                         setFormSolicitanteNombre("");
