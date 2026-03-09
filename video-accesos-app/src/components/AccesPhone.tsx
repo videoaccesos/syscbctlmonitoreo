@@ -17,7 +17,6 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
-  Play,
   BellOff,
   Zap,
   LogOut,
@@ -87,7 +86,6 @@ interface AccesPhoneConfig {
   sipDomain: string;
   displayName: string;
   micDeviceId: string; // "" = default del navegador
-  ringtone: string; // ringtone file name
   autoAnswer: boolean; // auto-answer incoming calls without ringing
   cameraProxyUrl: string;
   cameraRefreshMs: number;
@@ -115,7 +113,6 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
   micDeviceId: "",
-  ringtone: "ringtone-phone.wav",
   autoAnswer: false,
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
@@ -162,7 +159,6 @@ export default function AccesPhone({
   const [inCall, setInCall] = useState(false);
   const [callInfo, setCallInfo] = useState<CallInfo | null>(null);
   const [ringing, setRinging] = useState(false);
-  const ringingRef = useRef(false);
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
@@ -194,7 +190,6 @@ export default function AccesPhone({
   const sessionRef = useRef<RTCSession | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
@@ -229,15 +224,6 @@ export default function AccesPhone({
     setConfig(loadConfig());
   }, []);
 
-  // Reload ringtone audio element when ringtone selection changes
-  useEffect(() => {
-    if (ringtoneRef.current) {
-      ringtoneRef.current.src = `/sounds/${config.ringtone || "ringtone-phone.wav"}`;
-      ringtoneRef.current.load();
-      console.log("[AccesPhone] Ringtone changed to:", config.ringtone);
-    }
-  }, [config.ringtone]);
-
   // Call duration timer
   useEffect(() => {
     if (inCall) {
@@ -268,7 +254,6 @@ export default function AccesPhone({
   const cleanupCall = useCallback(() => {
     setInCall(false);
     setRinging(false);
-    ringingRef.current = false;
     setCallInfo(null);
     setMuted(false);
     sessionRef.current = null;
@@ -277,10 +262,6 @@ export default function AccesPhone({
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
-    }
-    if (ringtoneRef.current) {
-      ringtoneRef.current.pause();
-      ringtoneRef.current.currentTime = 0;
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
@@ -296,17 +277,7 @@ export default function AccesPhone({
         diag("SESSION_ACCEPTED", callerNumber);
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
-        ringingRef.current = false;
         setInCall(true);
-        if (ringtoneRef.current) {
-          ringtoneRef.current.pause();
-          ringtoneRef.current.currentTime = 0;
-        }
-        // Now play remote audio that was deferred during ringing
-        if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-          remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
-          remoteAudioRef.current.play().catch(() => {});
-        }
         onCallAnsweredRef.current?.(callerNumber);
       });
 
@@ -406,34 +377,25 @@ export default function AccesPhone({
         console.log("[AccesPhone] PeerConnection created");
         const pc = e.peerconnection;
         if (pc) {
-          // Remote audio - attach stream but only play if NOT ringing
-          // During ringing, Asterisk sends early media (ringback tone) that
-          // would play over our custom ringtone. We attach the stream but
-          // defer .play() until the call is accepted.
+          // Remote audio
           pc.addEventListener("track", (ev: RTCTrackEvent) => {
-            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length} ringing=${ringingRef.current}`);
-            console.log("[AccesPhone] Remote track received:", ev.track.kind, "ringing:", ringingRef.current);
+            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length}`);
+            console.log("[AccesPhone] Remote track received:", ev.track.kind);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
-              if (!ringingRef.current) {
-                // Not ringing (outgoing call or already answered) - play immediately
-                remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
-                remoteAudioRef.current.play().catch(() => {});
-              }
-              // If ringing, stream is attached but NOT played - will play on "accepted"
+              remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              remoteAudioRef.current.play().catch(() => {});
             }
           });
 
           // Backwards compatibility for older browsers
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pc.addEventListener("addstream", (ev: any) => {
-            console.log("[AccesPhone] addstream event received, ringing:", ringingRef.current);
+            console.log("[AccesPhone] addstream event received");
             if (ev.stream && ev.stream.getAudioTracks().length > 0) {
               if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = ev.stream;
-                if (!ringingRef.current) {
-                  remoteAudioRef.current.play().catch(() => {});
-                }
+                remoteAudioRef.current.play().catch(() => {});
               }
             }
           });
@@ -674,7 +636,6 @@ export default function AccesPhone({
 
           sessionRef.current = session;
           setRinging(true);
-          ringingRef.current = true;
           setCallInfo({
             number: callerNumber,
             direction: "incoming",
@@ -714,19 +675,14 @@ export default function AccesPhone({
             console.error("[AccesPhone] getUserMedia FAILED:", e);
           });
 
-          // Auto-answer or play ringtone
+          // Auto-answer if enabled
           if (autoAnswerRef.current) {
             console.log("[AccesPhone] Auto-answer enabled, answering immediately");
             diag("AUTO_ANSWER", `num=${callerNumber}`);
             // Small delay to let UI update with caller info
             setTimeout(() => answerCallRef.current(), 300);
-          } else {
-            // Play ringtone
-            if (ringtoneRef.current) {
-              ringtoneRef.current.loop = true;
-              ringtoneRef.current.play().catch(() => {});
-            }
           }
+          // Otherwise Asterisk's ringback tone plays via remote audio
         }
       });
 
@@ -1000,7 +956,7 @@ export default function AccesPhone({
         connectSIP();
       }, 500);
     } else {
-      console.log('[AccesPhone] Only non-SIP settings changed (ringtone/camera), no reconnect needed');
+      console.log('[AccesPhone] Only non-SIP settings changed (camera), no reconnect needed');
     }
   };
 
@@ -1152,9 +1108,8 @@ export default function AccesPhone({
   return (
     <>
       {/* Hidden audio elements - matching working softphone */}
-      <audio ref={remoteAudioRef} />
+      <audio ref={remoteAudioRef} autoPlay />
       <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
-      <audio ref={ringtoneRef} src={`/sounds/${config.ringtone || "ringtone-phone.wav"}`} preload="auto" />
 
       {/* Floating phone widget */}
       <div className="fixed bottom-4 right-4 z-50">
@@ -1566,37 +1521,6 @@ export default function AccesPhone({
                 <p className="text-[10px] text-gray-700 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
                 </p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-900 mb-1">
-                  Tono de timbre
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={config.ringtone || "ringtone-phone.wav"}
-                    onChange={(e) =>
-                      setConfig({ ...config, ringtone: e.target.value })
-                    }
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="ringtone-phone.wav">Telefono clasico</option>
-                    <option value="ringtone-classic.wav">Ding-Dong (campana)</option>
-                    <option value="ringtone-euro.wav">Beep-Beep (tono corto)</option>
-                    <option value="ringtone-digital.wav">Melodico (suave)</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const preview = new Audio(`/sounds/${config.ringtone || "ringtone-phone.wav"}`);
-                      preview.play().catch(() => {});
-                      setTimeout(() => { preview.pause(); preview.currentTime = 0; }, 3000);
-                    }}
-                    className="rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-gray-600 hover:bg-gray-50 transition"
-                    title="Escuchar tono"
-                  >
-                    <Play className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
 
               {/* Separador - Configuracion de Video */}
