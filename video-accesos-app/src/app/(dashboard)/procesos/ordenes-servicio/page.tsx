@@ -391,7 +391,7 @@ export default function OrdenesServicioPage() {
             <Wrench className="h-7 w-7 text-blue-600" />
             Ordenes de Servicio
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-700 mt-1">
             Gestiona las ordenes de servicio tecnico
           </p>
         </div>
@@ -408,7 +408,7 @@ export default function OrdenesServicioPage() {
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por folio o detalle..."
@@ -516,12 +516,12 @@ export default function OrdenesServicioPage() {
                 <tr>
                   <td colSpan={7} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-600">
                     No se encontraron ordenes de servicio
                   </td>
                 </tr>
@@ -544,7 +544,7 @@ export default function OrdenesServicioPage() {
                       <div className="font-medium">
                         {item.codigoServicio?.codigo || ""} - {item.codigoServicio?.descripcion || ""}
                       </div>
-                      <div className="text-xs text-gray-500 truncate max-w-xs">
+                      <div className="text-xs text-gray-700 truncate max-w-xs">
                         {item.detalleServicio}
                       </div>
                     </td>
@@ -615,7 +615,7 @@ export default function OrdenesServicioPage() {
                 Nueva Orden de Servicio
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
@@ -804,7 +804,7 @@ export default function OrdenesServicioPage() {
                 onClick={() => setDetailOrder(null)}
                 className="p-1 rounded hover:bg-gray-100 transition"
               >
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
@@ -819,29 +819,29 @@ export default function OrdenesServicioPage() {
               {/* Info general */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">Fecha:</span>
+                  <span className="text-gray-700">Fecha:</span>
                   <p className="font-medium text-gray-900">{fmtDate(detailOrder.fecha)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Privada:</span>
+                  <span className="text-gray-700">Privada:</span>
                   <p className="font-medium text-gray-900">
                     {detailOrder.privada?.descripcion || "-"}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Registrado por:</span>
+                  <span className="text-gray-700">Registrado por:</span>
                   <p className="font-medium text-gray-900">
                     {fmtEmpleado(detailOrder.empleado)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Tecnico:</span>
+                  <span className="text-gray-700">Tecnico:</span>
                   <p className="font-medium text-gray-900">
                     {fmtEmpleado(detailOrder.tecnico)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Servicio:</span>
+                  <span className="text-gray-700">Servicio:</span>
                   <p className="font-medium text-gray-900">
                     {detailOrder.codigoServicio?.codigo} -{" "}
                     {detailOrder.codigoServicio?.descripcion}
@@ -849,7 +849,7 @@ export default function OrdenesServicioPage() {
                 </div>
                 {detailOrder.diagnostico && (
                   <div>
-                    <span className="text-gray-500">Diagnostico:</span>
+                    <span className="text-gray-700">Diagnostico:</span>
                     <p className="font-medium text-gray-900">
                       {detailOrder.diagnostico.codigo} -{" "}
                       {detailOrder.diagnostico.descripcion}
@@ -860,7 +860,7 @@ export default function OrdenesServicioPage() {
 
               {/* Detalle servicio */}
               <div>
-                <span className="text-sm text-gray-500">Detalle del Servicio:</span>
+                <span className="text-sm text-gray-700">Detalle del Servicio:</span>
                 <p className="mt-1 text-sm text-gray-900 bg-gray-50 rounded-lg p-3">
                   {detailOrder.detalleServicio}
                 </p>
@@ -910,7 +910,7 @@ export default function OrdenesServicioPage() {
                         <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-400 mt-2" />
                         <div className="flex-1 bg-gray-50 rounded-lg p-3">
                           <p className="text-sm text-gray-900">{seg.comentario}</p>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-gray-700 mt-1">
                             {fmtDateTime(seg.fechaModificacion)}
                           </p>
                         </div>

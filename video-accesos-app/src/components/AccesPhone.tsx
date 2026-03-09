@@ -17,6 +17,9 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
+  BellOff,
+  Zap,
+  LogOut,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +28,52 @@ import {
 const RECONNECT_BASE_DELAY = 2000; // 2 seconds
 const RECONNECT_MAX_DELAY = 30000; // 30 seconds max
 const RECONNECT_MAX_ATTEMPTS = 0;  // 0 = unlimited
+
+// ---------------------------------------------------------------------------
+// Diagnostics logger - agrega timestamps y se puede ver en consola
+// ---------------------------------------------------------------------------
+interface DiagEntry {
+  ts: string;
+  elapsed: number;
+  event: string;
+  detail?: string;
+}
+const _diagLog: DiagEntry[] = [];
+const _diagStart = Date.now();
+
+function diag(event: string, detail?: string) {
+  const entry: DiagEntry = {
+    ts: new Date().toISOString(),
+    elapsed: Date.now() - _diagStart,
+    event,
+    detail,
+  };
+  _diagLog.push(entry);
+  // Mantener maximo 200 entradas
+  if (_diagLog.length > 200) _diagLog.shift();
+  console.log(`[DIAG-SIP] +${entry.elapsed}ms | ${event}${detail ? ` | ${detail}` : ""}`);
+}
+
+// Exponer para acceso desde consola del browser: window.__sipDiag()
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sipDiag = () => {
+    console.table(_diagLog);
+    return _diagLog;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sipDiagSummary = () => {
+    const summary = {
+      totalEntries: _diagLog.length,
+      firstEvent: _diagLog[0]?.ts || "none",
+      lastEvent: _diagLog[_diagLog.length - 1]?.ts || "none",
+      totalElapsed: _diagLog.length > 0 ? `${_diagLog[_diagLog.length - 1].elapsed}ms` : "0ms",
+      events: _diagLog.map(e => `+${e.elapsed}ms ${e.event}`).join("\n"),
+    };
+    console.log(summary.events);
+    return summary;
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +85,8 @@ interface AccesPhoneConfig {
   sipPassword: string;
   sipDomain: string;
   displayName: string;
+  micDeviceId: string; // "" = default del navegador
+  autoAnswer: boolean; // auto-answer incoming calls without ringing
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -43,6 +94,7 @@ interface AccesPhoneConfig {
 
 interface CallInfo {
   number: string;
+  callerLabel?: string;
   direction: "incoming" | "outgoing";
   startTime: Date;
 }
@@ -60,6 +112,8 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   sipPassword: "",
   sipDomain: "accessbotpbx.info",
   displayName: "Monitoreo",
+  micDeviceId: "",
+  autoAnswer: false,
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -112,33 +166,36 @@ export default function AccesPhone({
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
+  const [dndActive, setDndActive] = useState(false);
+  const [autoAnswerActive, setAutoAnswerActive] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").autoAnswer || false; } catch { return false; }
+  });
+  const dndRef = useRef(false);
+  const autoAnswerRef = useRef(false);
+
+  // Keep refs in sync to avoid stale closures in SIP event handlers
+  useEffect(() => { dndRef.current = dndActive; }, [dndActive]);
+  useEffect(() => { autoAnswerRef.current = autoAnswerActive; }, [autoAnswerActive]);
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
 
-  // Video/camera state
-  const [showVideo, setShowVideo] = useState(false);
-  const [videoCameras, setVideoCameras] = useState<{cam: number; name: string; channel?: string}[]>([]);
-  const [currentCamIndex, setCurrentCamIndex] = useState(0);
-  const [snapshotSrc, setSnapshotSrc] = useState("");
-  const [videoPrivadaId, setVideoPrivadaId] = useState(0);
-  const [videoPrivadaName, setVideoPrivadaName] = useState("");
-  const [videoError, setVideoError] = useState(false);
+  // Available microphones for settings selector
+  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
 
   // Refs
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
-  const videoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const snapshotImgRef = useRef<HTMLImageElement | null>(null);
-  const consecutiveErrorsRef = useRef(0);
+  const answeringRef = useRef(false);
+  const answerCallRef = useRef<() => void>(() => {});
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -200,14 +257,11 @@ export default function AccesPhone({
     setCallInfo(null);
     setMuted(false);
     sessionRef.current = null;
+    answeringRef.current = false;
     // Stop local media stream tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
-    }
-    if (ringtoneRef.current) {
-      ringtoneRef.current.pause();
-      ringtoneRef.current.currentTime = 0;
     }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
@@ -220,21 +274,20 @@ export default function AccesPhone({
   const setupSessionEvents = useCallback(
     (session: RTCSession, callerNumber: string) => {
       session.on("accepted", () => {
+        diag("SESSION_ACCEPTED", callerNumber);
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
         setInCall(true);
-        if (ringtoneRef.current) {
-          ringtoneRef.current.pause();
-          ringtoneRef.current.currentTime = 0;
-        }
         onCallAnsweredRef.current?.(callerNumber);
       });
 
       session.on("confirmed", () => {
+        diag("SESSION_CONFIRMED", callerNumber);
         console.log("[AccesPhone] Session confirmed - audio should already be attached via peerconnection track event");
       });
 
       session.on("ended", (e) => {
+        diag("SESSION_ENDED", `cause=${e?.cause || "unknown"} number=${callerNumber}`);
         console.log("[AccesPhone] Session ended:", e?.cause || "unknown cause");
         cleanupCall();
         onCallEndedRef.current?.();
@@ -243,6 +296,8 @@ export default function AccesPhone({
       session.on("failed", (e) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const evt = e as any;
+        const failDetail = `cause=${evt?.cause} status=${evt?.message?.status_code} reason=${evt?.message?.reason_phrase} originator=${evt?.originator}`;
+        diag("SESSION_FAILED", failDetail);
         console.error("[AccesPhone] Session failed:", evt?.cause || "unknown cause");
         console.error("[AccesPhone] Session failed details:", {
           cause: evt?.cause,
@@ -251,24 +306,80 @@ export default function AccesPhone({
           originator: evt?.originator,
         });
         if (evt?.cause === "Internal Error" || evt?.cause === "internal error") {
+          diag("SESSION_INTERNAL_ERROR", "Posible problema SDP/WebRTC/media");
           console.error("[AccesPhone] INTERNAL ERROR - posible problema con SDP/WebRTC/media");
         }
         cleanupCall();
         onCallEndedRef.current?.();
       });
 
-      // Log SDP events for debugging
+      // Intercept SDP to fix compatibility issues with Asterisk/FreePBX
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       session.on("sdp", (e: any) => {
         console.log("[AccesPhone] SDP event:", e?.type, "\n", e?.sdp?.substring(0, 500));
+
+        // Fix 1: Inject missing ICE credentials in remote offers (Asterisk omits them)
+        if (e?.type === "offer" && e?.sdp && !e.sdp.includes("a=ice-ufrag:")) {
+          console.warn("[AccesPhone] SDP missing ice-ufrag/ice-pwd, injecting dummy ICE credentials");
+          const iceAttrs = "a=ice-ufrag:astk\r\na=ice-pwd:asteriskasteriskasterisk\r\n";
+          const mLineIndex = e.sdp.indexOf("\r\nm=");
+          if (mLineIndex !== -1) {
+            e.sdp = e.sdp.slice(0, mLineIndex) + "\r\n" + iceAttrs.trimEnd() + e.sdp.slice(mLineIndex);
+          } else {
+            e.sdp = e.sdp + iceAttrs;
+          }
+          console.log("[AccesPhone] SDP patched with ICE credentials");
+        }
+
+        // Fix 2: Strip codecs Asterisk doesn't support from LOCAL outgoing offers only
+        // Chrome includes opus/red/CN and SAVPF which causes Asterisk to reject with 488
+        // IMPORTANT: Only apply to outgoing calls (session.direction === "outgoing")
+        // For incoming calls, the offer SDP comes from Asterisk and must NOT be modified
+        if (e?.type === "offer" && e?.sdp && session.direction === "outgoing" && e.sdp.includes("opus")) {
+          console.log("[AccesPhone] Stripping non-Asterisk codecs from outgoing SDP");
+          let sdp = e.sdp as string;
+          // Change SAVPF to SAVP (Asterisk expects SAVP)
+          sdp = sdp.replace(/UDP\/TLS\/RTP\/SAVPF/g, "UDP/TLS/RTP/SAVP");
+          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event(101)
+          sdp = sdp.replace(
+            /m=audio (\d+) UDP\/TLS\/RTP\/SAVP [^\r\n]+/,
+            "m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 101"
+          );
+          // Remove rtpmap/fmtp/rtcp-fb lines for codecs we stripped
+          const lines = sdp.split("\r\n");
+          const filtered = lines.filter((line) => {
+            // Remove opus, red, CN codec lines
+            if (/^a=rtpmap:\d+ (opus|red|CN)\//.test(line)) return false;
+            if (/^a=fmtp:\d+ (minptime|111)/.test(line)) return false;
+            if (/^a=rtcp-fb:/.test(line)) return false;
+            if (/^a=rtpmap:\d+ telephone-event\/48000/.test(line)) return false;
+            // Remove extmap-allow-mixed (not supported by all Asterisk versions)
+            if (line === "a=extmap-allow-mixed") return false;
+            // Remove rtcp-rsize (not supported by Asterisk SRTP)
+            if (line === "a=rtcp-rsize") return false;
+            // Remove extmap lines (Asterisk may not support these header extensions)
+            if (/^a=extmap:/.test(line)) return false;
+            return true;
+          });
+          // Ensure telephone-event/8000 with payload 101 is present
+          if (!filtered.some((l) => l.includes("telephone-event/8000"))) {
+            const midIdx = filtered.findIndex((l) => l.startsWith("a=mid:"));
+            if (midIdx !== -1) {
+              filtered.splice(midIdx, 0, "a=rtpmap:101 telephone-event/8000", "a=fmtp:101 0-16");
+            }
+          }
+          e.sdp = filtered.join("\r\n");
+          console.log("[AccesPhone] SDP cleaned for Asterisk compatibility");
+        }
       });
 
       session.on("peerconnection", (e) => {
         console.log("[AccesPhone] PeerConnection created");
         const pc = e.peerconnection;
         if (pc) {
-          // Remote audio - matching working softphone implementation
+          // Remote audio
           pc.addEventListener("track", (ev: RTCTrackEvent) => {
+            diag("REMOTE_TRACK", `kind=${ev.track.kind} readyState=${ev.track.readyState} streams=${ev.streams?.length}`);
             console.log("[AccesPhone] Remote track received:", ev.track.kind);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
@@ -290,15 +401,36 @@ export default function AccesPhone({
           });
 
           pc.oniceconnectionstatechange = () => {
+            diag("ICE_STATE", pc.iceConnectionState);
             console.log("[AccesPhone] ICE connection state:", pc.iceConnectionState);
           };
 
           pc.onsignalingstatechange = () => {
+            diag("SIGNAL_STATE", pc.signalingState);
             console.log("[AccesPhone] Signaling state:", pc.signalingState);
           };
 
           pc.onconnectionstatechange = () => {
+            diag("CONN_STATE", pc.connectionState);
             console.log("[AccesPhone] Connection state:", pc.connectionState);
+          };
+
+          pc.onicecandidateerror = (ev) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ice = ev as any;
+            diag("ICE_CANDIDATE_ERROR", `errorCode=${ice.errorCode} url=${ice.url} errorText=${ice.errorText}`);
+          };
+
+          pc.onicecandidate = (ev) => {
+            if (ev.candidate) {
+              diag("ICE_CANDIDATE", `type=${ev.candidate.type} protocol=${ev.candidate.protocol} address=${ev.candidate.address}`);
+            } else {
+              diag("ICE_GATHERING_DONE");
+            }
+          };
+
+          pc.onicegatheringstatechange = () => {
+            diag("ICE_GATHERING_STATE", pc.iceGatheringState);
           };
         }
       });
@@ -396,20 +528,21 @@ export default function AccesPhone({
     manualDisconnectRef.current = false;
     setConnecting(true);
     setStatusText("Conectando...");
+    diag("CONNECT_START", `ext=${cfg.extension} ws=${cfg.wsServer}`);
 
     try {
       // Dynamic import to avoid SSR issues
-      console.log('[AccesPhone] Importando JsSIP...');
+      diag("JSSIP_IMPORT_START");
       const JsSIP = await import("jssip");
-      console.log('[AccesPhone] JsSIP importado OK');
+      diag("JSSIP_IMPORT_OK");
 
       // Enable JsSIP internal debug logging
       JsSIP.debug.enable('JsSIP:*');
 
-      console.log('[AccesPhone] Creando WebSocket hacia:', cfg.wsServer);
+      diag("WS_CREATE", cfg.wsServer);
       const socket = new JsSIP.WebSocketInterface(cfg.wsServer);
       const sipUri = `sip:${cfg.extension}@${cfg.sipDomain}`;
-      console.log('[AccesPhone] SIP URI:', sipUri);
+      diag("SIP_URI", sipUri);
 
       const ua = new JsSIP.UA({
         sockets: [socket],
@@ -422,11 +555,18 @@ export default function AccesPhone({
       });
 
       ua.on("connected", () => {
+        diag("WS_CONNECTED", "WebSocket transport abierto");
         console.log("[AccesPhone] WebSocket conectado");
         setStatusText("Conectado");
       });
 
-      ua.on("disconnected", () => {
+      ua.on("disconnected", (e) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const evt = e as any;
+        const reason = evt?.error ? `error=${evt.error}` : "clean";
+        const code = evt?.code || "";
+        const wsReason = evt?.reason || "";
+        diag("WS_DISCONNECTED", `manual=${manualDisconnectRef.current} reason=${reason} code=${code} wsReason=${wsReason}`);
         console.log("[AccesPhone] WebSocket desconectado, manual:", manualDisconnectRef.current);
         setConnected(false);
         setConnecting(false);
@@ -440,11 +580,13 @@ export default function AccesPhone({
         } else {
           // Auto-reconnect - read attempt from ref to avoid stale closure
           setStatusText("Conexion perdida");
+          diag("RECONNECT_TRIGGER", `attempt=${reconnectAttemptRef.current}`);
           scheduleReconnect(reconnectAttemptRef.current);
         }
       });
 
       ua.on("registered", () => {
+        diag("SIP_REGISTERED", `ext=${cfg.extension}`);
         console.log("[AccesPhone] SIP registrado exitosamente");
         setConnected(true);
         setConnecting(false);
@@ -455,12 +597,14 @@ export default function AccesPhone({
       });
 
       ua.on("unregistered", () => {
+        diag("SIP_UNREGISTERED");
         console.log("[AccesPhone] SIP des-registrado");
         setConnected(false);
         setStatusText("No registrado");
       });
 
       ua.on("registrationFailed", (e) => {
+        diag("SIP_REG_FAILED", `cause=${e.cause}`);
         console.error("[AccesPhone] Registro SIP fallido:", e.cause);
         setConnected(false);
         setConnecting(false);
@@ -474,12 +618,21 @@ export default function AccesPhone({
 
       ua.on("newRTCSession", (data: IncomingRTCSessionEvent | OutgoingRTCSessionEvent) => {
         const session = data.session;
+        diag("NEW_RTC_SESSION", `originator=${data.originator} direction=${session.direction}`);
         console.log("[AccesPhone] newRTCSession - originator:", data.originator, "direction:", session.direction);
 
         if (data.originator === "remote") {
           // Incoming call
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
           console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
+
+          // DND: reject immediately
+          if (dndRef.current) {
+            console.log("[AccesPhone] DND active, rejecting call from:", callerNumber);
+            diag("DND_REJECT", `num=${callerNumber}`);
+            session.terminate({ status_code: 486, reason_phrase: "Busy Here" });
+            return;
+          }
 
           sessionRef.current = session;
           setRinging(true);
@@ -490,19 +643,28 @@ export default function AccesPhone({
           });
           setExpanded(true);
 
+          // Lookup caller ID (privada/residencia) for visual identification
+          fetch(`/api/procesos/registro-accesos/buscar-por-telefono?telefono=${encodeURIComponent(callerNumber)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data?.found) {
+                let label = "";
+                if (data.matchLevel === "residencia" && data.data) {
+                  const r = data.data;
+                  label = `${r.privada?.descripcion || ""}${r.nroCasa ? ` - #${r.nroCasa}` : ""}${r.calle ? ` ${r.calle}` : ""}`;
+                } else if (data.privada) {
+                  label = data.privada.descripcion || "";
+                }
+                if (label) {
+                  setCallInfo(prev => prev ? { ...prev, callerLabel: label.trim() } : prev);
+                  diag("CALLER_ID_FOUND", `num=${callerNumber} label=${label.trim()}`);
+                }
+              }
+            })
+            .catch(() => { /* silently ignore lookup failures */ });
+
           // Notify parent about incoming call
           onIncomingCallRef.current?.(callerNumber);
-
-          // Auto-show video on incoming call - lookup caller's privada
-          if (configRef.current.videoAutoOnCall) {
-            lookupCallerAndShowVideo(callerNumber);
-          }
-
-          // Play ringtone
-          if (ringtoneRef.current) {
-            ringtoneRef.current.loop = true;
-            ringtoneRef.current.play().catch(() => {});
-          }
 
           // Setup session events
           setupSessionEvents(session, callerNumber);
@@ -512,18 +674,29 @@ export default function AccesPhone({
           session.on("getusermediafailed", (e: any) => {
             console.error("[AccesPhone] getUserMedia FAILED:", e);
           });
+
+          // Auto-answer if enabled
+          if (autoAnswerRef.current) {
+            console.log("[AccesPhone] Auto-answer enabled, answering immediately");
+            diag("AUTO_ANSWER", `num=${callerNumber}`);
+            // Small delay to let UI update with caller info
+            setTimeout(() => answerCallRef.current(), 300);
+          }
+          // Otherwise Asterisk's ringback tone plays via remote audio
         }
       });
 
-      console.log('[AccesPhone] Llamando ua.start()...');
+      diag("UA_START");
       ua.start();
       uaRef.current = ua;
-      console.log('[AccesPhone] UA iniciado, esperando eventos de conexión...');
+      diag("UA_STARTED", "Esperando eventos WS...");
       setStatusText("Conectando WebSocket...");
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      diag("CONNECT_ERROR", errMsg);
       console.error("[AccesPhone] Error al conectar SIP:", err);
       setConnecting(false);
-      setStatusText(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusText(`Error: ${errMsg}`);
 
       // Schedule reconnect on connection error
       if (!manualDisconnectRef.current) {
@@ -569,11 +742,12 @@ export default function AccesPhone({
   // -----------------------------------------------------------
   // Call actions
   // -----------------------------------------------------------
+
   // Helper: try to get microphone, fallback to silent stream if not available
   const acquireMicOrFallback = useCallback(async (): Promise<MediaStream> => {
     // First, enumerate devices for diagnostics
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      const devices = await navigator.mediaDevices?.enumerateDevices();
       const audioInputs = devices.filter((d) => d.kind === "audioinput");
       console.log("[AccesPhone] Audio input devices found:", audioInputs.length);
       audioInputs.forEach((d, i) => {
@@ -586,28 +760,32 @@ export default function AccesPhone({
       console.warn("[AccesPhone] Could not enumerate devices:", enumErr);
     }
 
-    // Try to get real microphone
+    // Try to get real microphone (use selected device if configured)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      console.log("[AccesPhone] Microphone acquired OK");
+      const selectedMic = configRef.current.micDeviceId;
+      const audioConstraints: MediaTrackConstraints | boolean = selectedMic
+        ? { deviceId: { exact: selectedMic } }
+        : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      // Log which device was actually picked
+      const usedTrack = stream.getAudioTracks()[0];
+      console.log("[AccesPhone] Microphone acquired OK:", usedTrack?.label || "unknown", "settings:", JSON.stringify(usedTrack?.getSettings?.()));
       return stream;
     } catch (micErr) {
       console.warn("[AccesPhone] Microphone unavailable:", micErr);
       console.log("[AccesPhone] Creating silent audio stream as fallback (listen-only mode)");
 
-      // Create a silent audio stream so the call can still connect
+      // Create a proper silent audio stream compatible with SIP/WebRTC
       const ctx = new AudioContext();
       const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 0; // True silence via gain node
       const dst = ctx.createMediaStreamDestination();
-      oscillator.connect(dst);
+      oscillator.connect(gainNode);
+      gainNode.connect(dst);
       oscillator.start();
-      // Immediately stop to produce silence
-      const silentStream = dst.stream;
-      silentStream.getAudioTracks().forEach((t) => {
-        t.enabled = false; // muted silent track
-      });
       console.log("[AccesPhone] Silent fallback stream created - call will be LISTEN-ONLY");
-      return silentStream;
+      return dst.stream;
     }
   }, []);
 
@@ -616,23 +794,53 @@ export default function AccesPhone({
       console.warn("[AccesPhone] No session to answer");
       return;
     }
+
+    // Prevent multiple simultaneous answer attempts
+    if (answeringRef.current) {
+      console.log("[AccesPhone] Already answering, ignoring duplicate call");
+      return;
+    }
+
+    // Only answer if session is waiting (status 4 = STATUS_WAITING_FOR_ANSWER)
+    if (sessionRef.current.status !== 4) {
+      console.warn("[AccesPhone] Session not in WAITING_FOR_ANSWER state, status:", sessionRef.current.status);
+      return;
+    }
+
+    answeringRef.current = true;
     try {
       console.log("[AccesPhone] Attempting to answer call...");
-      console.log("[AccesPhone] Session status:", sessionRef.current.status);
-      console.log("[AccesPhone] Session direction:", sessionRef.current.direction);
 
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
+      // Check session is still valid after async mic acquisition
+      if (!sessionRef.current || sessionRef.current.status !== 4) {
+        console.warn("[AccesPhone] Session no longer valid after mic acquisition, status:", sessionRef.current?.status);
+        stream.getTracks().forEach((t) => t.stop());
+        answeringRef.current = false;
+        return;
+      }
+
       sessionRef.current.answer({
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
+        rtcAnswerConstraints: {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false,
+        },
       });
-      console.log("[AccesPhone] answer() called successfully");
+      console.log("[AccesPhone] answer() called successfully with provided stream");
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
+      answeringRef.current = false;
     }
   }, [acquireMicOrFallback]);
+
+  // Keep ref in sync for use in SIP event handlers (avoids stale closure)
+  useEffect(() => {
+    answerCallRef.current = answerCall;
+  }, [answerCall]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
@@ -670,14 +878,21 @@ export default function AccesPhone({
   }, [speakerOn]);
 
   const makeCall = useCallback(async () => {
-    if (!dialNumber || !connected || !uaRef.current) return;
+    if (!dialNumber || !connected || !uaRef.current) {
+      console.warn("[AccesPhone] makeCall blocked - dialNumber:", dialNumber, "connected:", connected, "ua:", !!uaRef.current);
+      return;
+    }
 
     try {
       console.log("[AccesPhone] Preparing outgoing call to:", dialNumber);
+      diag("OUTGOING_CALL_START", `target=${dialNumber}`);
       const stream = await acquireMicOrFallback();
       localStreamRef.current = stream;
 
-      const session = uaRef.current.call(`sip:${dialNumber}@${config.sipDomain}`, {
+      const targetUri = `sip:${dialNumber}@${config.sipDomain}`;
+      console.log("[AccesPhone] Calling URI:", targetUri);
+
+      const session = uaRef.current.call(targetUri, {
         mediaConstraints: { audio: true, video: false },
         mediaStream: stream,
         rtcOfferConstraints: {
@@ -686,6 +901,12 @@ export default function AccesPhone({
         },
       });
 
+      if (!session) {
+        console.error("[AccesPhone] ua.call() returned null/undefined");
+        setStatusText("Error: no se pudo iniciar llamada");
+        return;
+      }
+
       sessionRef.current = session;
       setCallInfo({
         number: dialNumber,
@@ -693,33 +914,50 @@ export default function AccesPhone({
         startTime: new Date(),
       });
       setInCall(true);
+      setExpanded(true);
       setDialNumber("");
 
       setupSessionEvents(session, dialNumber);
+      console.log("[AccesPhone] Outgoing call initiated successfully");
     } catch (err) {
       console.error("[AccesPhone] Error starting call:", err);
       setStatusText("Error al iniciar llamada");
+      cleanupCall();
     }
-  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback]);
+  }, [dialNumber, connected, setupSessionEvents, acquireMicOrFallback, cleanupCall]);
 
   // -----------------------------------------------------------
   // Settings
   // -----------------------------------------------------------
   const saveSettings = () => {
-    console.log('[AccesPhone] saveSettings - guardando y conectando...');
+    console.log('[AccesPhone] saveSettings - guardando configuración...');
+    // Check if SIP-related settings changed (require reconnect)
+    const prev = configRef.current;
+    const sipChanged =
+      prev.wsServer !== config.wsServer ||
+      prev.extension !== config.extension ||
+      prev.sipPassword !== config.sipPassword ||
+      prev.sipDomain !== config.sipDomain ||
+      prev.displayName !== config.displayName ||
+      prev.micDeviceId !== config.micDeviceId;
+
     saveConfigToStorage(config);
-    // Also update the ref immediately so reconnect sees the new config
     configRef.current = config;
     setShowSettings(false);
-    // Always reconnect after saving (like the original "Guardar y Conectar")
-    if (uaRef.current) {
-      disconnectSIP();
+
+    // Only reconnect SIP if SIP-related settings changed
+    if (sipChanged) {
+      console.log('[AccesPhone] SIP settings changed, reconnecting...');
+      if (uaRef.current) {
+        disconnectSIP();
+      }
+      setTimeout(() => {
+        console.log('[AccesPhone] saveSettings timeout - llamando connectSIP()');
+        connectSIP();
+      }, 500);
+    } else {
+      console.log('[AccesPhone] Only non-SIP settings changed (camera), no reconnect needed');
     }
-    // Use connectSIP() which properly resets manualDisconnectRef and cancelReconnect
-    setTimeout(() => {
-      console.log('[AccesPhone] saveSettings timeout - llamando connectSIP()');
-      connectSIP();
-    }, 500);
   };
 
   // Auto-connect on mount if credentials are saved
@@ -775,133 +1013,83 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
-  // Video/Camera functions
+  // DTMF tone generator (Web Audio API)
   // -----------------------------------------------------------
-  const getProxyBase = useCallback(() => {
-    const url = configRef.current.cameraProxyUrl;
-    // If relative, prefix with softphone path
-    if (!url.startsWith("http") && !url.startsWith("/")) {
-      return "/syscbctlmonitoreo/softphone/" + url;
-    }
-    return url;
-  }, []);
+  const dtmfCtxRef = useRef<AudioContext | null>(null);
 
-  const stopVideoRefresh = useCallback(() => {
-    if (videoIntervalRef.current) {
-      clearInterval(videoIntervalRef.current);
-      videoIntervalRef.current = null;
-    }
-  }, []);
+  const DTMF_FREQS: Record<string, [number, number]> = {
+    "1": [697, 1209], "2": [697, 1336], "3": [697, 1477],
+    "4": [770, 1209], "5": [770, 1336], "6": [770, 1477],
+    "7": [852, 1209], "8": [852, 1336], "9": [852, 1477],
+    "*": [941, 1209], "0": [941, 1336], "#": [941, 1477],
+  };
 
-  const startVideoRefresh = useCallback(() => {
-    stopVideoRefresh();
-    consecutiveErrorsRef.current = 0;
-    setVideoError(false);
-
-    const refresh = () => {
-      if (!mountedRef.current) return;
-      const cameras = videoCameras;
-      const camIdx = currentCamIndex;
-      if (cameras.length === 0) return;
-
-      const cam = cameras[camIdx] || cameras[0];
-      const base = getProxyBase();
-      let src: string;
-
-      if (videoPrivadaId > 0) {
-        src = `${base}?privada_id=${videoPrivadaId}&cam=${cam.cam}&_t=${Date.now()}`;
-      } else if (cam.channel) {
-        src = `${base}?channel=${cam.channel}&_t=${Date.now()}`;
-      } else {
-        return;
+  const getDtmfContext = useCallback(async (): Promise<AudioContext | null> => {
+    try {
+      if (!dtmfCtxRef.current || dtmfCtxRef.current.state === "closed") {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        dtmfCtxRef.current = new AC();
+        console.log("[DTMF] AudioContext creado, state:", dtmfCtxRef.current.state);
       }
+      const ctx = dtmfCtxRef.current;
+      if (ctx.state === "suspended") {
+        console.log("[DTMF] AudioContext suspendido, intentando resume...");
+        await ctx.resume();
+        console.log("[DTMF] AudioContext resume completado, state:", ctx.state);
+      }
+      return ctx;
+    } catch (err) {
+      console.error("[DTMF] Error creando/resumiendo AudioContext:", err);
+      return null;
+    }
+  }, []);
 
-      const pre = new Image();
-      pre.onload = () => {
-        if (mountedRef.current) {
-          setSnapshotSrc(src);
-          setVideoError(false);
-          consecutiveErrorsRef.current = 0;
-        }
-      };
-      pre.onerror = () => {
-        consecutiveErrorsRef.current++;
-        if (consecutiveErrorsRef.current >= 5) {
-          setVideoError(true);
-          stopVideoRefresh();
-          setTimeout(() => {
-            if (mountedRef.current && showVideo) {
-              consecutiveErrorsRef.current = 0;
-              startVideoRefresh();
-            }
-          }, 3000);
-        }
-      };
-      pre.src = src;
-    };
+  const playDtmfTone = useCallback(async (digit: string) => {
+    const freqs = DTMF_FREQS[digit];
+    if (!freqs) return;
 
-    refresh();
-    videoIntervalRef.current = setInterval(refresh, configRef.current.cameraRefreshMs || 500);
+    const ctx = await getDtmfContext();
+    if (!ctx) {
+      console.warn("[DTMF] No se pudo obtener AudioContext para tono", digit);
+      return;
+    }
+
+    try {
+      const gain = ctx.createGain();
+      gain.gain.value = 0.25;
+      gain.connect(ctx.destination);
+
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      osc1.type = "sine";
+      osc2.type = "sine";
+      osc1.frequency.value = freqs[0];
+      osc2.frequency.value = freqs[1];
+      osc1.connect(gain);
+      osc2.connect(gain);
+
+      const now = ctx.currentTime;
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.2);
+      osc2.stop(now + 0.2);
+
+      // Fade out to avoid click
+      gain.gain.setValueAtTime(0.25, now + 0.15);
+      gain.gain.linearRampToValueAtTime(0, now + 0.2);
+
+      console.log("[DTMF] Tono reproducido:", digit, freqs);
+    } catch (err) {
+      console.error("[DTMF] Error reproduciendo tono:", digit, err);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoCameras, currentCamIndex, videoPrivadaId, showVideo, getProxyBase, stopVideoRefresh]);
-
-  // Start/stop video refresh when showVideo or cameras change
-  useEffect(() => {
-    if (showVideo && videoCameras.length > 0) {
-      startVideoRefresh();
-    } else {
-      stopVideoRefresh();
-      if (!showVideo) setSnapshotSrc("");
-    }
-    return () => stopVideoRefresh();
-  }, [showVideo, videoCameras, currentCamIndex, startVideoRefresh, stopVideoRefresh]);
-
-  const loadPrivadaCameras = useCallback(async (privadaId: number, privadaName?: string) => {
-    const base = getProxyBase();
-    try {
-      const res = await fetch(`${base}?action=list_privada&privada_id=${privadaId}`, {
-        headers: { Accept: "application/json" },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.cameras?.length > 0) {
-          setVideoCameras(json.cameras);
-          setCurrentCamIndex(0);
-          setVideoPrivadaId(privadaId);
-          setVideoPrivadaName(privadaName || json.privada || `Privada ${privadaId}`);
-          setShowVideo(true);
-          return;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    setVideoCameras([]);
-  }, [getProxyBase]);
-
-  const lookupCallerAndShowVideo = useCallback(async (callerNumber: string) => {
-    const base = getProxyBase().replace("camera_proxy.php", "api_privada.php");
-    try {
-      const res = await fetch(`${base}?action=lookup_caller&telefono=${callerNumber}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.privada_id) {
-          await loadPrivadaCameras(json.privada_id, json.nombre);
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, [getProxyBase, loadPrivadaCameras]);
-
-  const toggleVideoPanel = useCallback(() => {
-    setShowVideo(prev => !prev);
-  }, []);
+  }, [getDtmfContext]);
 
   // -----------------------------------------------------------
   // Dialpad handler
   // -----------------------------------------------------------
   const dialpadPress = (digit: string) => {
+    playDtmfTone(digit); // async but fire-and-forget
     setDialNumber((prev) => prev + digit);
     if (inCall && sessionRef.current) {
       sessionRef.current.sendDTMF(digit);
@@ -922,7 +1110,6 @@ export default function AccesPhone({
       {/* Hidden audio elements - matching working softphone */}
       <audio ref={remoteAudioRef} autoPlay />
       <audio autoPlay muted /> {/* localAudio for local stream pipeline */}
-      <audio ref={ringtoneRef} src="/sounds/ringtone.wav" preload="auto" />
 
       {/* Floating phone widget */}
       <div className="fixed bottom-4 right-4 z-50">
@@ -938,7 +1125,17 @@ export default function AccesPhone({
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => {
+                    setShowSettings(true);
+                    // Enumerate microphones when settings open
+                    if (navigator.mediaDevices?.enumerateDevices) {
+                      navigator.mediaDevices.enumerateDevices()
+                        .then(devices => setAvailableMics(devices.filter(d => d.kind === "audioinput")))
+                        .catch(() => {});
+                    } else {
+                      console.warn("[AccesPhone] mediaDevices no disponible (requiere HTTPS)");
+                    }
+                  }}
                   className="p-1 rounded-md hover:bg-gray-700 transition"
                   title="Configuracion"
                 >
@@ -955,7 +1152,7 @@ export default function AccesPhone({
 
             {/* Status bar */}
             <div className={`px-4 py-1.5 border-b border-gray-200 text-xs flex items-center justify-between ${
-              reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-500"
+              reconnecting ? "bg-yellow-50 text-yellow-700" : "bg-gray-50 text-gray-700"
             }`}>
               <span className="flex items-center gap-1.5">
                 {reconnecting && <RefreshCw className="h-3 w-3 animate-spin" />}
@@ -993,11 +1190,16 @@ export default function AccesPhone({
                   ) : (
                     <PhoneOutgoing className="h-5 w-5 text-blue-600" />
                   )}
-                  <div>
+                  <div className="min-w-0 flex-1">
+                    {callInfo.callerLabel && (
+                      <div className="text-base font-extrabold text-green-800 truncate leading-tight">
+                        {callInfo.callerLabel}
+                      </div>
+                    )}
                     <div className="text-sm font-semibold text-gray-900">
                       {callInfo.number}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-700">
                       {ringing
                         ? "Llamada entrante..."
                         : callInfo.direction === "incoming"
@@ -1065,89 +1267,11 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Video/Camera Panel */}
-            {showVideo && (
-              <div className="border-b border-gray-200">
-                <div className="bg-gray-900 relative">
-                  {videoError ? (
-                    <div className="aspect-video flex items-center justify-center">
-                      <div className="text-center text-gray-400 text-xs">
-                        <span className="text-2xl block mb-1">&#128249;</span>
-                        Sin senal
-                      </div>
-                    </div>
-                  ) : snapshotSrc ? (
-                    <div className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        ref={snapshotImgRef}
-                        src={snapshotSrc}
-                        alt="Camara"
-                        className="w-full h-auto block"
-                        onError={() => setVideoError(true)}
-                      />
-                      <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                        LIVE
-                      </div>
-                      <div className="absolute top-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
-                        {videoCameras[currentCamIndex]?.name || "Camara"}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="aspect-video flex items-center justify-center">
-                      <RefreshCw className="h-5 w-5 animate-spin text-gray-500" />
-                    </div>
-                  )}
-                </div>
-                {/* Camera selector + privada info */}
-                <div className="bg-gray-50 px-2 py-1 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {videoCameras.map((cam, idx) => (
-                      <button
-                        key={cam.cam}
-                        onClick={() => { setCurrentCamIndex(idx); setVideoError(false); consecutiveErrorsRef.current = 0; }}
-                        className={`px-1.5 py-0.5 text-[10px] rounded transition ${
-                          idx === currentCamIndex
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 text-gray-600 hover:bg-gray-300"
-                        }`}
-                      >
-                        {cam.name}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={toggleVideoPanel}
-                    className="text-[10px] text-red-500 hover:text-red-700"
-                    title="Cerrar video"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                {videoPrivadaName && (
-                  <div className="bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700 text-center">
-                    {videoPrivadaName}
-                  </div>
-                )}
-              </div>
-            )}
-            {/* Video toggle button when panel is hidden */}
-            {!showVideo && videoCameras.length > 0 && (
-              <div className="px-3 py-1 border-b border-gray-200">
-                <button
-                  onClick={toggleVideoPanel}
-                  className="w-full text-xs text-blue-600 hover:text-blue-800 py-1 rounded hover:bg-blue-50 transition"
-                >
-                  &#128249; Mostrar video ({videoCameras.length} cam)
-                </button>
-              </div>
-            )}
-
-            {/* Dialpad - always visible when connected (sends DTMF during calls) */}
-            {connected && (
+            {/* Dialpad - visible when connected (both idle and in-call for DTMF) */}
+            {connected && !ringing && (
               <div className="p-3">
-                {!inCall && !ringing && (
+                {/* Number input and call button - only when not in call */}
+                {!inCall && (
                   <div className="flex gap-1 mb-2">
                     <input
                       type="text"
@@ -1168,10 +1292,9 @@ export default function AccesPhone({
                     </button>
                   </div>
                 )}
-                {inCall && !ringing && (
-                  <div className="text-center text-xs text-blue-600 font-medium mb-1">
-                    Teclado DTMF
-                  </div>
+                {/* DTMF label when in call */}
+                {inCall && (
+                  <p className="text-xs text-center text-blue-600 font-medium mb-1.5">Teclado DTMF</p>
                 )}
                 <div className="grid grid-cols-3 gap-1">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map(
@@ -1179,7 +1302,11 @@ export default function AccesPhone({
                       <button
                         key={d}
                         onClick={() => dialpadPress(d)}
-                        className="rounded-lg bg-gray-100 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition"
+                        className={`rounded-lg py-2 text-sm font-medium transition ${
+                          inCall
+                            ? "bg-blue-50 text-blue-800 hover:bg-blue-100 active:bg-blue-200"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
                       >
                         {d}
                       </button>
@@ -1189,15 +1316,51 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Connect/Disconnect button */}
+            {/* Action buttons: DND / AA / Disconnect */}
             <div className="px-3 pb-3">
               {connected ? (
-                <button
-                  onClick={disconnectSIP}
-                  className="w-full rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition"
-                >
-                  Desconectar
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {/* DND button */}
+                  <button
+                    onClick={() => {
+                      setDndActive(!dndActive);
+                      if (!dndActive) setAutoAnswerActive(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
+                      dndActive
+                        ? "bg-red-600 border-red-600 text-white"
+                        : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                    }`}
+                    title="No Disponible - rechaza llamadas entrantes"
+                  >
+                    <BellOff className="h-3.5 w-3.5" />
+                    DND
+                  </button>
+                  {/* AA button */}
+                  <button
+                    onClick={() => {
+                      setAutoAnswerActive(!autoAnswerActive);
+                      if (!autoAnswerActive) setDndActive(false);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
+                      autoAnswerActive
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                    }`}
+                    title="Auto Answer - contesta automaticamente"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    AA
+                  </button>
+                  {/* Disconnect button */}
+                  <button
+                    onClick={disconnectSIP}
+                    className="flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
+                    title="Desconectar SIP"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ) : reconnecting ? (
                 <button
                   onClick={() => {
@@ -1230,13 +1393,21 @@ export default function AccesPhone({
               ? "bg-green-500 animate-bounce"
               : inCall
                 ? "bg-blue-600"
-                : connected
-                  ? "bg-green-600"
-                  : "bg-gray-700"
+                : dndActive
+                  ? "bg-red-600"
+                  : autoAnswerActive
+                    ? "bg-blue-500"
+                    : connected
+                      ? "bg-green-600"
+                      : "bg-gray-700"
           } text-white hover:scale-105`}
         >
           {ringing ? (
             <PhoneIncoming className="h-6 w-6" />
+          ) : dndActive ? (
+            <BellOff className="h-6 w-6" />
+          ) : autoAnswerActive ? (
+            <Zap className="h-6 w-6" />
           ) : (
             <Phone className="h-6 w-6" />
           )}
@@ -1256,21 +1427,21 @@ export default function AccesPhone({
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowSettings(false)}
           />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Configuracion SIP
               </h2>
               <button
                 onClick={() => setShowSettings(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-3 overflow-y-auto flex-1">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Servidor WebSocket
                 </label>
                 <input
@@ -1284,7 +1455,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Extension
                 </label>
                 <input
@@ -1298,7 +1469,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Contrasena
                 </label>
                 <input
@@ -1311,7 +1482,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Dominio SIP
                 </label>
                 <input
@@ -1325,12 +1496,39 @@ export default function AccesPhone({
                 />
               </div>
 
-              {/* Separador - Configuracion de Video */}
+              {/* Separador - Audio */}
               <div className="border-t border-gray-200 pt-3 mt-3">
-                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Video / Camaras</p>
+                <p className="text-xs font-semibold text-gray-900 mb-2 uppercase tracking-wide">Audio</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Microfono
+                </label>
+                <select
+                  value={config.micDeviceId}
+                  onChange={(e) =>
+                    setConfig({ ...config, micDeviceId: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Default del navegador</option>
+                  {availableMics.map((mic) => (
+                    <option key={mic.deviceId} value={mic.deviceId}>
+                      {mic.label || `Mic ${mic.deviceId.substring(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-700 mt-1">
+                  Evite &quot;Stereo Mix&quot; - no es un microfono real
+                </p>
+              </div>
+
+              {/* Separador - Configuracion de Video */}
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <p className="text-xs font-semibold text-gray-900 mb-2 uppercase tracking-wide">Video / Camaras</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   URL Proxy Camaras
                 </label>
                 <input
@@ -1344,7 +1542,7 @@ export default function AccesPhone({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-gray-900 mb-1">
                   Refresh (ms)
                 </label>
                 <input
@@ -1369,7 +1567,7 @@ export default function AccesPhone({
                   }
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="videoAutoOnCall" className="text-sm text-gray-700">
+                <label htmlFor="videoAutoOnCall" className="text-sm text-gray-900">
                   Video automatico en llamadas
                 </label>
               </div>
@@ -1377,7 +1575,7 @@ export default function AccesPhone({
             <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
               <button
                 onClick={() => setShowSettings(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
               >
                 Cancelar
               </button>

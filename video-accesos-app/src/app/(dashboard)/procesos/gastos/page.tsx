@@ -164,7 +164,7 @@ export default function GastosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-          <p className="text-gray-500 mt-1">Registro de gastos por privada</p>
+          <p className="text-gray-700 mt-1">Registro de gastos por privada</p>
         </div>
         <button
           onClick={openCreate}
@@ -232,13 +232,13 @@ export default function GastosPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-gray-400">
+                <td colSpan={7} className="text-center py-8 text-gray-600">
                   Cargando...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-gray-400">
+                <td colSpan={7} className="text-center py-8 text-gray-600">
                   No se encontraron gastos
                 </td>
               </tr>
@@ -307,7 +307,7 @@ export default function GastosPage() {
       {/* Paginación */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Total: {total} registros</p>
+          <p className="text-sm text-gray-700">Total: {total} registros</p>
           <div className="flex gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -339,7 +339,7 @@ export default function GastosPage() {
                 {editing ? "Editar Gasto" : "Nuevo Gasto"}
               </h2>
               <button onClick={() => setShowModal(false)}>
-                <X className="h-5 w-5 text-gray-400" />
+                <X className="h-5 w-5 text-gray-600" />
               </button>
             </div>
             {error && (

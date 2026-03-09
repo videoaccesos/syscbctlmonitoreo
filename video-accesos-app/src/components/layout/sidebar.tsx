@@ -5,23 +5,15 @@ import { usePathname } from "next/navigation";
 import {
   Shield,
   Building2,
-  Home,
-  Users,
-  CreditCard,
   ClipboardList,
-  Wrench,
-  Phone,
-  DollarSign,
   BarChart3,
-  Settings,
-  UserCog,
   KeyRound,
   ChevronDown,
   LogOut,
   Monitor,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface NavItem {
   label: string;
@@ -30,10 +22,16 @@ interface NavItem {
   children?: { label: string; href: string }[];
 }
 
-const navigation: NavItem[] = [
+/** Menu completo del sistema. Se filtra segun permisos del usuario. */
+const fullNavigation: NavItem[] = [
   {
     label: "Inicio",
     href: "/",
+    icon: <Monitor className="h-5 w-5" />,
+  },
+  {
+    label: "Terminal de Monitoreo",
+    href: "/procesos/monitoristas",
     icon: <Monitor className="h-5 w-5" />,
   },
   {
@@ -82,9 +80,70 @@ const navigation: NavItem[] = [
   },
 ];
 
+interface PermisosResponse {
+  isAdmin: boolean;
+  grupos: { id: number; nombre: string; estatusId: number }[];
+  rutasAutorizadas: string[];
+  ramaNombres: string[];
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+  const [permisos, setPermisos] = useState<PermisosResponse | null>(null);
+
+  useEffect(() => {
+    fetch("/api/seguridad/mis-permisos")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: PermisosResponse | null) => {
+        if (data) {
+          setPermisos(data);
+          console.log(
+            `[Sidebar] Permisos cargados - Admin: ${data.isAdmin}, Grupos: [${data.grupos.map((g) => g.nombre).join(", ")}], Ramas: [${data.ramaNombres.join(", ")}]`
+          );
+        }
+      })
+      .catch(() => console.error("[Sidebar] Error al cargar permisos"));
+  }, []);
+
+  // Filtrar navegacion segun permisos
+  const navigation = (() => {
+    // Mientras cargan los permisos, solo mostrar Inicio
+    if (!permisos) {
+      return fullNavigation.filter((item) => item.label === "Inicio");
+    }
+
+    // Admin ve todo
+    if (permisos.isAdmin) {
+      return fullNavigation;
+    }
+
+    // Construir set de rutas autorizadas
+    const rutasAuth = new Set(permisos.rutasAutorizadas);
+
+    return fullNavigation
+      .map((item) => {
+        // Inicio siempre visible
+        if (item.label === "Inicio") return item;
+
+        // Items con href directo
+        if (item.href) {
+          return rutasAuth.has(item.href) ? item : null;
+        }
+
+        // Items con children: filtrar hijos
+        if (item.children) {
+          const filteredChildren = item.children.filter((child) =>
+            rutasAuth.has(child.href)
+          );
+          if (filteredChildren.length === 0) return null;
+          return { ...item, children: filteredChildren };
+        }
+
+        return null;
+      })
+      .filter(Boolean) as NavItem[];
+  })();
 
   const toggleMenu = (label: string) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -109,8 +168,8 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      {/* Navigation - pb-80 reserves space at bottom for the floating softphone */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto pb-80">
         {navigation.map((item) => {
           if (item.href) {
             return (
@@ -172,18 +231,18 @@ export function Sidebar() {
             </div>
           );
         })}
-      </nav>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-slate-700">
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition"
-        >
-          <LogOut className="h-5 w-5" />
-          Cerrar Sesión
-        </button>
-      </div>
+        {/* Logout - inside scrollable nav so softphone doesn't cover it */}
+        <div className="mt-4 pt-3 border-t border-slate-700">
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition"
+          >
+            <LogOut className="h-5 w-5" />
+            Cerrar Sesión
+          </button>
+        </div>
+      </nav>
     </aside>
   );
 }

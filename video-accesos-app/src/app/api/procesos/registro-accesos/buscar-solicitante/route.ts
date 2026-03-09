@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/procesos/registro-accesos/buscar-solicitante
-// Busca solicitantes en las 3 tablas: residentes, visitantes y registros generales
+// Busca solicitantes en visitantes y registros generales
+// Los residentes NO se incluyen aquí: el monitorista los coteja
+// desde la sección de residentes de la residencia seleccionada
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,8 +16,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") || "";
-    const residenciaId = searchParams.get("residenciaId");
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     if (!q || q.length < 1) {
       return NextResponse.json({ data: [] });
@@ -24,64 +25,49 @@ export async function GET(request: NextRequest) {
     const results: Array<{
       id: string;
       nombre: string;
-      tipo: "R" | "V" | "G";
+      nombrePila: string;
+      apePaterno: string;
+      apeMaterno: string;
+      tipo: "V" | "G";
       tipoLabel: string;
       celular: string;
       observaciones: string;
     }> = [];
 
-    // 1. Buscar en residentes
-    const residenteWhere: Record<string, unknown> = {
-      estatusId: 1,
-      OR: [
-        { nombre: { contains: q } },
-        { apePaterno: { contains: q } },
-        { apeMaterno: { contains: q } },
-      ],
+    // Separar el texto de búsqueda en palabras para buscar cada una
+    const palabras = q.trim().split(/\s+/).filter(Boolean);
+
+    // Construir condición: cada palabra debe coincidir en al menos un campo
+    const buildSearchCondition = (words: string[]) => {
+      if (words.length <= 1) {
+        return {
+          OR: [
+            { nombre: { contains: q } },
+            { apePaterno: { contains: q } },
+            { apeMaterno: { contains: q } },
+          ],
+        };
+      }
+      // Para múltiples palabras: cada palabra debe estar en algún campo (AND de ORs)
+      return {
+        AND: words.map((word) => ({
+          OR: [
+            { nombre: { contains: word } },
+            { apePaterno: { contains: word } },
+            { apeMaterno: { contains: word } },
+          ],
+        })),
+      };
     };
-    if (residenciaId) {
-      residenteWhere.residenciaId = parseInt(residenciaId, 10);
-    }
 
-    const residentes = await prisma.residente.findMany({
-      where: residenteWhere,
-      select: {
-        id: true,
-        nombre: true,
-        apePaterno: true,
-        apeMaterno: true,
-        celular: true,
-      },
-      take: limit,
-      orderBy: { apePaterno: "asc" },
-    });
+    const searchCondition = buildSearchCondition(palabras);
 
-    for (const r of residentes) {
-      results.push({
-        id: r.id,
-        nombre: `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim(),
-        tipo: "R",
-        tipoLabel: "Residente",
-        celular: r.celular || "",
-        observaciones: "",
-      });
-    }
-
-    // 2. Buscar en visitantes
-    const visitanteWhere: Record<string, unknown> = {
-      estatusId: 1,
-      OR: [
-        { nombre: { contains: q } },
-        { apePaterno: { contains: q } },
-        { apeMaterno: { contains: q } },
-      ],
-    };
-    if (residenciaId) {
-      visitanteWhere.residenciaId = parseInt(residenciaId, 10);
-    }
-
+    // 1. Buscar en visitantes (sin filtro de residencia - es solo autocompletado)
     const visitantes = await prisma.visita.findMany({
-      where: visitanteWhere,
+      where: {
+        estatusId: 1,
+        ...searchCondition,
+      },
       select: {
         id: true,
         nombre: true,
@@ -98,6 +84,9 @@ export async function GET(request: NextRequest) {
       results.push({
         id: v.id,
         nombre: `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim(),
+        nombrePila: v.nombre || "",
+        apePaterno: v.apePaterno || "",
+        apeMaterno: v.apeMaterno || "",
         tipo: "V",
         tipoLabel: "Visitante",
         celular: v.celular || "",
@@ -105,16 +94,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Buscar en registros generales (tabla puede no existir aun)
+    // 2. Buscar en registros generales (tabla puede no existir aun)
     try {
       const generales = await prisma.registroGeneral.findMany({
         where: {
           estatusId: 1,
-          OR: [
-            { nombre: { contains: q } },
-            { apePaterno: { contains: q } },
-            { apeMaterno: { contains: q } },
-          ],
+          ...searchCondition,
         },
         select: {
           id: true,
@@ -132,6 +117,9 @@ export async function GET(request: NextRequest) {
         results.push({
           id: g.id,
           nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
+          nombrePila: g.nombre || "",
+          apePaterno: g.apePaterno || "",
+          apeMaterno: g.apeMaterno || "",
           tipo: "G",
           tipoLabel: "General",
           celular: g.celular || "",

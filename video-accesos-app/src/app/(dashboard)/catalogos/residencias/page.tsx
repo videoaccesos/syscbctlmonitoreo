@@ -438,7 +438,7 @@ export default function ResidenciasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Residencias</h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-700 mt-1">
             Administración de residencias por privada
           </p>
         </div>
@@ -463,7 +463,7 @@ export default function ResidenciasPage() {
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Búsqueda */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por # casa o calle..."
@@ -529,14 +529,14 @@ export default function ResidenciasPage() {
                 <tr>
                   <td colSpan={9} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
-                    <p className="text-gray-400 mt-2 text-sm">Cargando...</p>
+                    <p className="text-gray-600 mt-2 text-sm">Cargando...</p>
                   </td>
                 </tr>
               ) : residencias.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="text-center py-12">
-                    <Home className="h-8 w-8 text-gray-300 mx-auto" />
-                    <p className="text-gray-400 mt-2">
+                    <Home className="h-8 w-8 text-gray-500 mx-auto" />
+                    <p className="text-gray-600 mt-2">
                       No se encontraron residencias
                     </p>
                   </td>
@@ -565,9 +565,9 @@ export default function ResidenciasPage() {
                             title={isExpanded ? "Contraer" : "Ver residentes y tarjetas"}
                           >
                             {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-gray-500" />
+                              <ChevronUp className="h-4 w-4 text-gray-700" />
                             ) : (
-                              <ChevronDown className="h-4 w-4 text-gray-500" />
+                              <ChevronDown className="h-4 w-4 text-gray-700" />
                             )}
                           </button>
                         </td>
@@ -601,7 +601,7 @@ export default function ResidenciasPage() {
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => openEdit(r)}
-                              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              className="p-1.5 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                               title="Editar"
                             >
                               <Pencil className="h-4 w-4" />
@@ -624,7 +624,7 @@ export default function ResidenciasPage() {
                             ) : (
                               <button
                                 onClick={() => setDeleteConfirm(r.id)}
-                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                className="p-1.5 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                                 title="Eliminar"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -652,14 +652,14 @@ export default function ResidenciasPage() {
                                 </button>
                               </div>
                               {residenteCount === 0 ? (
-                                <p className="text-gray-400 text-sm text-center py-2">
+                                <p className="text-gray-600 text-sm text-center py-2">
                                   No hay residentes registrados en esta residencia
                                 </p>
                               ) : (
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-sm">
                                     <thead>
-                                      <tr className="text-xs text-gray-500 border-b border-gray-200">
+                                      <tr className="text-xs text-gray-700 border-b border-gray-200">
                                         <th className="text-left py-2 px-3 font-medium">Nombre</th>
                                         <th className="text-left py-2 px-3 font-medium">Celular</th>
                                         <th className="text-left py-2 px-3 font-medium">Email</th>
@@ -710,7 +710,7 @@ export default function ResidenciasPage() {
                                             </td>
                                             <td className="py-2 px-3">
                                               {allTarjetas.length === 0 ? (
-                                                <span className="text-gray-400 text-xs">
+                                                <span className="text-gray-600 text-xs">
                                                   Sin tarjetas
                                                 </span>
                                               ) : (
@@ -733,7 +733,7 @@ export default function ResidenciasPage() {
                                               <div className="flex items-center justify-center gap-1">
                                                 <button
                                                   onClick={() => openEditResidente(res, r.id)}
-                                                  className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                                  className="p-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded transition"
                                                   title="Editar residente"
                                                 >
                                                   <Pencil className="h-3.5 w-3.5" />
@@ -756,7 +756,7 @@ export default function ResidenciasPage() {
                                                 ) : (
                                                   <button
                                                     onClick={() => setDeleteResidenteConfirm(res.id)}
-                                                    className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                                    className="p-1 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded transition"
                                                     title="Dar de baja"
                                                   >
                                                     <Trash2 className="h-3.5 w-3.5" />
@@ -844,7 +844,7 @@ export default function ResidenciasPage() {
               </h2>
               <button
                 onClick={closeModal}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                className="p-1.5 text-gray-600 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1025,14 +1025,14 @@ export default function ResidenciasPage() {
                   </div>
 
                   {(!editing.residentes || editing.residentes.length === 0) ? (
-                    <p className="text-gray-400 text-sm text-center py-3 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600 text-sm text-center py-3 bg-gray-50 rounded-lg">
                       No hay residentes registrados. Usa el boton de arriba para agregar.
                     </p>
                   ) : (
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-gray-50 text-xs text-gray-500 border-b border-gray-200">
+                          <tr className="bg-gray-50 text-xs text-gray-700 border-b border-gray-200">
                             <th className="text-left py-2 px-3 font-medium">Nombre</th>
                             <th className="text-left py-2 px-3 font-medium">Celular</th>
                             <th className="text-left py-2 px-3 font-medium">Email</th>
@@ -1067,7 +1067,7 @@ export default function ResidenciasPage() {
                                 <div className="flex items-center justify-center gap-1">
                                   <button
                                     onClick={() => openEditResidente(res, editing.id)}
-                                    className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                                    className="p-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded transition"
                                     title="Editar residente"
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
@@ -1090,7 +1090,7 @@ export default function ResidenciasPage() {
                                   ) : (
                                     <button
                                       onClick={() => setDeleteResidenteConfirm(res.id)}
-                                      className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                      className="p-1 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded transition"
                                       title="Dar de baja"
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
@@ -1142,7 +1142,7 @@ export default function ResidenciasPage() {
               </h2>
               <button
                 onClick={closeResidenteModal}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                className="p-1.5 text-gray-600 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>

@@ -193,7 +193,7 @@ export default function FallasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Fallas</h1>
-          <p className="text-sm text-gray-500">Administracion del catalogo de fallas</p>
+          <p className="text-sm text-gray-700">Administracion del catalogo de fallas</p>
         </div>
         <button
           onClick={openCreate}
@@ -208,7 +208,7 @@ export default function FallasPage() {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por codigo o descripcion..."
@@ -251,20 +251,20 @@ export default function FallasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12 text-gray-400">
+                  <td colSpan={5} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12 text-gray-400">
+                  <td colSpan={5} className="text-center py-12 text-gray-600">
                     No se encontraron fallas
                   </td>
                 </tr>
               ) : (
                 items.map((item, idx) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-gray-700">
                       {(page - 1) * pageSize + idx + 1}
                     </td>
                     <td className="px-4 py-3 font-mono text-gray-700">
@@ -349,7 +349,7 @@ export default function FallasPage() {
                 {editing ? "Editar Falla" : "Nueva Falla"}
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 

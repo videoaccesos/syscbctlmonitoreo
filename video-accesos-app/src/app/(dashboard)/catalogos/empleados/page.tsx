@@ -102,6 +102,7 @@ export default function EmpleadosPage() {
 
   // UI state
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"activos" | "bajas" | "todos">("activos");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -122,6 +123,7 @@ export default function EmpleadosPage() {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        estatus: statusFilter,
       });
       if (search) params.set("search", search);
 
@@ -136,7 +138,7 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   // -----------------------------------------------------------
   // Fetch puestos (for dropdown)
@@ -322,7 +324,7 @@ export default function EmpleadosPage() {
             <Users className="h-7 w-7 text-blue-600" />
             Empleados
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">
+          <p className="text-gray-700 mt-1 text-sm">
             Gestiona el catalogo de empleados del sistema
           </p>
         </div>
@@ -335,10 +337,10 @@ export default function EmpleadosPage() {
         </button>
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      {/* Search bar + status filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
           <input
             type="text"
             placeholder="Buscar por nombre, apellidos o nro. operador..."
@@ -349,8 +351,28 @@ export default function EmpleadosPage() {
             }}
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
+        </form>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+          {([
+            { value: "activos", label: "Activos" },
+            { value: "todos", label: "Todos" },
+            { value: "bajas", label: "Bajas" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { setStatusFilter(opt.value); setPage(1); }}
+              className={`px-3 py-2 font-medium transition ${
+                statusFilter === opt.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
-      </form>
+      </div>
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -386,14 +408,14 @@ export default function EmpleadosPage() {
                 <tr>
                   <td colSpan={7} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : empleados.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="text-center py-12 text-gray-400 text-sm"
+                    className="text-center py-12 text-gray-600 text-sm"
                   >
                     No se encontraron empleados
                   </td>
@@ -431,7 +453,7 @@ export default function EmpleadosPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => openEditModal(emp)}
-                          className="p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                          className="p-1.5 rounded-md text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition"
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
@@ -439,7 +461,7 @@ export default function EmpleadosPage() {
                         {emp.estatusId === 1 && (
                           <button
                             onClick={() => openDeleteModal(emp)}
-                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-md text-gray-700 hover:text-red-600 hover:bg-red-50 transition"
                             title="Dar de baja"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -511,7 +533,7 @@ export default function EmpleadosPage() {
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                className="p-1.5 rounded-md text-gray-600 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <X className="h-5 w-5" />
               </button>

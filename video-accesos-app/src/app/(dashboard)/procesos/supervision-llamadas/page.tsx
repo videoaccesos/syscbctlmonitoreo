@@ -277,7 +277,7 @@ export default function SupervisionLlamadasPage() {
     return (
       <span
         className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${
-          isTrue ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400"
+          isTrue ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
         }`}
       >
         {isTrue ? <Check className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
@@ -297,7 +297,7 @@ export default function SupervisionLlamadasPage() {
             <Phone className="h-7 w-7 text-blue-600" />
             Supervision de Llamadas
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-700 mt-1">
             Evaluacion de calidad en la atencion de llamadas
           </p>
         </div>
@@ -367,12 +367,12 @@ export default function SupervisionLlamadasPage() {
                 <tr>
                   <td colSpan={12} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-400">
+                  <td colSpan={12} className="text-center py-12 text-gray-600">
                     No se encontraron supervisiones
                   </td>
                 </tr>
@@ -387,7 +387,7 @@ export default function SupervisionLlamadasPage() {
                         {item.registroAcceso?.empleado?.nombre || ""}{" "}
                         {item.registroAcceso?.empleado?.apePaterno || ""}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-700">
                         Op. {item.registroAcceso?.empleado?.nroOperador || "-"}
                       </div>
                     </td>
@@ -459,7 +459,7 @@ export default function SupervisionLlamadasPage() {
                 Nueva Supervision de Llamada
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
@@ -477,7 +477,7 @@ export default function SupervisionLlamadasPage() {
                   Registro de Acceso <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
                   <input
                     type="text"
                     placeholder="Buscar por ID, observaciones..."
@@ -491,7 +491,7 @@ export default function SupervisionLlamadasPage() {
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   {searchingAccesos && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-600" />
                   )}
 
                   {/* Resultados */}
@@ -508,7 +508,7 @@ export default function SupervisionLlamadasPage() {
                             #{a.id} - {a.privada?.descripcion || ""} - Casa{" "}
                             {a.residencia?.nroCasa || ""}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-700">
                             Op. {a.empleado?.nroOperador || "-"} |{" "}
                             {fmtDateTime(a.fechaModificacion)} | {a.observaciones || "Sin obs."}
                           </div>

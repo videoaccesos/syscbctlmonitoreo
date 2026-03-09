@@ -311,7 +311,7 @@ export default function PrivadasPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Privadas</h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-700">
               Administracion de privadas / fraccionamientos
             </p>
           </div>
@@ -329,7 +329,7 @@ export default function PrivadasPage() {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por descripcion..."
@@ -386,13 +386,13 @@ export default function PrivadasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : privadas.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-gray-600">
                     No se encontraron privadas
                   </td>
                 </tr>
@@ -483,7 +483,7 @@ export default function PrivadasPage() {
                 {editing ? "Editar Privada" : "Nueva Privada"}
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
@@ -655,21 +655,21 @@ export default function PrivadasPage() {
                 <legend className="text-sm font-semibold text-gray-700 px-2">DNS 1</legend>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <label className="block text-xs text-gray-700 mb-1">DNS</label>
                     <input type="text" maxLength={100} value={form.dns1} onChange={(e) => setField("dns1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <label className="block text-xs text-gray-700 mb-1">Puerto</label>
                     <input type="text" maxLength={5} value={form.puerto1} onChange={(e) => setField("puerto1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <label className="block text-xs text-gray-700 mb-1">Alias</label>
                     <input type="text" maxLength={100} value={form.alias1} onChange={(e) => setField("alias1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <label className="block text-xs text-gray-700 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta1} onChange={(e) => setField("tipoTarjeta1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                       <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
@@ -677,7 +677,7 @@ export default function PrivadasPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <label className="block text-xs text-gray-700 mb-1">Contrasena</label>
                     <input type="password" maxLength={100} value={form.contrasena1} onChange={(e) => setField("contrasena1", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>
@@ -688,21 +688,21 @@ export default function PrivadasPage() {
                 <legend className="text-sm font-semibold text-gray-700 px-2">DNS 2</legend>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <label className="block text-xs text-gray-700 mb-1">DNS</label>
                     <input type="text" maxLength={100} value={form.dns2} onChange={(e) => setField("dns2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <label className="block text-xs text-gray-700 mb-1">Puerto</label>
                     <input type="text" maxLength={5} value={form.puerto2} onChange={(e) => setField("puerto2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <label className="block text-xs text-gray-700 mb-1">Alias</label>
                     <input type="text" maxLength={100} value={form.alias2} onChange={(e) => setField("alias2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <label className="block text-xs text-gray-700 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta2} onChange={(e) => setField("tipoTarjeta2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                       <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
@@ -710,7 +710,7 @@ export default function PrivadasPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <label className="block text-xs text-gray-700 mb-1">Contrasena</label>
                     <input type="password" maxLength={100} value={form.contrasena2} onChange={(e) => setField("contrasena2", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>
@@ -721,21 +721,21 @@ export default function PrivadasPage() {
                 <legend className="text-sm font-semibold text-gray-700 px-2">DNS 3</legend>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">DNS</label>
+                    <label className="block text-xs text-gray-700 mb-1">DNS</label>
                     <input type="text" maxLength={100} value={form.dns3} onChange={(e) => setField("dns3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Puerto</label>
+                    <label className="block text-xs text-gray-700 mb-1">Puerto</label>
                     <input type="text" maxLength={5} value={form.puerto3} onChange={(e) => setField("puerto3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <label className="block text-xs text-gray-700 mb-1">Alias</label>
                     <input type="text" maxLength={100} value={form.alias3} onChange={(e) => setField("alias3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Tipo Tarjeta</label>
+                    <label className="block text-xs text-gray-700 mb-1">Tipo Tarjeta</label>
                     <select value={form.tipoTarjeta3} onChange={(e) => setField("tipoTarjeta3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                       <option value="">--</option>
                       <option value="Tarjeta 1">Tarjeta 1</option>
@@ -743,7 +743,7 @@ export default function PrivadasPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Contrasena</label>
+                    <label className="block text-xs text-gray-700 mb-1">Contrasena</label>
                     <input type="password" maxLength={100} value={form.contrasena3} onChange={(e) => setField("contrasena3", e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                   </div>
                 </div>

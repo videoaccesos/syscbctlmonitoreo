@@ -387,7 +387,7 @@ export default function AsignacionTarjetasPage() {
             <CreditCard className="h-7 w-7 text-blue-600" />
             Asignacion de Tarjetas
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-700 mt-1">
             Gestiona la asignacion de tarjetas de acceso a residentes
           </p>
         </div>
@@ -404,7 +404,7 @@ export default function AsignacionTarjetasPage() {
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
               placeholder="Buscar por nombre de residente..."
@@ -488,12 +488,12 @@ export default function AsignacionTarjetasPage() {
                 <tr>
                   <td colSpan={8} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                    <p className="text-gray-400 text-sm mt-2">Cargando...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     No se encontraron asignaciones
                   </td>
                 </tr>
@@ -504,7 +504,7 @@ export default function AsignacionTarjetasPage() {
                       <div className="font-mono font-medium text-gray-900">
                         {item.tarjeta?.lectura || item.tarjetaId || "-"}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-700">
                         {item.tarjeta ? (TIPO_TARJETA[item.tarjeta.tipoId] || "") : ""}
                       </div>
                     </td>
@@ -593,7 +593,7 @@ export default function AsignacionTarjetasPage() {
                 Nueva Asignacion de Tarjeta
               </h2>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100 transition">
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-700" />
               </button>
             </div>
 
@@ -611,7 +611,7 @@ export default function AsignacionTarjetasPage() {
                   Tarjeta <span className="text-red-500">*</span>
                 </label>
                 {loadingTarjetas ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
                     <Loader2 className="h-4 w-4 animate-spin" /> Cargando tarjetas...
                   </div>
                 ) : (
@@ -649,7 +649,7 @@ export default function AsignacionTarjetasPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   {searchingResidentes && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-600" />
                   )}
 
                   {/* Resultados de busqueda */}
@@ -665,7 +665,7 @@ export default function AsignacionTarjetasPage() {
                           <div className="font-medium text-gray-900">
                             {r.apePaterno} {r.apeMaterno} {r.nombre}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-700">
                             {r.residencia?.privada?.descripcion || ""} - Casa #{r.residencia?.nroCasa || ""}
                           </div>
                         </button>

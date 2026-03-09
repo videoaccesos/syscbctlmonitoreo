@@ -1,0 +1,159 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
+
+const TAG = "camera-lookup";
+
+const privadaSelect = {
+  id: true,
+  descripcion: true,
+  telefono: true,
+  video1: true,
+  aliasVideo1: true,
+  video2: true,
+  aliasVideo2: true,
+  video3: true,
+  aliasVideo3: true,
+  dns1: true,
+  puerto1: true,
+  contrasena1: true,
+  dns2: true,
+  puerto2: true,
+  contrasena2: true,
+  dns3: true,
+  puerto3: true,
+  contrasena3: true,
+};
+
+// GET /api/camera-proxy/lookup?telefono=XXX
+// Busca la privada por telefono y devuelve las camaras configuradas (video_1, video_2, video_3)
+export async function GET(request: NextRequest) {
+  try {
+    logger.info(TAG, "Inicio de busqueda de camaras", { url: request.url });
+
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      logger.warn(TAG, "Solicitud sin sesion activa (401)");
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    logger.info(TAG, "Sesion activa", { user: session.user?.email || session.user?.name || "desconocido" });
+
+    const { searchParams } = new URL(request.url);
+    const telefono = searchParams.get("telefono");
+    const privadaId = searchParams.get("privada_id");
+
+    logger.info(TAG, "Parametros de busqueda", { telefono, privadaId });
+
+    if (!telefono && !privadaId) {
+      logger.warn(TAG, "Busqueda sin parametros (telefono ni privada_id)");
+      return NextResponse.json(
+        { error: "Se requiere telefono o privada_id" },
+        { status: 400 }
+      );
+    }
+
+    let privada;
+
+    if (privadaId) {
+      // Busqueda directa por ID
+      logger.info(TAG, `Buscando privada por ID: ${privadaId}`);
+      privada = await prisma.privada.findFirst({
+        where: { id: parseInt(privadaId), estatusId: { in: [1, 2] } },
+        select: privadaSelect,
+      });
+      logger.info(TAG, privada ? `Privada encontrada: ${privada.descripcion} (ID:${privada.id})` : `Privada ID ${privadaId} NO encontrada o inactiva`);
+    } else if (telefono) {
+      const cleanNumber = telefono.replace(/\D/g, "");
+      const last10 = cleanNumber.length > 10 ? cleanNumber.slice(-10) : null;
+      const numberVariants = [cleanNumber, telefono];
+      if (last10) numberVariants.push(last10);
+
+      // 1. Buscar directamente en privada por telefono/celular
+      privada = await prisma.privada.findFirst({
+        where: {
+          estatusId: { in: [1, 2] },
+          OR: numberVariants.flatMap((num) => [
+            { telefono: num },
+            { celular: num },
+          ]),
+        },
+        select: privadaSelect,
+      });
+
+      // 2. Si no se encuentra, buscar via residencia (telefonoInterfon, interfon, telefono1, telefono2)
+      if (!privada) {
+        const residencia = await prisma.residencia.findFirst({
+          where: {
+            estatusId: { in: [1, 2, 3] },
+            OR: numberVariants.flatMap((num) => [
+              { telefonoInterfon: num },
+              { interfon: num },
+              { telefono1: num },
+              { telefono2: num },
+            ]),
+          },
+          select: { privadaId: true },
+        });
+
+        if (residencia) {
+          privada = await prisma.privada.findFirst({
+            where: { id: residencia.privadaId, estatusId: { in: [1, 2] } },
+            select: privadaSelect,
+          });
+        }
+      }
+    }
+
+    if (!privada) {
+      logger.warn(TAG, "Privada no encontrada", { telefono, privadaId });
+      return NextResponse.json(
+        { found: false, message: "No se encontro privada con ese telefono" },
+        { status: 200 }
+      );
+    }
+
+    // Construir lista de camaras disponibles (sin exponer URLs ni credenciales)
+    logger.info(TAG, `Privada ${privada.descripcion}: video1="${privada.video1}", video2="${privada.video2}", video3="${privada.video3}", dns1="${privada.dns1}", dns2="${privada.dns2}", dns3="${privada.dns3}"`);
+    const cameras = [];
+    if (privada.video1 && privada.video1.trim() !== "") {
+      cameras.push({
+        index: 1,
+        alias: privada.aliasVideo1 || "Camara 1",
+        available: true,
+      });
+    }
+    if (privada.video2 && privada.video2.trim() !== "") {
+      cameras.push({
+        index: 2,
+        alias: privada.aliasVideo2 || "Camara 2",
+        available: true,
+      });
+    }
+    if (privada.video3 && privada.video3.trim() !== "") {
+      cameras.push({
+        index: 3,
+        alias: privada.aliasVideo3 || "Camara 3",
+        available: true,
+      });
+    }
+
+    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas`, { privada_id: privada.id, privada: privada.descripcion, cameras });
+
+    return NextResponse.json({
+      found: true,
+      privada_id: privada.id,
+      privada: privada.descripcion,
+      cameras,
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errStack = error instanceof Error ? error.stack : undefined;
+    logger.error(TAG, "Error al buscar camaras", { message: errMsg, stack: errStack, telefono: request.url });
+    return NextResponse.json(
+      { error: "Error al buscar camaras", detail: errMsg },
+      { status: 500 }
+    );
+  }
+}
