@@ -117,6 +117,15 @@ export default function AccesPhone({
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
 
+  // Video/camera state
+  const [showVideo, setShowVideo] = useState(false);
+  const [videoCameras, setVideoCameras] = useState<{cam: number; name: string; channel?: string}[]>([]);
+  const [currentCamIndex, setCurrentCamIndex] = useState(0);
+  const [snapshotSrc, setSnapshotSrc] = useState("");
+  const [videoPrivadaId, setVideoPrivadaId] = useState(0);
+  const [videoPrivadaName, setVideoPrivadaName] = useState("");
+  const [videoError, setVideoError] = useState(false);
+
   // Refs
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
@@ -127,6 +136,9 @@ export default function AccesPhone({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
+  const videoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapshotImgRef = useRef<HTMLImageElement | null>(null);
+  const consecutiveErrorsRef = useRef(0);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -481,6 +493,11 @@ export default function AccesPhone({
           // Notify parent about incoming call
           onIncomingCallRef.current?.(callerNumber);
 
+          // Auto-show video on incoming call - lookup caller's privada
+          if (configRef.current.videoAutoOnCall) {
+            lookupCallerAndShowVideo(callerNumber);
+          }
+
           // Play ringtone
           if (ringtoneRef.current) {
             ringtoneRef.current.loop = true;
@@ -758,6 +775,130 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
+  // Video/Camera functions
+  // -----------------------------------------------------------
+  const getProxyBase = useCallback(() => {
+    const url = configRef.current.cameraProxyUrl;
+    // If relative, prefix with softphone path
+    if (!url.startsWith("http") && !url.startsWith("/")) {
+      return "/syscbctlmonitoreo/softphone/" + url;
+    }
+    return url;
+  }, []);
+
+  const stopVideoRefresh = useCallback(() => {
+    if (videoIntervalRef.current) {
+      clearInterval(videoIntervalRef.current);
+      videoIntervalRef.current = null;
+    }
+  }, []);
+
+  const startVideoRefresh = useCallback(() => {
+    stopVideoRefresh();
+    consecutiveErrorsRef.current = 0;
+    setVideoError(false);
+
+    const refresh = () => {
+      if (!mountedRef.current) return;
+      const cameras = videoCameras;
+      const camIdx = currentCamIndex;
+      if (cameras.length === 0) return;
+
+      const cam = cameras[camIdx] || cameras[0];
+      const base = getProxyBase();
+      let src: string;
+
+      if (videoPrivadaId > 0) {
+        src = `${base}?privada_id=${videoPrivadaId}&cam=${cam.cam}&_t=${Date.now()}`;
+      } else if (cam.channel) {
+        src = `${base}?channel=${cam.channel}&_t=${Date.now()}`;
+      } else {
+        return;
+      }
+
+      const pre = new Image();
+      pre.onload = () => {
+        if (mountedRef.current) {
+          setSnapshotSrc(src);
+          setVideoError(false);
+          consecutiveErrorsRef.current = 0;
+        }
+      };
+      pre.onerror = () => {
+        consecutiveErrorsRef.current++;
+        if (consecutiveErrorsRef.current >= 5) {
+          setVideoError(true);
+          stopVideoRefresh();
+          setTimeout(() => {
+            if (mountedRef.current && showVideo) {
+              consecutiveErrorsRef.current = 0;
+              startVideoRefresh();
+            }
+          }, 3000);
+        }
+      };
+      pre.src = src;
+    };
+
+    refresh();
+    videoIntervalRef.current = setInterval(refresh, configRef.current.cameraRefreshMs || 500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoCameras, currentCamIndex, videoPrivadaId, showVideo, getProxyBase, stopVideoRefresh]);
+
+  // Start/stop video refresh when showVideo or cameras change
+  useEffect(() => {
+    if (showVideo && videoCameras.length > 0) {
+      startVideoRefresh();
+    } else {
+      stopVideoRefresh();
+      if (!showVideo) setSnapshotSrc("");
+    }
+    return () => stopVideoRefresh();
+  }, [showVideo, videoCameras, currentCamIndex, startVideoRefresh, stopVideoRefresh]);
+
+  const loadPrivadaCameras = useCallback(async (privadaId: number, privadaName?: string) => {
+    const base = getProxyBase();
+    try {
+      const res = await fetch(`${base}?action=list_privada&privada_id=${privadaId}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.cameras?.length > 0) {
+          setVideoCameras(json.cameras);
+          setCurrentCamIndex(0);
+          setVideoPrivadaId(privadaId);
+          setVideoPrivadaName(privadaName || json.privada || `Privada ${privadaId}`);
+          setShowVideo(true);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setVideoCameras([]);
+  }, [getProxyBase]);
+
+  const lookupCallerAndShowVideo = useCallback(async (callerNumber: string) => {
+    const base = getProxyBase().replace("camera_proxy.php", "api_privada.php");
+    try {
+      const res = await fetch(`${base}?action=lookup_caller&telefono=${callerNumber}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.privada_id) {
+          await loadPrivadaCameras(json.privada_id, json.nombre);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [getProxyBase, loadPrivadaCameras]);
+
+  const toggleVideoPanel = useCallback(() => {
+    setShowVideo(prev => !prev);
+  }, []);
+
+  // -----------------------------------------------------------
   // Dialpad handler
   // -----------------------------------------------------------
   const dialpadPress = (digit: string) => {
@@ -924,28 +1065,114 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Dialpad (when not in call) */}
-            {!inCall && !ringing && connected && (
-              <div className="p-3">
-                <div className="flex gap-1 mb-2">
-                  <input
-                    type="text"
-                    placeholder="Numero..."
-                    value={dialNumber}
-                    onChange={(e) => setDialNumber(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") makeCall();
-                    }}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
+            {/* Video/Camera Panel */}
+            {showVideo && (
+              <div className="border-b border-gray-200">
+                <div className="bg-gray-900 relative">
+                  {videoError ? (
+                    <div className="aspect-video flex items-center justify-center">
+                      <div className="text-center text-gray-400 text-xs">
+                        <span className="text-2xl block mb-1">&#128249;</span>
+                        Sin senal
+                      </div>
+                    </div>
+                  ) : snapshotSrc ? (
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        ref={snapshotImgRef}
+                        src={snapshotSrc}
+                        alt="Camara"
+                        className="w-full h-auto block"
+                        onError={() => setVideoError(true)}
+                      />
+                      <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                        LIVE
+                      </div>
+                      <div className="absolute top-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
+                        {videoCameras[currentCamIndex]?.name || "Camara"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="aspect-video flex items-center justify-center">
+                      <RefreshCw className="h-5 w-5 animate-spin text-gray-500" />
+                    </div>
+                  )}
+                </div>
+                {/* Camera selector + privada info */}
+                <div className="bg-gray-50 px-2 py-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    {videoCameras.map((cam, idx) => (
+                      <button
+                        key={cam.cam}
+                        onClick={() => { setCurrentCamIndex(idx); setVideoError(false); consecutiveErrorsRef.current = 0; }}
+                        className={`px-1.5 py-0.5 text-[10px] rounded transition ${
+                          idx === currentCamIndex
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                        }`}
+                      >
+                        {cam.name}
+                      </button>
+                    ))}
+                  </div>
                   <button
-                    onClick={makeCall}
-                    disabled={!dialNumber}
-                    className="rounded-lg bg-green-600 px-3 py-1.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
+                    onClick={toggleVideoPanel}
+                    className="text-[10px] text-red-500 hover:text-red-700"
+                    title="Cerrar video"
                   >
-                    <Phone className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </button>
                 </div>
+                {videoPrivadaName && (
+                  <div className="bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700 text-center">
+                    {videoPrivadaName}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Video toggle button when panel is hidden */}
+            {!showVideo && videoCameras.length > 0 && (
+              <div className="px-3 py-1 border-b border-gray-200">
+                <button
+                  onClick={toggleVideoPanel}
+                  className="w-full text-xs text-blue-600 hover:text-blue-800 py-1 rounded hover:bg-blue-50 transition"
+                >
+                  &#128249; Mostrar video ({videoCameras.length} cam)
+                </button>
+              </div>
+            )}
+
+            {/* Dialpad - always visible when connected (sends DTMF during calls) */}
+            {connected && (
+              <div className="p-3">
+                {!inCall && !ringing && (
+                  <div className="flex gap-1 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Numero..."
+                      value={dialNumber}
+                      onChange={(e) => setDialNumber(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") makeCall();
+                      }}
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      onClick={makeCall}
+                      disabled={!dialNumber}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
+                    >
+                      <Phone className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                {inCall && !ringing && (
+                  <div className="text-center text-xs text-blue-600 font-medium mb-1">
+                    Teclado DTMF
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-1">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map(
                     (d) => (
