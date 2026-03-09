@@ -896,11 +896,11 @@ export default function MonitoristasPage() {
       {/* ================================================================= */}
       {/* LAYOUT PRINCIPAL: Softphone (izq) + Formulario (der)             */}
       {/* ================================================================= */}
-      <div className="flex gap-3">
+      <div className="flex flex-col lg:flex-row gap-3">
         {/* ============================================================= */}
         {/* PANEL IZQUIERDO: Softphone embebido + Video                   */}
         {/* ============================================================= */}
-        <div className="w-[340px] flex-shrink-0 space-y-3">
+        <div className="w-full lg:w-[340px] lg:flex-shrink-0 space-y-3">
           {/* Softphone integrado */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
             <AccesPhoneInline

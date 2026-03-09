@@ -735,28 +735,33 @@ export default function AccesPhoneInline({
         </div>
       )}
 
-      {/* Dialpad (when not in call) */}
-      {!inCall && !ringing && connected && (
+      {/* Dialpad (visible when connected - both idle and in-call for DTMF) */}
+      {!ringing && connected && (
         <div className="p-4">
-          <div className="flex gap-2 mb-3">
-            <input
-              type="text"
-              placeholder="Numero a marcar..."
-              value={dialNumber}
-              onChange={(e) => setDialNumber(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") makeCall();
-              }}
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-base font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-            <button
-              onClick={makeCall}
-              disabled={!dialNumber}
-              className="rounded-lg bg-green-600 px-4 py-2.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
-            >
-              <Phone className="h-5 w-5" />
-            </button>
-          </div>
+          {!inCall && (
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                placeholder="Numero a marcar..."
+                value={dialNumber}
+                onChange={(e) => setDialNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") makeCall();
+                }}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-base font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+              <button
+                onClick={makeCall}
+                disabled={!dialNumber}
+                className="rounded-lg bg-green-600 px-4 py-2.5 text-white hover:bg-green-700 disabled:opacity-40 transition"
+              >
+                <Phone className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+          {inCall && (
+            <p className="text-xs text-center text-gray-500 mb-2">Teclado DTMF</p>
+          )}
           <div className="grid grid-cols-3 gap-1.5">
             {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map(
               (d) => (
