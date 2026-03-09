@@ -644,7 +644,7 @@ export default function RegistroAccesosPage() {
 
     // Si no se selecciono un solicitante del autocompletado pero hay texto escrito,
     // crear automaticamente un registro de visitante con ese nombre
-    let solicitanteId = formSolicitanteId;
+    let solicitanteId = formSolicitanteId === "__nuevo__" ? "" : formSolicitanteId;
     let solicitanteNombre = formSolicitanteNombre;
 
     if (!solicitanteId && solicitanteSearch.trim()) {
@@ -1183,6 +1183,22 @@ export default function RegistroAccesosPage() {
                           if (formSolicitanteId) {
                             setFormSolicitanteId("");
                             setFormSolicitanteNombre("");
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (solicitanteResults.length > 0) {
+                              // Select first result from dropdown
+                              const first = solicitanteResults[0];
+                              selectSolicitante(first.id, first.nombre);
+                            } else if (solicitanteSearch.trim()) {
+                              // Confirm typed text as solicitante name
+                              // guardarAcceso will auto-create the visitor
+                              setSolicitanteResults([]);
+                              setFormSolicitanteId("__nuevo__");
+                              setFormSolicitanteNombre(solicitanteSearch.trim());
+                            }
                           }
                         }}
                         disabled={!selectedResidencia}
