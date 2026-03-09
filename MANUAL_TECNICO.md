@@ -1,6 +1,6 @@
 # Manual Tecnico - Sistema de Control de Acceso y Videomonitoreo (Video Accesos)
 
-**Version:** 2.1
+**Version:** 3.0
 **Fecha:** Marzo 2026
 **Nombre del proyecto:** syscbctlmonitoreo / Video Accesos
 **Repositorio:** videoaccesos/syscbctlmonitoreo
@@ -10,124 +10,109 @@
 ## Tabla de Contenidos
 
 1. [Resumen Ejecutivo](#1-resumen-ejecutivo)
-2. [Arquitectura General del Sistema](#2-arquitectura-general-del-sistema)
+2. [Arquitectura General](#2-arquitectura-general)
 3. [Stack Tecnologico](#3-stack-tecnologico)
 4. [Estructura del Proyecto](#4-estructura-del-proyecto)
-5. [Sistema Legacy (v1 - PHP/CodeIgniter)](#5-sistema-legacy-v1---phpcodeigniter)
-6. [Sistema Moderno (v2 - Next.js)](#6-sistema-moderno-v2---nextjs)
-7. [Base de Datos](#7-base-de-datos)
-8. [Modulos Funcionales](#8-modulos-funcionales)
-9. [API REST - Endpoints](#9-api-rest---endpoints)
-10. [Sistema VoIP/SIP - AccesPhone](#10-sistema-voipsip---accesphone)
-11. [Sistema de Autenticacion y Seguridad](#11-sistema-de-autenticacion-y-seguridad)
+5. [Base de Datos (Prisma/MySQL)](#5-base-de-datos-prismamysql)
+6. [Sistema de Autenticacion y Seguridad](#6-sistema-de-autenticacion-y-seguridad)
+7. [Modulos Funcionales](#7-modulos-funcionales)
+8. [API REST - Endpoints Completos](#8-api-rest---endpoints-completos)
+9. [Componente AccesPhone (Softphone VoIP/SIP)](#9-componente-accesphone-softphone-voipsip)
+10. [Componente CameraGrid (Videomonitoreo)](#10-componente-cameragrid-videomonitoreo)
+11. [Camera Proxy (API Backend)](#11-camera-proxy-api-backend)
 12. [Flujo Operativo Principal](#12-flujo-operativo-principal)
-13. [Configuracion y Despliegue](#13-configuracion-y-despliegue)
-14. [Diagrama de Arquitectura](#14-diagrama-de-arquitectura)
-15. [Glosario](#15-glosario)
+13. [Configuracion y Variables de Entorno](#13-configuracion-y-variables-de-entorno)
+14. [Scripts de Base de Datos](#14-scripts-de-base-de-datos)
+15. [Sistema Legacy (v1 - PHP/CodeIgniter)](#15-sistema-legacy-v1---phpcodeigniter)
+16. [Diagrama de Arquitectura](#16-diagrama-de-arquitectura)
+17. [Glosario](#17-glosario)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-**Video Accesos** es un sistema integral de control de acceso y videomonitoreo disenado para administrar comunidades residenciales privadas (fraccionamientos cerrados). El sistema permite a operadores de caseta gestionar el ingreso de visitantes, residentes y proveedores mediante un flujo que integra:
+**Video Accesos** es un sistema integral de control de acceso y videomonitoreo para administrar comunidades residenciales privadas (fraccionamientos cerrados). Permite a operadores de caseta gestionar el ingreso de visitantes, residentes y proveedores mediante:
 
-- **Registro de accesos** con identificacion de solicitante
-- **Comunicacion VoIP/SIP** (softphone integrado) para contactar residentes via interfon
-- **Videomonitoreo** de camaras en accesos de las privadas
-- **Gestion de tarjetas RFID** para acceso vehicular y peatonal
-- **Reportes y graficas** de actividad operativa
+- **Registro de accesos** con identificacion de solicitante (autocomplete con busqueda en residentes, visitantes y registros generales)
+- **Comunicacion VoIP/SIP** (softphone integrado con JsSIP) para contactar residentes via interfon
+- **Videomonitoreo en tiempo real** de camaras IP en accesos (proxy con autenticacion Digest hacia DVRs)
+- **Gestion de tarjetas RFID** para acceso vehicular y peatonal (5 slots por residente)
+- **Reportes y graficas** de actividad operativa (Recharts)
 - **Supervision de calidad** de llamadas de operadores
 - **Ordenes de servicio** para mantenimiento de equipos
 - **Control de gastos** operativos por privada
+- **Recuperacion patrimonial** con seguimiento de casos
 
-El proyecto inicio en enero de 2013 como una aplicacion PHP con CodeIgniter (v1) y fue migrado en 2025-2026 a una arquitectura moderna con **Next.js 16, React 19, Prisma ORM y TailwindCSS** (v2), conservando la misma base de datos MySQL de produccion.
+El proyecto inicio en enero 2013 como aplicacion PHP/CodeIgniter (v1) y fue migrado en 2025-2026 a **Next.js 16, React 19, Prisma ORM y TailwindCSS 4** (v2), conservando la misma base de datos MySQL de produccion.
 
 ---
 
-## 2. Arquitectura General del Sistema
+## 2. Arquitectura General
 
-El sistema opera con una arquitectura de dos generaciones coexistentes:
+### Componentes del Sistema
 
 ```
-+---------------------------------------------------------------------+
-|                        SERVIDOR WEB (50.62.182.131)                 |
-|                                                                     |
-|  +---------------------------+   +-------------------------------+  |
-|  |   SISTEMA LEGACY (v1)     |   |   SISTEMA MODERNO (v2)        |  |
-|  |   PHP / CodeIgniter       |   |   Next.js 16 / React 19       |  |
-|  |   Puerto 80 (Apache)      |   |   Puerto 3000 (Node.js)       |  |
-|  |   /syscbctlmonitoreo/     |   |   /video-accesos-app/         |  |
-|  +------------+--------------+   +---------------+---------------+  |
-|               |                                  |                  |
-|               +----------------------------------+                  |
-|                              |                                      |
-|                   +----------v----------+                           |
-|                   |   MySQL 5.7         |                           |
-|                   |   wwwvideo_video_   |                           |
-|                   |   accesos           |                           |
-|                   +---------------------+                           |
-+---------------------------------------------------------------------+
-              |                                    |
-    +---------v---------+              +-----------v-----------+
-    |   PBX SIP         |              |   Camaras IP          |
-    |   accessbotpbx    |              |   (RTSP/HTTP)         |
-    |   .info:8089/ws   |              |   via proxy camara    |
-    +-------------------+              +-----------------------+
+[Navegador Web]
+    |
+    |--- Next.js 16 App (React 19 + TailwindCSS 4)
+    |       |
+    |       |--- NextAuth (JWT, sesiones 2h)
+    |       |--- Prisma ORM --> MySQL (wwwvideo_video_accesos)
+    |       |--- API Routes (REST)
+    |       |--- AccesPhone (JsSIP) --> Asterisk PBX (WebSocket SIP)
+    |       |--- CameraGrid --> Camera Proxy API --> DVRs (HTTP Digest Auth)
+    |
+[Asterisk PBX]
+    |--- WebSocket (wss://accessbotpbx.info:8089/ws)
+    |--- Extensiones SIP
+    |
+[DVRs / Camaras IP]
+    |--- HTTP con autenticacion Digest
+    |--- Snapshots JPEG por canal
 ```
 
-### Componentes Clave
+### Flujo de Datos
 
-| Componente | Tecnologia | Proposito |
-|---|---|---|
-| Frontend v2 | Next.js 16 + React 19 + TailwindCSS | Interfaz de usuario moderna SPA |
-| Backend v2 | Next.js API Routes (App Router) | API REST para todas las operaciones |
-| ORM | Prisma 5 | Mapeo objeto-relacional a MySQL |
-| Base de datos | MySQL 5.7 | Persistencia de datos (BD legacy compartida) |
-| Autenticacion | NextAuth.js 4 (JWT) | Login con credenciales legacy DES crypt |
-| Softphone | JsSIP 3.13 + WebRTC | Comunicacion SIP integrada en el navegador |
-| PBX | Asterisk/FreePBX | Central telefonica SIP (servidor externo) |
-| Camaras | IP Cameras + Proxy PHP (`camera_proxy.php`) | Videovigilancia en accesos de privadas |
-| CameraGrid | React component + diagnosticos | Grid de visualizacion de camaras con refresco automatico |
-| Legacy v1 | PHP/CodeIgniter + Apache | Sistema original (en coexistencia) |
+1. **Operador** inicia sesion via NextAuth (credenciales legacy DES crypt)
+2. **Dashboard** muestra estadisticas del dia (accesos, rechazos, privadas activas)
+3. **Llamada entrante** → AccesPhone detecta via JsSIP → busca caller ID en BD → auto-puebla formulario
+4. **Camaras** se cargan via proxy que autentica contra DVRs con HTTP Digest
+5. **Registro de acceso** se guarda en BD con referencia a solicitante, residencia, operador y duracion
 
 ---
 
 ## 3. Stack Tecnologico
 
-### Frontend (v2)
-- **Next.js 16.1.6** - Framework React con App Router
-- **React 19.2.3** - Libreria de UI
-- **TailwindCSS 4** - Framework CSS utility-first
-- **Lucide React** - Iconografia
-- **Recharts 3.7** - Graficas y visualizaciones
-- **React Hook Form 7 + Zod 4** - Formularios con validacion
-- **@tanstack/react-table 8** - Tablas de datos avanzadas
-- **JsSIP 3.13.5** - Cliente SIP/WebRTC
+### Frontend
+| Tecnologia | Version | Uso |
+|---|---|---|
+| Next.js | 16.1.6 | Framework fullstack (App Router) |
+| React | 19.2.3 | UI components |
+| TailwindCSS | 4.x | Estilos utilitarios |
+| Lucide React | 0.575.0 | Iconografia |
+| JsSIP | 3.13.5 | Cliente SIP/VoIP WebRTC |
+| Recharts | 3.7.0 | Graficas y reportes |
+| React Hook Form | 7.71.2 | Manejo de formularios |
+| Zod | 4.3.6 | Validacion de schemas |
+| @tanstack/react-table | 8.21.3 | Tablas de datos |
 
-### Backend (v2)
-- **Next.js API Routes** - Endpoints REST
-- **Prisma 5.22** - ORM para MySQL
-- **NextAuth.js 4.24** - Autenticacion JWT
-- **unix-crypt-td-js** - Compatibilidad con hashes DES legacy
-- **ExcelJS 4.4** - Exportacion de reportes a Excel
-- **Nodemailer 7** - Envio de correos electronicos
+### Backend
+| Tecnologia | Version | Uso |
+|---|---|---|
+| Prisma ORM | 5.22.0 | Acceso a base de datos |
+| NextAuth | 4.24.13 | Autenticacion (JWT, 2h) |
+| MySQL | 5.7+ | Base de datos produccion |
+| ExcelJS | 4.4.0 | Exportacion a Excel |
+| Nodemailer | 7.0.13 | Envio de correos |
+| unix-crypt-td-js | 1.1.4 | Hash de passwords legacy (PHP DES) |
 
-### Base de Datos
-- **MySQL 5.7** - Motor relacional
-- **Base de datos:** `wwwvideo_video_accesos`
-- **Prisma Relation Mode:** `prisma` (sin foreign keys nativas en MySQL, relaciones manejadas por Prisma)
-
-### Legacy (v1)
-- **PHP 5.x/7.x** - Lenguaje servidor
-- **CodeIgniter 2.x** - Framework MVC PHP
-- **Apache** con mod_rewrite
-- **jQuery, Bootstrap, FusionCharts, jqPlot** - Frontend legacy
-
-### Infraestructura VoIP
-- **PBX:** `accessbotpbx.info` (Asterisk/FreePBX)
-- **Protocolo:** SIP sobre WebSocket (WSS puerto 8089)
-- **Codec:** WebRTC (SRTP)
-- **ICE/STUN:** Defaults del navegador (no se configuran servidores ICE explicitamente)
+### Infraestructura
+| Componente | Detalle |
+|---|---|
+| PBX | Asterisk via WebSocket (wss://accessbotpbx.info:8089/ws) |
+| DVRs | Camaras IP con HTTP Digest Auth |
+| Base de datos | MySQL `wwwvideo_video_accesos` |
+| Logging | Archivo `/tmp/video-accesos.log` (rotacion 10MB) |
 
 ---
 
@@ -135,980 +120,669 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 
 ```
 syscbctlmonitoreo/
-|
-|-- index.php                    # Entry point del sistema legacy (CodeIgniter)
-|-- .htaccess                    # Rewrite rules para Apache + CORS
-|-- LEEME.txt                    # Nota historica del proyecto (inicio 2013)
-|-- Manual tecnico.pdf           # Manual tecnico anterior (referencia)
-|
-|-- application/                 # Aplicacion CodeIgniter (legacy v1)
-|   |-- _controllers/            # Controladores MVC
-|   |   |-- catalogos/           # CRUD de catalogos (privadas, empleados, etc.)
-|   |   |-- procesos/            # Logica de negocio (accesos, ordenes, etc.)
-|   |   |-- reportes/            # Generacion de reportes
-|   |   |-- seguridad/           # Gestion de usuarios y permisos
-|   |   |-- login.php            # Controlador de autenticacion
-|   |   +-- sistema.php          # Controlador del sistema
-|   |-- __models/                # Modelos de datos
-|   |   |-- catalogos/           # Modelos de catalogos
-|   |   |-- procesos/            # Modelos de procesos
-|   |   +-- seguridad/           # Modelos de seguridad
-|   |-- _views/                  # Vistas PHP (HTML renderizado)
-|   |   |-- catalogos/           # Vistas de catalogos
-|   |   |-- procesos/            # Vistas de procesos
-|   |   |-- reportes/            # Vistas de reportes
-|   |   +-- seguridad/           # Vistas de seguridad
-|   +-- config/                  # Configuracion de CodeIgniter
-|       |-- config.php           # URL base, sesiones, etc.
-|       |-- routes.php           # Ruteo (default: login)
-|       +-- autoload.php         # Carga automatica de librerias
-|
-|-- system/                      # Core de CodeIgniter (framework)
-|   |-- core/                    # Clases base del framework
-|   |-- database/                # Drivers de BD
-|   |-- helpers/                 # Helpers utilitarios
-|   +-- libraries/               # Librerias del framework
-|
-|-- js/                          # JavaScript del sistema legacy
-|   |-- jquery-2.1.4.js          # jQuery
-|   |-- bootstrap.js             # Bootstrap JS
-|   |-- fusioncharts.js          # Graficas FusionCharts
-|   |-- sistema_form_general.js  # Logica de formularios del sistema
-|   +-- ...                      # Plugins adicionales (jqPlot, datepicker, etc.)
-|
-|-- css/                         # Estilos del sistema legacy
-|-- img/                         # Imagenes y recursos
-|-- less/                        # Archivos LESS (preprocesador CSS)
-|-- reports/                     # Plantillas de reportes
-|-- bd/                          # Scripts de base de datos (referencia)
-|
-|-- softphone/                   # Softphone legacy standalone
-|   +-- jssip.min.js             # JsSIP v3.10 (version standalone)
-|
-+-- video-accesos-app/           # === APLICACION MODERNA (v2) ===
-    |-- package.json             # Dependencias Node.js
-    |-- tsconfig.json            # Configuracion TypeScript
-    |-- prisma/
-    |   |-- schema.prisma        # Esquema de BD (734 lineas, 30+ modelos)
-    |   +-- seed.ts              # Datos semilla para desarrollo
-    +-- src/
-        |-- middleware.ts         # Proteccion de rutas (NextAuth)
-        |-- app/
-        |   |-- layout.tsx        # Layout raiz (providers)
-        |   |-- (auth)/
-        |   |   +-- login/page.tsx # Pagina de login
-        |   |-- (dashboard)/
-        |   |   |-- layout.tsx     # Layout con sidebar + header
-        |   |   |-- page.tsx       # Dashboard principal
-        |   |   |-- catalogos/     # Paginas de catalogos (8 modulos)
-        |   |   |-- procesos/      # Paginas de procesos (6 modulos)
-        |   |   |-- reportes/      # Paginas de reportes (3 modulos)
-        |   |   +-- seguridad/     # Paginas de seguridad (3 modulos)
-        |   +-- api/               # API Routes (endpoints REST)
-        |       |-- auth/          # Autenticacion NextAuth
-        |       |-- dashboard/     # Estadisticas dashboard
-        |       |-- camera-proxy/  # Proxy de camaras IP (snapshot, lookup, diag)
-        |       |-- catalogos/     # APIs de catalogos
-        |       |-- procesos/      # APIs de procesos
-        |       |-- reportes/      # APIs de reportes
-        |       +-- seguridad/     # APIs de seguridad
-        |-- components/
-        |   |-- AccesPhone.tsx     # Softphone SIP/WebRTC integrado
-        |   |-- CameraGrid.tsx     # Grid de camaras IP con proxy y diagnosticos
-        |   +-- layout/
-        |       |-- sidebar.tsx    # Barra lateral de navegacion
-        |       |-- header.tsx     # Encabezado con info de usuario
-        |       +-- providers.tsx  # SessionProvider de NextAuth
-        |-- lib/
-        |   |-- auth.ts           # Configuracion NextAuth + DES crypt
-        |   |-- logger.ts         # Logger del servidor con rotacion de archivos
-        |   +-- prisma.ts         # Singleton del cliente Prisma
-        +-- types/
-            +-- next-auth.d.ts    # Extensiones de tipo para NextAuth
+├── MANUAL_TECNICO.md                    # Este manual
+├── documentacion bot orquestador/
+│   └── Manual_Tecnico_Control_Remoto_MQTT.md
+│
+└── video-accesos-app/                   # Aplicacion Next.js principal
+    ├── package.json
+    ├── next.config.ts
+    ├── tsconfig.json
+    ├── middleware.ts                     # Proteccion de rutas (NextAuth)
+    │
+    ├── prisma/
+    │   ├── schema.prisma                # 734 lineas, 45+ modelos
+    │   └── seed.ts                      # Verificacion de conexion
+    │
+    ├── public/
+    │   └── sounds/                      # Archivos de audio (ringtones legacy)
+    │
+    └── src/
+        ├── app/
+        │   ├── layout.tsx               # Root layout
+        │   ├── globals.css              # Estilos globales
+        │   │
+        │   ├── (auth)/
+        │   │   ├── layout.tsx
+        │   │   └── login/page.tsx       # Pagina de login
+        │   │
+        │   ├── (dashboard)/
+        │   │   ├── layout.tsx           # Layout con sidebar + header
+        │   │   ├── page.tsx             # Dashboard principal
+        │   │   │
+        │   │   ├── catalogos/
+        │   │   │   ├── empleados/page.tsx
+        │   │   │   ├── fallas/page.tsx
+        │   │   │   ├── materiales/page.tsx
+        │   │   │   ├── privadas/page.tsx
+        │   │   │   ├── puestos/page.tsx
+        │   │   │   ├── residencias/page.tsx
+        │   │   │   ├── tarjetas/page.tsx
+        │   │   │   └── turnos/page.tsx
+        │   │   │
+        │   │   ├── procesos/
+        │   │   │   ├── asignacion-tarjetas/page.tsx
+        │   │   │   ├── gastos/page.tsx
+        │   │   │   ├── monitoristas/page.tsx      # Consola de monitoreo
+        │   │   │   ├── ordenes-servicio/page.tsx
+        │   │   │   ├── registro-accesos/page.tsx  # Modulo principal
+        │   │   │   └── supervision-llamadas/page.tsx
+        │   │   │
+        │   │   ├── reportes/
+        │   │   │   ├── accesos-consultas/page.tsx
+        │   │   │   ├── accesos-graficas/page.tsx
+        │   │   │   └── supervision-llamadas/page.tsx
+        │   │   │
+        │   │   └── seguridad/
+        │   │       ├── grupos-usuarios/page.tsx
+        │   │       ├── permisos/page.tsx
+        │   │       └── usuarios/page.tsx
+        │   │
+        │   └── api/
+        │       ├── auth/[...nextauth]/route.ts
+        │       ├── dashboard/route.ts
+        │       ├── camera-proxy/
+        │       │   ├── route.ts          # Proxy principal de camaras
+        │       │   ├── diag/route.ts     # Diagnosticos de camara
+        │       │   └── lookup/route.ts   # Busqueda de camaras por telefono/privada
+        │       ├── catalogos/            # CRUD para cada catalogo
+        │       │   ├── empleados/[route.ts, [id]/route.ts]
+        │       │   ├── fallas/[route.ts, [id]/route.ts]
+        │       │   ├── materiales/[route.ts, [id]/route.ts]
+        │       │   ├── privadas/[route.ts, [id]/route.ts]
+        │       │   ├── puestos/[route.ts, [id]/route.ts]
+        │       │   ├── residencias/[route.ts, [id]/route.ts]
+        │       │   ├── residentes/[route.ts, [id]/route.ts]
+        │       │   ├── tarjetas/[route.ts, [id]/route.ts]
+        │       │   └── turnos/[route.ts, [id]/route.ts]
+        │       ├── procesos/
+        │       │   ├── asignacion-tarjetas/[route.ts, [id]/route.ts]
+        │       │   ├── gastos/[route.ts, [id]/route.ts]
+        │       │   ├── ordenes-servicio/[route.ts, [id]/route.ts]
+        │       │   ├── registro-accesos/
+        │       │   │   ├── route.ts                    # CRUD principal
+        │       │   │   ├── [id]/route.ts
+        │       │   │   ├── buscar-por-telefono/route.ts
+        │       │   │   ├── buscar-residencia/route.ts
+        │       │   │   ├── buscar-solicitante/route.ts # Autocomplete
+        │       │   │   ├── registrar-general/route.ts
+        │       │   │   ├── registrar-visitante/route.ts
+        │       │   │   └── resolver-nombre/route.ts
+        │       │   └── supervision-llamadas/route.ts
+        │       ├── reportes/
+        │       │   ├── accesos-consultas/route.ts
+        │       │   ├── accesos-graficas/route.ts
+        │       │   └── supervision-llamadas/route.ts
+        │       └── seguridad/
+        │           ├── grupos-usuarios/[route.ts, [id]/route.ts]
+        │           ├── mis-permisos/route.ts
+        │           ├── permisos/route.ts
+        │           ├── sync-procesos/route.ts
+        │           └── usuarios/[route.ts, [id]/route.ts]
+        │
+        ├── components/
+        │   ├── AccesPhone.tsx           # Softphone VoIP/SIP (~1600 lineas)
+        │   ├── CameraGrid.tsx           # Grid de camaras (~524 lineas)
+        │   └── layout/
+        │       ├── header.tsx           # Barra superior
+        │       ├── sidebar.tsx          # Menu lateral con permisos
+        │       └── providers.tsx        # SessionProvider wrapper
+        │
+        ├── lib/
+        │   ├── auth.ts                  # Configuracion NextAuth
+        │   ├── prisma.ts               # Cliente Prisma singleton
+        │   └── logger.ts               # Logger con archivo y rotacion
+        │
+        └── types/
+            └── next-auth.d.ts           # Tipos extendidos de sesion
 ```
 
 ---
 
-## 5. Sistema Legacy (v1 - PHP/CodeIgniter)
+## 5. Base de Datos (Prisma/MySQL)
 
-### Descripcion General
+### Conexion
+- **Motor:** MySQL 5.7+
+- **Base de datos:** `wwwvideo_video_accesos`
+- **ORM:** Prisma 5.22.0 con `relationMode = "prisma"` (sin foreign keys en BD)
+- **Modo:** Solo lectura de esquema (`db pull`), sin migraciones contra produccion
 
-El sistema original fue desarrollado en 2013 utilizando **CodeIgniter 2.x**, un framework MVC para PHP. Sigue el patron clasico:
+### Modelos Principales (45+ tablas)
 
-- **Controladores** (`application/_controllers/`): Manejan las peticiones HTTP y la logica de negocio
-- **Modelos** (`application/__models/`): Interactuan con la base de datos MySQL
-- **Vistas** (`application/_views/`): Generan el HTML renderizado en el servidor
-
-### Configuracion
-
-| Parametro | Valor |
-|---|---|
-| URL Base | `http://50.62.182.131/syscbctlmonitoreo` |
-| Zona horaria | `America/Mazatlan` |
-| Controlador default | `login` |
-| Entorno | `development` |
-
-### Modulos Legacy
-
-| Modulo | Controlador | Descripcion |
+#### Seguridad
+| Modelo | Tabla | Descripcion |
 |---|---|---|
-| Login | `login.php` | Autenticacion de operadores |
-| Privadas | `catalogos/privadas.php` | Gestion de fraccionamientos |
-| Residencias | `catalogos/residencias.php` | Domicilios dentro de privadas |
-| Empleados | `catalogos/empleados.php` | Personal operativo |
-| Tarjetas | `catalogos/tarjetas.php` | Tarjetas RFID |
-| Registro Accesos | `procesos/registroaccesos.php` | Modulo principal de operacion |
-| Asignacion Tarjetas | `procesos/asignaciontarjetas.php` | Asignacion de RFID a residentes |
-| Ordenes Servicio | `procesos/ordenesservicio.php` | Mantenimiento de equipos |
-| Supervision Llamadas | `procesos/supervisionllamadas.php` | Calidad de atencion |
-| Supervision Guardias | `procesos/supervisionguardias.php` | Control de personal |
-| Supervision Portones | `procesos/supervisionportonesabiertos.php` | Monitoreo de portones |
-| Recuperacion Patrimonial | `procesos/recuperacionpatrimonial.php` | Danos y siniestros |
-| Reportes | `reportes/*.php` | Consultas y graficas |
+| `Usuario` | `usuarios` | Usuarios del sistema con password DES crypt |
+| `GrupoUsuario` | `grupos_usuarios` | Grupos/roles de usuario |
+| `GrupoUsuarioDetalle` | `grupos_usuarios_detalle` | Membresia usuario-grupo |
+| `Proceso` | `procesos` | Procesos del menu (jerarquico, padre-hijo) |
+| `Subproceso` | `subprocesos` | Subprocesos para permisos granulares |
+| `PermisoAcceso` | `permisos_accesos` | Control de acceso rol+subproceso |
+| `BitacoraInicio` | `bitacora_inicio` | Auditoria de logins |
+
+#### Catalogos
+| Modelo | Tabla | Descripcion |
+|---|---|---|
+| `Empleado` | `empleados` | Empleados con puesto, contacto, permisos |
+| `Puesto` | `puestos` | Puestos de trabajo |
+| `Turno` | `turnos` | Turnos laborales (hora inicio/fin) |
+| `Privada` | `privadas` | Privadas/fraccionamientos con DNS, video, relays |
+| `PrivadaRelay` | `privadas_relays` | Configuracion de relays por privada |
+| `Residencia` | `residencias` | Casas/departamentos (#casa, calle, telefonos, estatus) |
+| `Residente` | `residentes` | Residentes (ID char(8)) |
+| `Visita` | `visitas` | Visitantes registrados (ID char(8)) |
+| `RegistroGeneral` | `registros_generales` | Personas generales no categorizadas |
+| `Falla` | `fallas` | Codigos de falla |
+| `Material` | `materiales` | Inventario de materiales |
+| `Tarjeta` | `tarjetas` | Tarjetas RFID |
+
+#### Procesos de Negocio
+| Modelo | Tabla | Descripcion |
+|---|---|---|
+| `RegistroAcceso` | `registros_accesos` | Registro principal de accesos (entrada/salida) |
+| `SupervisionLlamada` | `supervision_llamadas` | Calificacion de llamadas |
+| `ResidenteTarjeta` | `residentes_tarjetas` | Asignacion de tarjetas (5 slots, precio, seguro) |
+| `OrdenServicio` | `ordenes_servicio` | Ordenes de trabajo tecnico |
+| `OrdenServicioSeguimiento` | `ordenes_servicio_seguimientos` | Seguimiento de ordenes |
+| `Gasto` | `gastos` | Gastos operativos por privada |
+| `RecuperacionPatrimonial` | `recuperacion_patrimonial` | Seguimiento de incidentes |
+
+### Campos Clave de Privada (Configuracion de Video)
+```
+privada {
+  dns_1, dns_2, dns_3          // Hostnames de DVRs
+  puerto_1, puerto_2, puerto_3 // Puertos HTTP
+  contrasena_1, contrasena_2, contrasena_3  // "usuario:password"
+  video_1 ... video_16         // Paths o URLs completas de snapshot por canal
+}
+```
+
+### Campos Clave de Residencia
+```
+residencia {
+  nroCasa                      // Numero de casa
+  calle                        // Calle
+  telefono1, telefono2         // Telefonos del residente
+  interfon                     // Extension del interfon
+  telefonoInterfon             // Telefono del interfon
+  estatusId                    // 1=Activo, 2=Inactivo, 3=Moroso
+}
+```
 
 ---
 
-## 6. Sistema Moderno (v2 - Next.js)
+## 6. Sistema de Autenticacion y Seguridad
 
-### Descripcion General
+### Autenticacion (NextAuth)
+- **Estrategia:** JWT con sesiones de 2 horas
+- **Provider:** Credentials (usuario + contrasena)
+- **Hash de password:** Legacy PHP DES crypt: `substr(crypt($pass, 0), 0, 10)`
+- **Middleware:** Protege todas las rutas excepto `/login`, `/api/auth`, `/_next/*`, `/favicon.ico`
 
-La version 2 reimplementa el sistema completo utilizando tecnologias modernas. Usa el **App Router** de Next.js con React Server Components y Client Components segun corresponda.
+### Sesion del Usuario (JWT extendido)
+```typescript
+session.user = {
+  id, name, email,
+  usuarioId,        // ID del usuario en tabla usuarios
+  empleadoId,       // ID del empleado vinculado
+  puestoId,         // Puesto del empleado
+  nroOperador,      // Numero de operador
+  modificarFechas,  // Permiso especial
+  privadaId,        // Privada asignada (si aplica)
+  isAdmin           // Flag de administrador
+}
+```
 
-### Layout y Navegacion
+### Sistema de Permisos
+1. **Procesos** (menu principal) → **Subprocesos** (acciones dentro del menu)
+2. **GrupoUsuario** agrupa usuarios
+3. **PermisoAcceso** vincula grupo + subproceso con permisos (alta, baja, cambio, consulta, reporte)
+4. **Sidebar** filtra menu segun permisos del usuario via `/api/seguridad/mis-permisos`
+5. **Admins** ven todo el menu sin restriccion
 
-El layout principal (`(dashboard)/layout.tsx`) consta de:
-
-1. **Sidebar** (`sidebar.tsx`): Menu lateral con navegacion jerarquica
-   - Inicio (Dashboard)
-   - Catalogos (8 submenus)
-   - Procesos (6 submenus)
-   - Reportes (3 submenus)
-   - Seguridad (3 submenus)
-   - Cerrar Sesion
-
-2. **Header** (`header.tsx`): Barra superior con nombre del sistema, notificaciones y datos del operador logueado (nombre + numero de operador)
-
-3. **Contenido principal**: Area dinamica segun la ruta activa
-
-### Paginas del Sistema v2
-
-#### Catalogos (CRUD completo)
-
-| Pagina | Ruta | Modelo Prisma | Descripcion |
-|---|---|---|---|
-| Privadas | `/catalogos/privadas` | `Privada` | Fraccionamientos administrados |
-| Residencias | `/catalogos/residencias` | `Residencia` | Domicilios, residentes y visitantes |
-| Empleados | `/catalogos/empleados` | `Empleado` | Operadores y personal |
-| Tarjetas | `/catalogos/tarjetas` | `Tarjeta` | Inventario de tarjetas RFID |
-| Puestos | `/catalogos/puestos` | `Puesto` | Tipos de puesto laboral |
-| Turnos | `/catalogos/turnos` | `Turno` | Horarios laborales |
-| Fallas | `/catalogos/fallas` | `Falla` | Catalogo de tipos de falla |
-| Materiales | `/catalogos/materiales` | `Material` | Inventario de materiales |
-
-#### Procesos (Operacion diaria)
-
-| Pagina | Ruta | Descripcion |
-|---|---|---|
-| Registro de Accesos | `/procesos/registro-accesos` | Modulo operativo principal con softphone integrado |
-| Asignacion de Tarjetas | `/procesos/asignacion-tarjetas` | Asignar tarjetas RFID a residentes |
-| Ordenes de Servicio | `/procesos/ordenes-servicio` | Mantenimiento tecnico |
-| Supervision de Llamadas | `/procesos/supervision-llamadas` | Evaluacion de calidad |
-| Monitoristas | `/procesos/monitoristas` | Gestion de operadores/monitoristas |
-| Gastos | `/procesos/gastos` | Control de gastos por privada |
-
-#### Reportes (Consulta y analisis)
-
-| Pagina | Ruta | Descripcion |
-|---|---|---|
-| Accesos Consultas | `/reportes/accesos-consultas` | Busqueda y filtrado de accesos |
-| Accesos Graficas | `/reportes/accesos-graficas` | Graficas por tipo, estatus, dia y hora |
-| Supervision Llamadas | `/reportes/supervision-llamadas` | Reporte de evaluaciones |
-
-#### Seguridad (Administracion)
-
-| Pagina | Ruta | Descripcion |
-|---|---|---|
-| Usuarios | `/seguridad/usuarios` | Gestion de cuentas |
-| Grupos de Usuario | `/seguridad/grupos-usuarios` | Agrupacion de permisos |
-| Permisos de Acceso | `/seguridad/permisos` | Asignacion granular de permisos |
+### Auditoria
+- Cada login se registra en `BitacoraInicio` con fecha, hora, IP, navegador
 
 ---
 
-## 7. Base de Datos
+## 7. Modulos Funcionales
 
-### Informacion General
+### 7.1 Dashboard Principal (`/`)
+- 4 tarjetas resumen: Accesos Hoy, Privadas Activas, Residencias, Desglose (accesos/rechazos/informes)
+- Tabla de ultimos accesos del dia con paginacion
+- Auto-refresh cada 30 segundos
+- Layout responsivo (1/2/4 columnas)
 
-| Parametro | Valor |
-|---|---|
-| Motor | MySQL 5.7 |
-| Nombre BD | `wwwvideo_video_accesos` |
-| Charset | Latin1 / UTF-8 |
-| Modo relacion | Prisma (sin FK nativas) |
-| ORM | Prisma 5.22 |
+### 7.2 Registro de Accesos (`/procesos/registro-accesos`)
+**Modulo principal del sistema.** Permite registrar entradas/salidas de personas.
 
-### Diagrama Entidad-Relacion (Simplificado)
+**Formulario:**
+- **Privada:** Selector dropdown de privadas activas
+- **Residencia:** Busqueda autocomplete por #casa o calle (Enter para buscar). Muestra residentes y visitantes de la residencia en tabs.
+- **Tipo de Gestion:** 9 opciones (No concluida, Moroso, Proveedor, Residente, Tecnico, Trab. Obra, Trab. Servicio, Visita, Visita Morosos)
+- **Solicitante:** Autocomplete con debounce 300ms. Busca en visitantes (V) y registros generales (G). Boton `+` para registrar nueva persona con modal prellenado. Todo en MAYUSCULAS.
+- **Observaciones:** Campo de texto libre
+- **Timer:** Cronometro que inicia automaticamente
 
-```
-SEGURIDAD                          CATALOGOS
-+----------------+                 +----------------+
-| Usuario        |                 | Puesto         |
-| - usuario_id   |                 | - puesto_id    |
-| - usuario      |---+            | - descripcion  |
-| - contrasena   |   |            +-------+--------+
-| - empleado_id  |   |                    |
-| - privada_id   |   |            +-------v--------+
-+-------+--------+   |            | Empleado       |
-        |             |            | - empleado_id  |
-+-------v--------+   |            | - nombre       |
-| GrupoUsuario   |   |            | - puesto_id    |
-| Detalle        |   |            | - nro_operador |
-+----------------+   |            +-------+--------+
-                     |                    |
-COMUNIDADES          |            +-------v--------+
-+----------------+   |            | Turno          |
-| Privada        |<--+            | - turno_id     |
-| - privada_id   |                +----------------+
-| - descripcion  |
-| - dns_1..3     |   (config camaras/interfon)
-| - video_1..3   |
-| - relay config |
-+-------+--------+
-        |
-+-------v--------+    +-------------------+
-| Residencia     |--->| Residente         |
-| - residencia_id|    | - residente_id    |
-| - nro_casa     |    | - nombre          |
-| - calle        |    | - celular         |
-| - telefono_    |    +--------+----------+
-|   interfon     |             |
-+-------+--------+    +--------v----------+
-        |             | ResidenteTarjeta  |
-        |             | (Folio H)         |
-        |             | - tarjeta_id 1..5 |
-        |             +-------------------+
-        |
-+-------v--------+    +-------------------+
-| Visita         |    | ResidenteTarjeta  |
-| - visitante_id |    | NoRenovacion      |
-| - nombre       |    | (Folio B)         |
-+----------------+    +-------------------+
+**Acciones de guardado:**
+- **Acceso** (estatusId=1) - Acceso concedido
+- **Informo** (estatusId=3) - Solo informacion
+- **Rechazo** (estatusId=2) - Acceso denegado
 
-OPERACION
-+--------------------+    +---------------------+
-| RegistroAcceso     |--->| SupervisionLlamada  |
-| - registro_acceso_id    | - saludo            |
-| - empleado_id      |   | - identifico_empresa|
-| - privada_id       |   | - amable            |
-| - residencia_id    |   | - gracias           |
-| - tipo_gestion_id  |   +---------------------+
-| - solicitante_id   |
-| - estatus_id       |
-| - duracion         |
-| - observaciones    |
-+--------------------+
+**Integracion con llamadas:**
+- Al recibir llamada entrante, busca el telefono en BD
+- Si encuentra residencia → auto-puebla privada + residencia + inicia timer
+- Si encuentra privada → auto-selecciona privada
 
-MANTENIMIENTO
-+--------------------+    +---------------------+
-| OrdenServicio      |--->| OrdenServicio       |
-| - orden_servicio_id|    | Seguimiento         |
-| - folio            |    | - comentario        |
-| - tecnico_id       |    +---------------------+
-| - codigo_servicio  |
-| - diagnostico_id   |
-+--------------------+
+**Historial:** Tabla paginada (20/pag) filtrable por privada y rango de fechas.
 
-FINANZAS
-+--------------------+
-| Gasto              |
-| - gasto_id         |
-| - tipo_gasto       |
-| - privada_id       |
-| - total            |
-+--------------------+
-```
+### 7.3 Consola de Monitoristas (`/procesos/monitoristas`)
+Panel de monitoreo en tiempo real que integra:
+- Panel de llamadas entrantes con identificacion de caller
+- Lista de residencias de la privada seleccionada con telefonos y estatus
+- Grid de camaras en vivo (componente CameraGrid)
+- Softphone integrado (componente AccesPhone)
+- Historial de registros del dia
 
-### Modelos Prisma (30+ entidades)
+### 7.4 Catalogos (`/catalogos/*`)
+CRUD completo para cada catalogo:
+- **Privadas:** Fraccionamientos con configuracion de DNS, video (16 canales), relays
+- **Residencias:** Casas con telefonos, interfon, estatus (Activo/Inactivo/Moroso)
+- **Empleados:** Personal con puesto, contacto, permisos especiales
+- **Tarjetas:** Tarjetas RFID con numero y estatus
+- **Puestos, Turnos, Fallas, Materiales:** Catalogos auxiliares
 
-| Modelo | Tabla MySQL | PK | Descripcion |
-|---|---|---|---|
-| `Usuario` | `usuarios` | `usuario_id` (int, auto) | Cuentas de operadores |
-| `GrupoUsuario` | `grupos_usuarios` | `grupo_usuario_id` (int, auto) | Grupos de permisos |
-| `GrupoUsuarioDetalle` | `grupos_usuarios_detalles` | Compuesta (grupo, usuario) | Relacion N:M |
-| `Proceso` | `procesos` | `proceso_id` (int, auto) | Items del menu (jerarquico) |
-| `Subproceso` | `subprocesos` | `subproceso_id` (int, auto) | Acciones dentro de procesos |
-| `PermisoAcceso` | `permisos_acceso` | Compuesta (grupo, subproceso) | Permisos granulares |
-| `BitacoraInicio` | `bitacora_inicio` | Compuesta (usuario, inicio) | Log de sesiones |
-| `Puesto` | `puestos` | `puesto_id` (int, auto) | Catalogo de puestos |
-| `Empleado` | `empleados` | `empleado_id` (int, auto) | Personal con permisos especiales |
-| `Turno` | `turnos` | `turno_id` (int, auto) | Horarios de trabajo |
-| `Privada` | `privadas` | `privada_id` (int, auto) | Fraccionamientos con config DNS/video |
-| `PrivadaRelay` | `privadas_relays` | `relay_id` (int, auto) | Config de relays por privada |
-| `Residencia` | `residencias` | `residencia_id` (int, auto) | Domicilios con telefono interfon |
-| `Residente` | `residencias_residentes` | `residente_id` (char(8)) | Personas que viven en residencias |
-| `Visita` | `residencias_visitantes` | `visitante_id` (char(8)) | Visitantes registrados |
-| `RegistroGeneral` | `registros_generales` | `registro_general_id` (char(8)) | Solicitantes no residentes |
-| `Tarjeta` | `tarjetas` | `tarjeta_id` (int, auto) | Inventario de RFID |
-| `ResidenteTarjeta` | `residencias_residentes_tarjetas` | `asignacion_id` (int) | Folio H: asignacion con renovacion |
-| `ResidenteTarjetaNoRenovacion` | `residencias_residentes_tarjetas_no_renovacion` | `asignacion_id` (int) | Folio B: sin renovacion |
-| `RegistroAcceso` | `registros_accesos` | `registro_acceso_id` (int, auto) | Registro principal de operacion |
-| `SupervisionLlamada` | `supervicion_llamadas` | `registro_acceso_id` (int) | Evaluacion de calidad 1:1 |
-| `OrdenServicio` | `ordenes_servicio` | `orden_servicio_id` (int, auto) | Mantenimiento tecnico |
-| `OrdenServicioSeguimiento` | `ordenes_servicio_seguimiento` | Compuesta (orden, seq) | Historial de seguimiento |
-| `Gasto` | `gastos` | `gasto_id` (int, auto) | Gastos operativos |
-| `TipoGasto` | `tipos_gastos` | `gasto_id` (int, auto) | Catalogo de tipos de gasto |
-| `Clasificacion` | `clasificaciones` | `clasificacion_id` (int, auto) | Tipos de clasificacion |
-| `Falla` | `fallas` | `falla_id` (int, auto) | Catalogo de fallas |
-| `CodigoServicio` | `codigos_servicio` | `codigo_servicio_id` (int, auto) | Codigos de servicio tecnico |
-| `Diagnostico` | `diagnosticos` | `diagnostico_id` (int, auto) | Catalogo de diagnosticos |
-| `Folio` | `folios` | `folio_id` (int, auto) | Consecutivos de folios |
-| `Material` | `materiales` | `material_id` (int, auto) | Inventario de materiales |
-| `RecuperacionPatrimonial` | `recuperacion_patrimonial` | Auto (int) | Registro de incidentes |
-| `RecuperacionPatrimonialSeguimiento` | `recuperacion_patrimonial_seguimiento` | Compuesta | Seguimiento de incidentes |
+### 7.5 Asignacion de Tarjetas (`/procesos/asignacion-tarjetas`)
+- 5 slots de tarjeta por residente
+- Precio y seguro por tarjeta
+- Historico de asignaciones y no-renovaciones
 
-### Tipos de Gestion (tipo_gestion_id)
+### 7.6 Ordenes de Servicio (`/procesos/ordenes-servicio`)
+- Registro de trabajos tecnicos con diagnostico
+- Seguimiento con actualizaciones
+- Codigos de servicio y diagnostico
 
-| ID | Tipo | Descripcion |
-|---|---|---|
-| 1 | No concluida | Gestion que no se completo |
-| 2 | Moroso | Residente moroso |
-| 3 | Proveedor | Acceso de proveedor |
-| 4 | Residente | Acceso de residente |
-| 5 | Tecnico | Acceso de tecnico |
-| 6 | Trab. Obra | Trabajador de obra |
-| 7 | Trab. Servicio | Trabajador de servicio |
-| 8 | Visita | Visitante |
-| 9 | Visita Morosos | Visita a residente moroso |
+### 7.7 Gastos (`/procesos/gastos`)
+- Registro de gastos por privada
+- Seguimiento de pagos
+- Tipos de gasto configurables
 
-### Estatus de Acceso (estatus_id)
+### 7.8 Supervision de Llamadas (`/procesos/supervision-llamadas`)
+- Calificacion de llamadas de operadores
+- Metricas de calidad
 
-| ID | Estatus | Color UI |
-|---|---|---|
-| 1 | Acceso (permitido) | Verde |
-| 2 | Rechazado | Rojo |
-| 3 | Informo (solo consulta) | Azul |
+### 7.9 Reportes (`/reportes/*`)
+- **Accesos Consultas:** Busqueda avanzada de registros de acceso
+- **Accesos Graficas:** Graficas con Recharts (barras, lineas, pie)
+- **Supervision Llamadas:** Reporte de calificaciones
+
+### 7.10 Seguridad (`/seguridad/*`)
+- **Usuarios:** CRUD de usuarios del sistema
+- **Grupos de Usuario:** Roles/grupos
+- **Permisos de Acceso:** Asignacion de permisos grupo-subproceso
 
 ---
 
-## 8. Modulos Funcionales
-
-### 8.1 Dashboard (Inicio)
-
-**Ruta:** `/`
-**Archivo:** `src/app/(dashboard)/page.tsx`
-**API:** `GET /api/dashboard`
-
-Presenta un resumen en tiempo real (actualizacion cada 30 segundos) con:
-
-- **Tarjetas resumen:** Accesos hoy, Privadas activas, Total residencias
-- **Desglose del dia:** Accesos permitidos vs. rechazados vs. informes
-- **Tabla de ultimos accesos:** Hora, privada, residencia, operador, estado
-
-### 8.2 Registro de Accesos (Modulo Principal)
-
-**Ruta:** `/procesos/registro-accesos`
-**Archivo:** `src/app/(dashboard)/procesos/registro-accesos/page.tsx`
-**APIs:** Multiples endpoints bajo `/api/procesos/registro-accesos/`
-
-Este es el **modulo central de operacion** del sistema. Integra:
-
-1. **Lista de accesos del dia** con filtros por privada, estatus y texto
-2. **Formulario de nuevo registro** con flujo:
-   - Seleccion de privada
-   - Busqueda/seleccion de residencia (por numero de casa o calle)
-   - Identificacion del solicitante (residente, visitante o general)
-   - Registro de observaciones y tipo de gestion
-   - Seleccion de estatus (Acceso/Rechazado/Informo)
-3. **Softphone AccesPhone** integrado para llamar o recibir llamadas
-4. **Identificacion automatica de llamadas entrantes** por telefono de interfon
-
-#### Flujo de Trabajo del Operador
-
-```
-Llamada entrante del interfon
-        |
-        v
-[AccesPhone detecta numero] ---> [Busca residencia por telefono_interfon]
-        |                                    |
-        v                                    v
-[Operador contesta]              [Pre-selecciona privada + residencia]
-        |                                    |
-        v                                    v
-[Identifica solicitante]         [Muestra residentes y visitantes]
-        |
-        v
-[Registra tipo de gestion] ---> [Decide: Acceso / Rechazo / Informe]
-        |
-        v
-[Guarda registro de acceso con duracion de llamada]
-```
-
-### 8.3 Catalogo de Privadas
-
-**Ruta:** `/catalogos/privadas`
-
-Cada privada contiene:
-- Datos de contacto (representante, telefono, email)
-- **Configuracion DNS** (hasta 3 slots) para interfones IP
-- **Configuracion de video** (hasta 3 camaras con alias)
-- **Configuracion de relays** (portones, plumas) con tiempo de activacion
-- Precios (vehicular, peatonal, mensualidad)
-- Fecha de vencimiento de contrato
-
-### 8.4 Catalogo de Residencias
-
-**Ruta:** `/catalogos/residencias`
-
-Cada residencia incluye:
-- Numero de casa, calle
-- Telefonos de contacto (2 lineas)
-- **Telefono interfon** (crucial para identificacion de llamadas)
-- Observaciones (mostradas en rojo durante registro de accesos)
-- **Residentes** (CRUD de personas que habitan la residencia)
-- **Visitantes** (registro de visitantes frecuentes)
-
-### 8.5 Asignacion de Tarjetas RFID
-
-**Ruta:** `/procesos/asignacion-tarjetas`
-
-Sistema de asignacion de tarjetas con dos tipos de folio:
-- **Folio H:** Tarjetas con renovacion (hasta 5 tarjetas por residente)
-- **Folio B:** Tarjetas sin renovacion
-- Incluye precio, descuento, IVA, seguro de tarjeta
-- Busqueda de tarjetas en **ambas tablas** de asignacion
-
-### 8.6 Ordenes de Servicio
-
-**Ruta:** `/procesos/ordenes-servicio`
-
-Gestion de mantenimiento tecnico:
-- Folio consecutivo automatico
-- Asignacion de tecnico y codigo de servicio
-- Diagnostico y detalle del trabajo
-- Sistema de seguimiento con multiples comentarios
-- Cierre por tecnico diferente al asignado
-
-### 8.7 Supervision de Llamadas
-
-**Ruta:** `/procesos/supervision-llamadas`
-
-Evaluacion de calidad del servicio del operador, vinculada a cada registro de acceso:
-- Saludo adecuado
-- Identificacion de la empresa
-- Identificacion del operador
-- Amabilidad
-- Agradecimiento
-- Manejo de demanda
-- Asunto resuelto
-- Tiempo de gestion
-
-### 8.8 Control de Gastos
-
-**Ruta:** `/procesos/gastos`
-
-Registro de gastos operativos por privada:
-- Tipo de gasto (catalogo)
-- Descripcion, fecha de pago, comprobante
-- Total y tipo de pago
-
-### 8.9 Reportes y Graficas
-
-#### Accesos - Consultas (`/reportes/accesos-consultas`)
-- Filtros por privada, rango de fechas, tipo de gestion, estatus
-- Tabla paginada con exportacion
-
-#### Accesos - Graficas (`/reportes/accesos-graficas`)
-- Grafica por tipo de gestion (barras)
-- Grafica por estatus (pie)
-- Grafica por dia (linea temporal)
-- Grafica por hora del dia (barras)
-- Filtros por privada y rango de fechas
-
-#### Supervision de Llamadas (`/reportes/supervision-llamadas`)
-- Reporte de evaluaciones por supervisor
-- Filtros por fecha
-
----
-
-## 9. API REST - Endpoints
-
-Todos los endpoints requieren autenticacion JWT via NextAuth. Retornan JSON.
+## 8. API REST - Endpoints Completos
 
 ### Autenticacion
-
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| POST | `/api/auth/[...nextauth]` | Login/logout via NextAuth |
+| POST | `/api/auth/[...nextauth]` | Login/logout/session via NextAuth |
 
 ### Dashboard
-
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/dashboard` | Estadisticas generales del dia |
+| GET | `/api/dashboard` | Estadisticas del dia (accesos, privadas, residencias) |
 
-### Catalogos
-
-Cada catalogo implementa el patron CRUD estandar:
-
+### Camera Proxy
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/catalogos/{recurso}` | Listar con paginacion/filtros |
-| POST | `/api/catalogos/{recurso}` | Crear nuevo registro |
+| GET | `/api/camera-proxy?cam=N&telefono=X` | Snapshot JPEG de camara via proxy |
+| GET | `/api/camera-proxy?cam=N&privada_id=X` | Snapshot por ID de privada |
+| GET | `/api/camera-proxy/lookup?telefono=X` | Lista camaras disponibles |
+| GET | `/api/camera-proxy/lookup?privada_id=X` | Lista camaras por privada |
+| GET | `/api/camera-proxy/diag` | Diagnosticos del proxy |
+
+### Catalogos (patron repetido para cada uno)
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/catalogos/{recurso}` | Listar con filtros |
+| POST | `/api/catalogos/{recurso}` | Crear registro |
 | GET | `/api/catalogos/{recurso}/[id]` | Obtener por ID |
-| PUT | `/api/catalogos/{recurso}/[id]` | Actualizar registro |
+| PUT | `/api/catalogos/{recurso}/[id]` | Actualizar |
 | DELETE | `/api/catalogos/{recurso}/[id]` | Eliminar (soft delete) |
 
-**Recursos disponibles:**
-`empleados`, `fallas`, `materiales`, `privadas`, `puestos`, `residencias`, `residentes`, `tarjetas`, `turnos`
+Recursos: `empleados`, `fallas`, `materiales`, `privadas`, `puestos`, `residencias`, `residentes`, `tarjetas`, `turnos`
 
-### Procesos
-
+### Registro de Accesos
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/procesos/registro-accesos` | Listar accesos (filtros: privadaId, fechas, estatus, search) |
+| GET | `/api/procesos/registro-accesos` | Listar registros con filtros |
 | POST | `/api/procesos/registro-accesos` | Crear registro de acceso |
-| GET | `/api/procesos/registro-accesos/[id]` | Obtener acceso por ID |
-| PUT | `/api/procesos/registro-accesos/[id]` | Actualizar acceso |
-| GET | `/api/procesos/registro-accesos/buscar-residencia` | Buscar residencias por privada (params: privadaId, search) |
-| GET | `/api/procesos/registro-accesos/buscar-por-telefono` | Buscar residencia por telefono interfon |
-| GET | `/api/procesos/registro-accesos/buscar-solicitante` | Buscar solicitante por nombre |
+| GET | `/api/procesos/registro-accesos/[id]` | Detalle de registro |
+| GET | `/api/procesos/registro-accesos/buscar-por-telefono?telefono=X` | Buscar residencia/privada por telefono |
+| GET | `/api/procesos/registro-accesos/buscar-residencia?privadaId=X&q=Y` | Autocomplete de residencias |
+| GET | `/api/procesos/registro-accesos/buscar-solicitante?q=X` | Autocomplete de solicitantes (V/G) |
 | POST | `/api/procesos/registro-accesos/registrar-visitante` | Registrar nuevo visitante |
-| POST | `/api/procesos/registro-accesos/registrar-general` | Registrar solicitante general |
-| GET | `/api/procesos/registro-accesos/resolver-nombre` | Resolver nombre de solicitante por ID |
-| GET/POST | `/api/procesos/asignacion-tarjetas` | CRUD de asignaciones |
-| GET/POST | `/api/procesos/ordenes-servicio` | CRUD de ordenes de servicio |
-| GET/POST | `/api/procesos/supervision-llamadas` | CRUD de supervisiones |
-| GET/POST | `/api/procesos/gastos` | CRUD de gastos |
+| POST | `/api/procesos/registro-accesos/registrar-general` | Registrar persona general |
+| GET | `/api/procesos/registro-accesos/resolver-nombre?ids=X,Y,Z` | Resolver nombres por IDs |
+
+### Otros Procesos
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET/POST | `/api/procesos/asignacion-tarjetas` | Asignacion de tarjetas RFID |
+| GET/POST | `/api/procesos/gastos` | Gastos operativos |
+| GET/POST | `/api/procesos/ordenes-servicio` | Ordenes de servicio |
+| GET/POST | `/api/procesos/supervision-llamadas` | Supervision de calidad |
 
 ### Reportes
-
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/reportes/accesos-consultas` | Consulta de accesos con filtros |
-| GET | `/api/reportes/accesos-graficas` | Datos agregados para graficas |
-| GET | `/api/reportes/supervision-llamadas` | Reporte de supervisiones |
+| GET | `/api/reportes/accesos-consultas` | Consulta avanzada de accesos |
+| GET | `/api/reportes/accesos-graficas` | Datos para graficas |
+| GET | `/api/reportes/supervision-llamadas` | Reporte de supervision |
 
 ### Seguridad
-
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET/POST | `/api/seguridad/usuarios` | CRUD de usuarios |
-| GET/POST | `/api/seguridad/grupos-usuarios` | CRUD de grupos |
-| GET | `/api/seguridad/permisos` | Gestion de permisos |
-| GET | `/api/seguridad/mis-permisos` | Permisos del usuario autenticado |
-| POST | `/api/seguridad/sync-procesos` | Sincronizacion de procesos/menu |
-
-### Camera Proxy (Sistema de Videovigilancia)
-
-| Metodo | Endpoint | Descripcion |
-|---|---|---|
-| GET | `/api/camera-proxy` | Proxy de snapshot de camara IP con autenticacion HTTP Digest |
-| GET | `/api/camera-proxy/lookup` | Descubrimiento de camaras por telefono o privada_id |
-| GET | `/api/camera-proxy/diag` | Diagnosticos del sistema de camaras (memoria, version Node) |
-
-**Parametros de `/api/camera-proxy`:**
-- `telefono` o `privada_id` - Identifica la privada
-- `cam` - Indice de camara (1, 2 o 3)
-
-**Caracteristicas del proxy:**
-- Autenticacion HTTP Digest con cache de nonce (60s TTL)
-- Semaforo por host (max 2 concurrentes) para evitar saturar el DVR
-- Placeholder SVG en caso de error ("Sin senal")
-- Soporte de cancelacion por desconexion del cliente
-- Diagnosticos por request (auth, fetch, retry)
+| GET/POST | `/api/seguridad/usuarios` | CRUD usuarios |
+| GET/POST | `/api/seguridad/grupos-usuarios` | CRUD grupos |
+| GET/PUT | `/api/seguridad/permisos` | Gestion de permisos |
+| GET | `/api/seguridad/mis-permisos` | Permisos del usuario actual |
+| POST | `/api/seguridad/sync-procesos` | Sincronizar procesos del menu |
 
 ---
 
-## 10. Sistema VoIP/SIP - AccesPhone
+## 9. Componente AccesPhone (Softphone VoIP/SIP)
 
-### Descripcion
+**Archivo:** `src/components/AccesPhone.tsx` (~1600 lineas)
+**Libreria:** JsSIP 3.13.5
 
-**AccesPhone** (`src/components/AccesPhone.tsx`) es un softphone WebRTC completo integrado directamente en la pagina de Registro de Accesos. Permite al operador recibir y realizar llamadas SIP desde el navegador web.
-
-### Arquitectura de Comunicacion
-
-```
-+-------------------+     WebSocket (WSS:8089)     +-------------------+
-|                   |<---------------------------->|                   |
-|  Navegador Web    |     SIP Signaling            |  PBX Asterisk     |
-|  (AccesPhone)     |                              |  accessbotpbx     |
-|                   |<---------------------------->|  .info             |
-|  JsSIP 3.13       |     WebRTC (SRTP)            |                   |
-|  + WebRTC API     |     Audio Media              |  Extensiones:     |
-|                   |                              |  1000-1099        |
-+-------------------+                              +---+---------------+
-                                                       |
-                                               +-------v-------+
-                                               |  Interfones   |
-                                               |  IP de las    |
-                                               |  privadas     |
-                                               +---------------+
+### Configuracion (almacenada en localStorage)
+```typescript
+interface AccesPhoneConfig {
+  wsServer: string;      // WebSocket del PBX (wss://accessbotpbx.info:8089/ws)
+  extension: string;     // Extension SIP
+  sipPassword: string;   // Password SIP
+  sipDomain: string;     // Dominio SIP (accessbotpbx.info)
+  displayName: string;   // Nombre mostrado
+  micDeviceId: string;   // Microfono seleccionado ("" = default)
+  autoAnswer: boolean;   // Auto-contestar llamadas entrantes
+  cameraProxyUrl: string;  // URL del proxy de camaras
+  cameraRefreshMs: number; // Intervalo de refresh de camaras (ms)
+  videoAutoOnCall: boolean; // Mostrar video al recibir llamada
+}
 ```
 
-### Configuracion SIP (AccesPhoneConfig)
+### Funcionalidades
+- **Conexion SIP:** Auto-reconexion con backoff exponencial (2s base, 30s max, reintentos ilimitados)
+- **Llamadas entrantes:** Deteccion, caller ID lookup en BD, indicador de ringing con animacion
+- **Llamadas salientes:** Teclado numerico, marcacion directa
+- **DND (No Molestar):** Rechaza llamadas con 486 Busy Here
+- **Auto-contestar:** Contesta automaticamente llamadas entrantes
+- **Audio:**
+  - Mute/unmute microfono
+  - Speaker on/off
+  - Seleccion de microfono en configuracion
+  - Fallback a stream silencioso si no hay microfono (modo solo-escucha)
+- **DTMF:** Envio de tonos durante llamada
+- **Timer:** Duracion de llamada en formato MM:SS
+- **Tono de timbre:** Usa el ringback tone nativo de Asterisk (sin ringtones custom)
 
-La configuracion se almacena en `localStorage` bajo la clave `accesphone_config`.
+### Compatibilidad SDP con Asterisk
+El componente incluye parches de SDP para compatibilidad con Asterisk/FreePBX:
+- Inyeccion de credenciales ICE faltantes
+- Limpieza de codecs no soportados (opus, red, CN) en llamadas salientes
+- Conversion SAVPF → SAVP
+- Remocion de extensiones no soportadas
 
-| Parametro | Valor Default | Descripcion |
-|---|---|---|
-| `wsServer` | `wss://accessbotpbx.info:8089/ws` | Servidor WebSocket SIP |
-| `sipDomain` | `accessbotpbx.info` | Dominio SIP |
-| `extension` | *(configurado por operador)* | Numero de extension (ej: 1001) |
-| `sipPassword` | *(configurado por operador)* | Contrasena SIP |
-| `displayName` | `Monitoreo` | Nombre para CallerID |
-| `micDeviceId` | `""` (default del navegador) | ID del dispositivo de microfono seleccionado |
-| `cameraProxyUrl` | `camera_proxy.php` | URL del proxy PHP para imagenes de camaras |
-| `cameraRefreshMs` | `500` | Intervalo de refresco de imagen de camara (ms) |
-| `videoAutoOnCall` | `true` | Mostrar video automaticamente al iniciar/recibir llamada |
+### Diagnosticos
+- `window.__sipDiag()` — Log completo de eventos SIP con timestamps
+- `window.__sipDiagSummary()` — Resumen de diagnosticos
 
-### Funcionalidades del Softphone
-
-1. **Registro SIP:** Conexion automatica al PBX via WebSocket con auto-reconexion
-2. **Llamadas entrantes:** Deteccion automatica, timbre visual, boton de contestar
-3. **Llamadas salientes:** Marcador numerico integrado
-4. **Control de audio:**
-   - Mute/Unmute de microfono
-   - Control de volumen del altavoz
-   - **Selector de microfono:** Lista de dispositivos de audio disponibles en el panel de configuracion, evitando seleccionar dispositivos no validos como "Stereo Mix"
-5. **Identificacion de llamadas:** Al recibir una llamada, busca automaticamente la residencia por `telefono_interfon` via API
-6. **Panel de configuracion:** Organizado en secciones:
-   - **SIP:** Extension, password, servidor WebSocket, dominio SIP
-   - **Audio:** Selector de microfono con lista de dispositivos disponibles
-   - **Video/Camaras:** URL proxy camaras, intervalo de refresco, video automatico en llamadas
-7. **Integracion con video:** Opcion de mostrar automaticamente el feed de camara al recibir/realizar llamada, usando proxy PHP (`camera_proxy.php`) para obtener imagenes de camaras IP
-8. **Sistema de diagnosticos:** Herramientas de debugging accesibles desde la consola del navegador:
-   - `window.__sipDiag()` - Muestra tabla completa de eventos diagnosticos
-   - `window.__sipDiagSummary()` - Resumen con timeline de eventos
-   - Registra hasta 200 entradas con timestamps y tiempos relativos
-
-### Auto-Reconexion
-
-El softphone implementa reconexion automatica con backoff exponencial:
-- **Delay base:** 2 segundos
-- **Delay maximo:** 30 segundos
-- **Intentos maximos:** Ilimitados (0)
-- **Formula:** `min(base * 2^intento, max_delay)`
-
-### Flujo de Llamada Entrante
-
-```
-1. Interfon de residencia marca al PBX
-2. PBX rutea la llamada a la extension del operador
-3. JsSIP recibe evento "newRTCSession" (incoming)
-4. AccesPhone muestra alerta visual con numero entrante
-5. AccesPhone llama API buscar-por-telefono con el CallerID
-6. Si encuentra residencia: pre-selecciona privada y residencia en el formulario
-7. Operador contesta -> WebRTC establece flujo de audio bidireccional
-8. Operador gestiona el acceso y registra en el sistema
-9. Al colgar, se calcula la duracion de la llamada
-```
-
-### Manejo de Audio
-
-- **Pre-adquisicion de stream:** Antes de contestar o llamar, se solicita `getUserMedia()` para evitar errores `NotReadableError`
-- **Seleccion de microfono:** Si el operador configuro un `micDeviceId`, se usa `{ deviceId: { exact: id } }` como constraint; de lo contrario se usa el microfono default del navegador
-- **Enumeracion de dispositivos:** Antes de adquirir el microfono, se enumeran todos los dispositivos de audio y se registran en consola para diagnostico
-- **Fallback silencioso:** Si el microfono no esta disponible, se genera un stream silencioso con `AudioContext` para mantener la llamada funcional
-- **ICE/STUN:** No se configuran servidores ICE/STUN explicitamente en las opciones de llamada; se usan los defaults del navegador y del PBX
-
-### CameraGrid - Visualizacion de Camaras
-
-**Archivo:** `src/components/CameraGrid.tsx`
-
-Componente React que muestra un grid de hasta 3 camaras IP por privada, obteniendo snapshots via el proxy `/api/camera-proxy`.
-
-**Caracteristicas:**
-- Refresco automatico configurable (default 500ms)
-- Navegacion entre camaras disponibles
-- Vista a pantalla completa (fullscreen) por camara
-- Placeholder SVG cuando no hay senal
-- Deteccion automatica de camaras disponibles via `/api/camera-proxy/lookup`
-- **Sistema de diagnosticos** accesible desde consola:
-  - `window.__camDiag()` - Log completo de eventos de camara con timestamps
-  - Registra hasta 300 entradas por camara (fetch, error, timeout, etc.)
+### UI
+- Widget flotante en esquina inferior derecha
+- Panel expandible/colapsable
+- Indicadores de estado: Desconectado (rojo), Conectando (amarillo), Registrado (verde)
+- Info de llamada con label de caller (privada/residencia)
 
 ---
 
-## 11. Sistema de Autenticacion y Seguridad
+## 10. Componente CameraGrid (Videomonitoreo)
 
-### Autenticacion
+**Archivo:** `src/components/CameraGrid.tsx` (~524 lineas)
 
-**Archivo:** `src/lib/auth.ts`
+### Funcionamiento
+1. **Lookup:** Consulta `/api/camera-proxy/lookup` con `telefono` o `privada_id`
+2. **Renderizado:** Grid de thumbnails con imagenes JPEG de cada camara
+3. **Refresh secuencial:** Espera `onload`/`onerror` antes de pedir siguiente snapshot (evita saturar el DVR)
+4. **Intervalo:** Default 300ms, configurable via prop `refreshMs`
 
-El sistema utiliza **NextAuth.js v4** con estrategia JWT:
+### Manejo de Errores
+- Backoff progresivo: 3x delay en errores consecutivos
+- Pausa automatica a los 10+ errores consecutivos
+- Log de diagnosticos
 
-1. **Proveedor:** `CredentialsProvider` (usuario + contrasena)
-2. **Verificacion de contrasena:** Compatibilidad con hash DES crypt del sistema PHP legacy
-   - El sistema PHP original usa: `substr(crypt($password, 0), 0, 10)`
-   - Se replica con la libreria `unix-crypt-td-js`
-   - Se extrae el salt (primeros 2 caracteres del hash) y se compara
-3. **Sesion JWT:** Duracion de 2 horas
-4. **Datos en sesion:** usuarioId, empleadoId, puestoId, nroOperador, privadaId, modificarFechas
+### Modo Fullscreen
+- Portal overlay con camara ampliada
+- Navegacion prev/next entre camaras
+- Sincronizacion de src desde thumbnail
 
-### Proteccion de Rutas
-
-**Archivo:** `src/middleware.ts`
-
-Todas las rutas estan protegidas excepto:
-- `/login` - Pagina de login
-- `/api/auth/*` - Endpoints de NextAuth
-- `/_next/*` - Assets estaticos de Next.js
-- `/favicon.ico`
-
-### Modelo de Permisos
-
-```
-Usuario (N) <---> (N) GrupoUsuario (N) <---> (N) Subproceso
-                        via                        via
-                  GrupoUsuarioDetalle         PermisoAcceso
-
-Proceso (padre)
-   |
-   +-- Proceso (hijo) -- jerarquia de menu
-         |
-         +-- Subproceso (accion individual)
+### Props
+```typescript
+{
+  telefono?: string;      // Buscar camaras por telefono
+  privadaId?: string;     // Buscar camaras por ID de privada
+  refreshMs?: number;     // Intervalo de refresh (default 300)
+  compact?: boolean;      // Modo compacto para sidebar
+}
 ```
 
-- Los **Usuarios** pertenecen a uno o mas **Grupos de Usuario**
-- Cada **Grupo** tiene **Permisos de Acceso** a **Subprocesos**
-- Los **Procesos** representan items del menu y forman una jerarquia padre-hijo
-- Los **Subprocesos** son las acciones individuales (ver, crear, editar, eliminar)
+### Diagnosticos
+- `window.__camDiag()` — Estado actual de camaras
+- `window.__camDiagStats()` — Estadisticas de carga
 
-### Bitacora de Sesiones
+---
 
-Cada inicio de sesion se registra en `BitacoraInicio`:
-- Usuario, fecha/hora de inicio, fecha/hora de cierre
-- Direccion IP y hostname
+## 11. Camera Proxy (API Backend)
+
+**Archivo:** `src/app/api/camera-proxy/route.ts`
+
+### Flujo de Proxy
+1. **Autenticacion:** Verifica sesion NextAuth
+2. **Resolucion de camara:**
+   - Por `privada_id`: Query directo a tabla `privadas`
+   - Por `telefono`: Busca en privada (telefono/celular) → residencia (interfon/telefono)
+3. **Construccion de URL:** Combina `video_N` + `dns_N` + `puerto_N` de la privada
+4. **Descubrimiento de credenciales:** Busca hostname en dns_1/2/3, parsea `contrasena_N` como "usuario:password"
+
+### Autenticacion HTTP Digest
+- **Cache de nonce:** Reutiliza challenge Digest por 60s (evita doble request por snapshot)
+- **Fallback:** Basic Auth si el servidor no usa Digest
+- **Flujo:**
+  1. Request sin auth → 401 con WWW-Authenticate
+  2. Parsea challenge, calcula response MD5, envia request autenticado
+
+### Control de Concurrencia
+- **Semaforo por host:** MAX_CONCURRENT_PER_HOST = 2
+- Previene agotamiento de conexiones del DVR
+- Cola de requests excedentes
+
+### Respuesta
+- **Exito:** 200 con imagen JPEG y headers no-cache
+- **Error:** 200 con placeholder SVG (evita loops de recarga del browser)
+- Headers: `X-Camera-Index`, `X-Privada`
 
 ---
 
 ## 12. Flujo Operativo Principal
 
-### Escenario Tipico: Visitante Solicita Acceso
+### Flujo de Registro de Acceso (caso tipico)
 
 ```
-                     CASETA DE ACCESO
+1. Llamada entrante al interfon
+   └─> Asterisk PBX envia INVITE via WebSocket
+       └─> AccesPhone detecta llamada entrante
+           └─> Busca caller ID: /api/registro-accesos/buscar-por-telefono
+               ├─> Match residencia: auto-puebla privada + residencia
+               ├─> Match privada: auto-selecciona privada
+               └─> Sin match: muestra solo numero
 
-Visitante            Interfon             Operador (Navegador)
-    |                    |                        |
-    |  Presiona boton    |                        |
-    |------------------->|                        |
-    |                    |   Llamada SIP          |
-    |                    |----------------------->|
-    |                    |                        |
-    |                    |              [AccesPhone suena]
-    |                    |              [Identifica residencia]
-    |                    |              [Pre-carga datos en formulario]
-    |                    |                        |
-    |                    |   Operador contesta    |
-    |                    |<-----------------------|
-    |                    |                        |
-    |  "Soy Juan,       |                        |
-    |   vengo a ver      |                        |
-    |   al Sr. Garcia"   |                        |
-    |------------------->|----------------------->|
-    |                    |                        |
-    |                    |              [Busca solicitante]
-    |                    |              [Selecciona tipo: Visita]
-    |                    |              [Verifica con residente]
-    |                    |                        |
-    |                    |   "Puede pasar"        |
-    |                    |<-----------------------|
-    |                    |                        |
-    |   Porton abre      |              [Registra acceso: ACCESO]
-    |<-------------------|              [Guarda duracion llamada]
-    |                    |                        |
-    |                    |              [Acceso visible en dashboard]
+2. Operador contesta la llamada
+   └─> Timer inicia automaticamente
+   └─> Camaras de la privada se cargan (CameraGrid)
+
+3. Operador identifica al visitante
+   └─> Busca solicitante por nombre (autocomplete)
+       ├─> Selecciona existente del dropdown
+       └─> O registra nuevo via boton + (modal prellenado)
+
+4. Operador selecciona tipo de gestion
+   └─> Ej: "Visita", "Proveedor", "Residente"
+
+5. Operador registra el acceso
+   └─> Boton "Acceso" / "Informo" / "Rechazo"
+       └─> POST /api/procesos/registro-accesos
+           └─> Guarda: solicitanteId, residenciaId, empleadoId, duracion, estatus
+
+6. Formulario se reinicia para siguiente registro
 ```
-
-### Escenario: Acceso Rechazado
-
-1. Visitante llama desde interfon
-2. Operador contesta e identifica
-3. Residente no autoriza o no contesta
-4. Operador registra acceso con estatus **"Rechazado"**
-5. Visitante no puede ingresar
-
-### Escenario: Solo Informacion
-
-1. Residente llama para preguntar algo (horarios, contactos, etc.)
-2. Operador atiende la consulta
-3. Se registra con estatus **"Informo"** (sin acceso fisico)
 
 ---
 
-## 13. Configuracion y Despliegue
+## 13. Configuracion y Variables de Entorno
 
-### Variables de Entorno Requeridas (v2)
-
+### Variables Requeridas
 ```env
-# Base de datos
-DATABASE_URL="mysql://usuario:contrasena@host:3306/wwwvideo_video_accesos"
-
-# NextAuth
-NEXTAUTH_SECRET="clave-secreta-aleatoria"
-NEXTAUTH_URL="http://dominio-o-ip:3000"
+DATABASE_URL="mysql://usuario:password@host:3306/wwwvideo_video_accesos"
+NEXTAUTH_SECRET="clave-secreta-para-jwt"
+NEXTAUTH_URL="http://localhost:3000"
+LOG_FILE="/tmp/video-accesos.log"
 ```
 
-### Comandos de Desarrollo
-
+### Scripts Disponibles
 ```bash
-# Instalar dependencias
-cd video-accesos-app
-npm install
+npm run dev          # Servidor de desarrollo
+npm run build        # Build de produccion
+npm run start        # Servidor de produccion
+npm run lint         # Linter ESLint
 
-# Generar cliente Prisma
-npm run db:generate
-
-# Ejecutar en desarrollo
-npm run dev
-
-# Construir para produccion
-npm run build
-
-# Iniciar en produccion
-npm run start
-
-# Abrir Prisma Studio (explorador visual de BD)
-npm run db:studio
-
-# Sincronizar esquema desde BD existente
-npm run db:pull
+npm run db:pull      # Sincronizar schema desde BD
+npm run db:generate  # Generar cliente Prisma
+npm run db:studio    # Abrir Prisma Studio
+npm run db:seed      # Verificar conexion a BD
+npm run db:verify    # Verificar conexion a BD
 ```
 
-### Despliegue en Produccion
-
-1. **Sistema Legacy (v1):**
-   - Servido por Apache en puerto 80
-   - URL: `http://50.62.182.131/syscbctlmonitoreo/`
-   - Configurado via `.htaccess` con `mod_rewrite`
-
-2. **Sistema Moderno (v2):**
-   - Servido por Node.js (Next.js) en puerto 3000
-   - Se recomienda usar un reverse proxy (Nginx/Apache) para HTTPS
-   - Requiere Node.js 18+ en el servidor
-
-### Requisitos del Servidor
-
-| Componente | Requisito Minimo |
-|---|---|
-| OS | Linux (Ubuntu/CentOS) o Windows Server |
-| Node.js | 18.x o superior |
-| MySQL | 5.7 o superior |
-| PHP | 7.x (para sistema legacy) |
-| Apache | 2.4 con mod_rewrite |
-| RAM | 2 GB minimo |
-| Almacenamiento | 10 GB minimo |
-
-### Requisitos del Cliente (Navegador)
-
-| Requisito | Detalle |
-|---|---|
-| Navegador | Chrome 90+, Firefox 90+, Edge 90+ |
-| WebRTC | Soporte nativo requerido para softphone |
-| Microfono | Requerido para llamadas SIP |
-| Altavoz/Audifonos | Requerido para recibir audio |
-| HTTPS | Recomendado (requerido para WebRTC en produccion) |
-| Resolucion | 1280x720 minimo recomendado |
-
----
-
-## 14. Diagrama de Arquitectura
-
-### Arquitectura de Red
-
-```
-                        INTERNET
-                           |
-                    +------v------+
-                    |  Router/    |
-                    |  Firewall   |
-                    +------+------+
-                           |
-              +------------+------------+
-              |                         |
-      +-------v-------+       +--------v--------+
-      | Servidor Web   |       | PBX SIP         |
-      | 50.62.182.131  |       | accessbotpbx    |
-      |                |       | .info           |
-      | - Apache :80   |       |                 |
-      |   (PHP/CI)     |       | - WSS :8089     |
-      |                |       | - SIP :5060     |
-      | - Node.js :3000|       |                 |
-      |   (Next.js)    |       +--------+--------+
-      |                |                |
-      | - MySQL :3306  |       +--------v--------+
-      |                |       | Interfones IP   |
-      +----------------+       | (por privada)   |
-                               +-----------------+
-
-                               +------------------+
-                               | Camaras IP       |
-                               | (RTSP/HTTP)      |
-                               | Por privada:     |
-                               | video_1, 2, 3    |
-                               +------------------+
-```
-
-### Flujo de Datos
-
-```
-[Navegador] --HTTPS--> [Next.js App Router] --Prisma--> [MySQL]
-     |                        |
-     |--WSS (SIP)----------> [PBX Asterisk]
-     |                        |
-     |--HTTP (proxy)-------> [Camaras IP]
+### Configuracion Next.js
+```typescript
+// next.config.ts
+{
+  outputFileTracingRoot: path.join(__dirname)
+}
 ```
 
 ---
 
-## 15. Glosario
+## 14. Scripts de Base de Datos
+
+### Prisma Schema
+- **Ubicacion:** `prisma/schema.prisma` (734 lineas)
+- **Modo:** `relationMode = "prisma"` (relaciones manejadas por Prisma, no por BD)
+- **Sincronizacion:** `npx prisma db pull` para leer esquema de produccion
+- **IMPORTANTE:** No se ejecutan migraciones contra produccion. Solo `db pull` para mantener schema sincronizado.
+
+### Seed Script
+- **Ubicacion:** `prisma/seed.ts`
+- Solo verifica conexion y muestra conteo de registros por tabla
+- No inserta datos
+
+---
+
+## 15. Sistema Legacy (v1 - PHP/CodeIgniter)
+
+El sistema v1 coexiste con v2 compartiendo la misma base de datos:
+
+- **Framework:** CodeIgniter 3.x
+- **Lenguaje:** PHP 7.x
+- **Password hash:** DES crypt `substr(crypt($pass, 0), 0, 10)`
+- **Ubicacion:** Carpeta raiz del repositorio (archivos PHP)
+- **Estado:** En uso parcial, siendo reemplazado por v2
+
+La compatibilidad de passwords se mantiene via la libreria `unix-crypt-td-js` en el sistema v2.
+
+---
+
+## 16. Diagrama de Arquitectura
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    NAVEGADOR WEB                        │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  Dashboard   │  │  Registro    │  │  Monitorista │  │
+│  │              │  │  Accesos     │  │  Console     │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐                    │
+│  │  AccesPhone  │  │  CameraGrid  │                    │
+│  │  (JsSIP)     │  │  (Proxy)     │                    │
+│  └──────┬───────┘  └──────┬───────┘                    │
+│         │                  │                            │
+└─────────┼──────────────────┼────────────────────────────┘
+          │ WebSocket        │ HTTP
+          │ SIP              │ JPEG snapshots
+          ▼                  ▼
+┌──────────────┐    ┌──────────────────┐
+│  Asterisk    │    │  Next.js API     │
+│  PBX         │    │  Routes          │
+│              │    │                  │
+│  Extensions: │    │  ┌────────────┐  │    ┌──────────┐
+│  100-199     │    │  │ Camera     │──┼───>│ DVR 1    │
+│              │    │  │ Proxy      │  │    │ (Digest) │
+│  WebSocket:  │    │  └────────────┘  │    └──────────┘
+│  :8089/ws    │    │                  │    ┌──────────┐
+└──────────────┘    │  ┌────────────┐  │    │ DVR 2    │
+                    │  │ Prisma     │──┼───>│ (Digest) │
+                    │  │ ORM        │  │    └──────────┘
+                    │  └─────┬──────┘  │
+                    │        │         │
+                    └────────┼─────────┘
+                             │
+                             ▼
+                    ┌──────────────────┐
+                    │  MySQL 5.7       │
+                    │  wwwvideo_       │
+                    │  video_accesos   │
+                    └──────────────────┘
+```
+
+---
+
+## 17. Glosario
 
 | Termino | Definicion |
 |---|---|
-| **Privada** | Fraccionamiento residencial cerrado (condominio/colonia privada) |
-| **Residencia** | Domicilio individual dentro de una privada |
+| **Privada** | Fraccionamiento o comunidad residencial cerrada con caseta de acceso |
+| **Residencia** | Casa o departamento individual dentro de una privada |
 | **Residente** | Persona que habita en una residencia |
-| **Visitante** | Persona que frecuenta una residencia (registrado) |
-| **Registro General** | Solicitante que no es residente ni visitante |
-| **Operador** | Empleado que atiende la caseta de acceso |
-| **Tipo de Gestion** | Clasificacion del motivo de acceso (visita, proveedor, etc.) |
-| **Estatus de Acceso** | Resultado de la gestion (acceso, rechazo, informe) |
-| **Interfon** | Dispositivo de comunicacion en la entrada de la privada |
-| **Telefono Interfon** | Numero telefonico asignado al interfon de una residencia |
-| **Folio H** | Folio de asignacion de tarjeta con renovacion |
-| **Folio B** | Folio de asignacion de tarjeta sin renovacion |
-| **RFID** | Radio-Frequency Identification (tarjetas de acceso) |
-| **PBX** | Private Branch Exchange (central telefonica) |
-| **SIP** | Session Initiation Protocol (protocolo de telefonia IP) |
-| **WebRTC** | Web Real-Time Communication (comunicacion en tiempo real) |
-| **JsSIP** | Libreria JavaScript para SIP sobre WebSocket |
-| **AccesPhone** | Componente softphone integrado en el sistema |
-| **Relay** | Dispositivo electromecanico para abrir portones/plumas |
-| **DNS (en Privada)** | Direccion del dispositivo de red del interfon |
-| **Supervision de Llamada** | Evaluacion de calidad del servicio del operador |
-| **Orden de Servicio** | Solicitud de mantenimiento tecnico |
-| **Recuperacion Patrimonial** | Registro de danos o incidentes patrimoniales |
+| **Visitante (Visita)** | Persona externa que solicita acceso a una residencia |
+| **Registro General** | Persona no categorizada como residente ni visitante |
+| **Solicitante** | Persona que solicita el acceso (puede ser residente, visitante o general) |
+| **Monitorista** | Operador de caseta que gestiona el acceso |
+| **Interfon** | Extension telefonica del interfon de la residencia |
+| **DVR** | Digital Video Recorder, dispositivo que graba video de camaras IP |
+| **AccesPhone** | Componente softphone VoIP integrado en el sistema |
+| **CameraGrid** | Componente de visualizacion de camaras en grid |
+| **Tipo de Gestion** | Clasificacion del motivo de acceso (Visita, Proveedor, Tecnico, etc.) |
+| **Estatus de Acceso** | Resultado: Acceso (1), Rechazo (2), Informo (3) |
+| **DND** | Do Not Disturb - modo que rechaza llamadas automaticamente |
+| **DTMF** | Dual Tone Multi-Frequency - tonos de teclado telefonico |
+| **Nonce cache** | Cache de challenge HTTP Digest para evitar doble request a DVRs |
+| **Semaforo por host** | Limite de 2 conexiones simultaneas por DVR |
+| **DES crypt** | Algoritmo de hash de passwords del sistema legacy PHP |
 
 ---
 
-## Historial del Proyecto
-
-| Fecha | Evento |
-|---|---|
-| Enero 2013 | Inicio del proyecto con PHP/CodeIgniter + jQuery |
-| 2013-2024 | Desarrollo y operacion del sistema legacy (v1) |
-| 2025 | Inicio de migracion a Next.js/React (v2) |
-| 2025 | Integracion con BD de produccion MySQL |
-| 2025 | Implementacion de softphone JsSIP/WebRTC |
-| 2025-2026 | Desarrollo de modulos CRUD, reportes y graficas |
-| Febrero 2026 | Comunicacion SIP funcional entre extensiones |
-| Febrero 2026 | Documentacion tecnica completa (este manual) |
-| Marzo 2026 | Selector de microfono en panel de configuracion del softphone |
-| Marzo 2026 | Sistema de diagnosticos SIP (`window.__sipDiag()`) |
-| Marzo 2026 | Eliminacion de configuracion TURN Server (no necesaria) |
-| Marzo 2026 | Actualizacion de documentacion tecnica v2.1 |
-
----
-
-*Este manual fue generado como parte del desarrollo del sistema Video Accesos v2.*
-*Ultima actualizacion: 8 de marzo de 2026.*
+*Generado: Marzo 2026 | Version 3.0 | Proyecto syscbctlmonitoreo*
