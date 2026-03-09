@@ -85,6 +85,7 @@ interface AccesPhoneConfig {
   displayName: string;
   micDeviceId: string; // "" = default del navegador
   ringtone: string; // ringtone file name
+  autoAnswer: boolean; // auto-answer incoming calls without ringing
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -112,6 +113,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   displayName: "Monitoreo",
   micDeviceId: "",
   ringtone: "ringtone-classic.wav",
+  autoAnswer: false,
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -183,6 +185,7 @@ export default function AccesPhone({
   const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
   const answeringRef = useRef(false);
+  const answerCallRef = useRef<() => void>(() => {});
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -653,12 +656,6 @@ export default function AccesPhone({
           // Notify parent about incoming call
           onIncomingCallRef.current?.(callerNumber);
 
-          // Play ringtone
-          if (ringtoneRef.current) {
-            ringtoneRef.current.loop = true;
-            ringtoneRef.current.play().catch(() => {});
-          }
-
           // Setup session events
           setupSessionEvents(session, callerNumber);
 
@@ -667,6 +664,20 @@ export default function AccesPhone({
           session.on("getusermediafailed", (e: any) => {
             console.error("[AccesPhone] getUserMedia FAILED:", e);
           });
+
+          // Auto-answer or play ringtone
+          if (configRef.current.autoAnswer) {
+            console.log("[AccesPhone] Auto-answer enabled, answering immediately");
+            diag("AUTO_ANSWER", `num=${callerNumber}`);
+            // Small delay to let UI update with caller info
+            setTimeout(() => answerCallRef.current(), 300);
+          } else {
+            // Play ringtone
+            if (ringtoneRef.current) {
+              ringtoneRef.current.loop = true;
+              ringtoneRef.current.play().catch(() => {});
+            }
+          }
         }
       });
 
@@ -820,6 +831,11 @@ export default function AccesPhone({
       answeringRef.current = false;
     }
   }, [acquireMicOrFallback]);
+
+  // Keep ref in sync for use in SIP event handlers (avoids stale closure)
+  useEffect(() => {
+    answerCallRef.current = answerCall;
+  }, [answerCall]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
@@ -1474,6 +1490,26 @@ export default function AccesPhone({
                   </button>
                 </div>
               </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="autoAnswer"
+                  checked={config.autoAnswer || false}
+                  onChange={(e) =>
+                    setConfig({ ...config, autoAnswer: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="autoAnswer" className="text-sm text-gray-700">
+                  Contestar automaticamente
+                </label>
+              </div>
+              {config.autoAnswer && (
+                <p className="text-[10px] text-amber-600 -mt-1">
+                  Las llamadas se contestaran sin timbrar
+                </p>
+              )}
 
               {/* Separador - Configuracion de Video */}
               <div className="border-t border-gray-200 pt-3 mt-3">
