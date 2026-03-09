@@ -1561,9 +1561,9 @@ export default function AccesPhone({
                     }
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   >
-                    <option value="ringtone-classic.wav">Clasico (telefono fijo)</option>
-                    <option value="ringtone-euro.wav">Europeo (doble timbre)</option>
-                    <option value="ringtone-digital.wav">Digital (melodico)</option>
+                    <option value="ringtone-classic.wav">Ding-Dong (campana)</option>
+                    <option value="ringtone-euro.wav">Beep-Beep (tono corto)</option>
+                    <option value="ringtone-digital.wav">Melodico (suave)</option>
                   </select>
                   <button
                     type="button"
