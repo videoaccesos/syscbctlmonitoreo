@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(usuarioSinContrasena, { status: 201 });
   } catch (error) {
-    console.error("Error al crear usuario:", error);
+    console.error("Error al crear usuario:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     return NextResponse.json(
       { error: "Error al crear usuario" },
       { status: 500 }
