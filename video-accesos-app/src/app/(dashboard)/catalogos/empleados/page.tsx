@@ -6,6 +6,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  RotateCcw,
   X,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,13 @@ interface EmpleadoForm {
   permisoEncargadoAdministracion: number;
 }
 
+interface OperadorEnUso {
+  id: number;
+  nroOperador: string;
+  nombre: string;
+  apePaterno: string;
+}
+
 const emptyForm: EmpleadoForm = {
   nombre: "",
   apePaterno: "",
@@ -112,6 +120,7 @@ export default function EmpleadosPage() {
     null
   );
   const [form, setForm] = useState<EmpleadoForm>(emptyForm);
+  const [usedOperadores, setUsedOperadores] = useState<OperadorEnUso[]>([]);
   const [error, setError] = useState("");
 
   // -----------------------------------------------------------
@@ -154,13 +163,25 @@ export default function EmpleadosPage() {
     }
   }, []);
 
+  const fetchOperadores = useCallback(async () => {
+    try {
+      const res = await fetch("/api/catalogos/empleados/nro-operadores");
+      if (!res.ok) return;
+      const json = await res.json();
+      setUsedOperadores(json);
+    } catch {
+      console.error("Error al cargar nros operador");
+    }
+  }, []);
+
   useEffect(() => {
     fetchEmpleados();
   }, [fetchEmpleados]);
 
   useEffect(() => {
     fetchPuestos();
-  }, [fetchPuestos]);
+    fetchOperadores();
+  }, [fetchPuestos, fetchOperadores]);
 
   // -----------------------------------------------------------
   // Handlers
@@ -238,6 +259,16 @@ export default function EmpleadosPage() {
       return;
     }
 
+    if (form.nroOperador.trim()) {
+      const conflict = usedOperadores.find(
+        (o) => o.nroOperador === form.nroOperador.trim() && o.id !== editingId
+      );
+      if (conflict) {
+        setError(`El nro. operador "${form.nroOperador}" ya esta asignado a ${conflict.nombre} ${conflict.apePaterno}.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -279,6 +310,7 @@ export default function EmpleadosPage() {
 
       setModalOpen(false);
       fetchEmpleados();
+      fetchOperadores();
     } catch {
       setError("Error de conexion al guardar");
     } finally {
@@ -305,10 +337,28 @@ export default function EmpleadosPage() {
       setDeleteModalOpen(false);
       setDeletingEmpleado(null);
       fetchEmpleados();
+      fetchOperadores();
     } catch {
       setError("Error de conexion al eliminar");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (emp: Empleado) => {
+    if (!confirm(`¿Reactivar a ${emp.nombre} ${emp.apePaterno} ${emp.apeMaterno}?`)) return;
+
+    try {
+      const res = await fetch(`/api/catalogos/empleados/${emp.id}`, { method: "PATCH" });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Error al reactivar empleado");
+        return;
+      }
+      fetchEmpleados();
+      fetchOperadores();
+    } catch {
+      alert("Error de conexion al reactivar");
     }
   };
 
@@ -467,6 +517,15 @@ export default function EmpleadosPage() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                         )}
+                        {emp.estatusId !== 1 && (
+                          <button
+                            onClick={() => handleReactivate(emp)}
+                            className="p-1.5 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50 transition"
+                            title="Reactivar"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -622,6 +681,15 @@ export default function EmpleadosPage() {
                     maxLength={4}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   />
+                  {usedOperadores.length > 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      En uso:{" "}
+                      {usedOperadores
+                        .filter((o) => o.id !== editingId)
+                        .map((o) => o.nroOperador)
+                        .join(", ") || "ninguno"}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

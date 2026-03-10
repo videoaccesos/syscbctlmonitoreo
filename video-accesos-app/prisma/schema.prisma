@@ -134,7 +134,7 @@ model Puesto {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   empleados Empleado[]
 
@@ -185,7 +185,7 @@ model Turno {
   puestoId          Int      @default(0) @map("puesto_id")
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("turnos")
 }
@@ -207,7 +207,7 @@ model Falla {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("fallas")
 }
@@ -218,7 +218,7 @@ model CodigoServicio {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   ordenesServicio OrdenServicio[]
 
@@ -231,7 +231,7 @@ model Diagnostico {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   ordenesServicio OrdenServicio[]
 
@@ -575,7 +575,7 @@ model SupervisionLlamada {
   tiempoGestion      DateTime @default(now()) @map("tiempo_gestion") @db.Time(0)
   observaciones      String   @default("") @db.Text
   fechaModificacion  DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId       Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId       Int      @default(0) @map("usuario_id")
 
   registroAcceso RegistroAcceso @relation(fields: [registroAccesoId], references: [id])
 
@@ -604,7 +604,7 @@ model OrdenServicio {
   detalleDiagnostico  String    @default("") @map("detalle_diagnostico") @db.Text
   estatusId           Int       @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion   DateTime  @updatedAt @map("fecha_modificacion")
-  usuarioModId        Int       @default(0) @map("usuario_id") @db.SmallInt
+  usuarioModId        Int       @default(0) @map("usuario_id")
 
   empleado       Empleado       @relation("OrdenEmpleado", fields: [empleadoId], references: [id])
   privada        Privada        @relation(fields: [privadaId], references: [id])
