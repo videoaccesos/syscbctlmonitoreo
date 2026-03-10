@@ -340,10 +340,13 @@ export default function AccesPhone({
           let sdp = e.sdp as string;
           // Change SAVPF to SAVP (Asterisk expects SAVP)
           sdp = sdp.replace(/UDP\/TLS\/RTP\/SAVPF/g, "UDP/TLS/RTP/SAVP");
-          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event(101)
+          // Detect the actual payload type Chrome assigned to telephone-event/8000
+          const dtmfMatch = sdp.match(/a=rtpmap:(\d+) telephone-event\/8000/);
+          const dtmfPT = dtmfMatch ? dtmfMatch[1] : "101";
+          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event
           sdp = sdp.replace(
             /m=audio (\d+) UDP\/TLS\/RTP\/SAVP [^\r\n]+/,
-            "m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 101"
+            `m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 ${dtmfPT}`
           );
           // Remove rtpmap/fmtp/rtcp-fb lines for codecs we stripped
           const lines = sdp.split("\r\n");
@@ -353,6 +356,7 @@ export default function AccesPhone({
             if (/^a=fmtp:\d+ (minptime|111)/.test(line)) return false;
             if (/^a=rtcp-fb:/.test(line)) return false;
             if (/^a=rtpmap:\d+ telephone-event\/48000/.test(line)) return false;
+            if (/^a=fmtp:\d+ 0-16/.test(line) && !line.startsWith(`a=fmtp:${dtmfPT}`)) return false;
             // Remove extmap-allow-mixed (not supported by all Asterisk versions)
             if (line === "a=extmap-allow-mixed") return false;
             // Remove rtcp-rsize (not supported by Asterisk SRTP)
@@ -361,11 +365,11 @@ export default function AccesPhone({
             if (/^a=extmap:/.test(line)) return false;
             return true;
           });
-          // Ensure telephone-event/8000 with payload 101 is present
+          // Ensure telephone-event/8000 rtpmap is present
           if (!filtered.some((l) => l.includes("telephone-event/8000"))) {
             const midIdx = filtered.findIndex((l) => l.startsWith("a=mid:"));
             if (midIdx !== -1) {
-              filtered.splice(midIdx, 0, "a=rtpmap:101 telephone-event/8000", "a=fmtp:101 0-16");
+              filtered.splice(midIdx, 0, `a=rtpmap:${dtmfPT} telephone-event/8000`, `a=fmtp:${dtmfPT} 0-16`);
             }
           }
           e.sdp = filtered.join("\r\n");
