@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
         estatusId: 1,
         fechaModificacion: fechaHoy,
         ultimaSesion: ahora,
-        cambioContrasena: null, // Evitar DEFAULT '0000-00-00' que MySQL strict rechaza
+        cambioContrasena: fechaHoy,
       },
       include: {
         empleado: true,

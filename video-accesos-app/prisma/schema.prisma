@@ -22,7 +22,7 @@ model Usuario {
   modificarFechas   String   @default("N") @map("modificar_fechas") @db.Char(1)
   ultimaSesion      DateTime @default(now()) @map("ultima_sesion") @db.DateTime(0)
   direccionIp       String   @default("") @map("direccion_ip") @db.VarChar(15)
-  cambioContrasena  DateTime? @map("cambio_contrasena") @db.Date
+  cambioContrasena  DateTime  @map("cambio_contrasena") @db.Date
   empleadoId        Int?     @map("empleado_id")
   privadaId         Int?     @map("privada_id")
   logueado          Int      @default(0) @db.TinyInt
