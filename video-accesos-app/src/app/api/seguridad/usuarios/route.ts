@@ -117,6 +117,10 @@ export async function POST(request: NextRequest) {
     const saltChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./";
     const salt = saltChars[Math.floor(Math.random() * saltChars.length)] + saltChars[Math.floor(Math.random() * saltChars.length)];
     const hashedPassword = crypt(contrasena, salt).substring(0, 10);
+    // Fecha como solo DATE (YYYY-MM-DD) para compatibilidad con MySQL DATE column
+    const hoy = new Date();
+    const fechaHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         usuario: usuario.trim(),
@@ -127,6 +131,7 @@ export async function POST(request: NextRequest) {
         logueado: body.logueado || 0,
         usuarioMovId: body.usuarioMovId || 0,
         estatusId: 1,
+        fechaModificacion: fechaHoy,
       },
       include: {
         empleado: true,
