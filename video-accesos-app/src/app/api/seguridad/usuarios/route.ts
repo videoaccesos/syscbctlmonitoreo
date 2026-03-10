@@ -117,9 +117,8 @@ export async function POST(request: NextRequest) {
     const saltChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./";
     const salt = saltChars[Math.floor(Math.random() * saltChars.length)] + saltChars[Math.floor(Math.random() * saltChars.length)];
     const hashedPassword = crypt(contrasena, salt).substring(0, 10);
-    // Fecha como solo DATE (YYYY-MM-DD) para compatibilidad con MySQL DATE column
-    const hoy = new Date();
-    const fechaHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const ahora = new Date();
+    const fechaHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
 
     const nuevoUsuario = await prisma.usuario.create({
       data: {
@@ -132,6 +131,8 @@ export async function POST(request: NextRequest) {
         usuarioMovId: body.usuarioMovId || 0,
         estatusId: 1,
         fechaModificacion: fechaHoy,
+        ultimaSesion: ahora,
+        cambioContrasena: null, // Evitar DEFAULT '0000-00-00' que MySQL strict rechaza
       },
       include: {
         empleado: true,
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(usuarioSinContrasena, { status: 201 });
   } catch (error) {
-    console.error("Error al crear usuario:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error("Error al crear usuario:", error);
     return NextResponse.json(
       { error: "Error al crear usuario" },
       { status: 500 }
