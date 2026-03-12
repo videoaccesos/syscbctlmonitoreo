@@ -32,7 +32,9 @@ export async function POST(request: NextRequest) {
     }
 
     const user = session.user as Record<string, unknown>;
-    const usuarioId = (user?.usuarioId as number) || 0;
+    // Clamp to TINYINT max (127) — column usuario_id is TINYINT in residencias_visitantes
+    const rawUsuarioId = (user?.usuarioId as number) || 0;
+    const usuarioId = Math.min(rawUsuarioId, 127);
 
     // Generar ID unico de 8 digitos
     let visitanteId = generarId();
