@@ -268,6 +268,7 @@ export default function RegistroAccesosPage() {
   const [formTipoGestionId, setFormTipoGestionId] = useState("1");
   const [formSolicitanteId, setFormSolicitanteId] = useState("");
   const [formSolicitanteNombre, setFormSolicitanteNombre] = useState("");
+  const [formSolicitanteData, setFormSolicitanteData] = useState<SolicitanteResult | null>(null);
   const [formObservaciones, setFormObservaciones] = useState("");
 
   // Solicitante search
@@ -523,7 +524,7 @@ export default function RegistroAccesosPage() {
     setResidenciaSearch("");
     setResidencias([]);
     setFormTipoGestionId("1");
-    setFormSolicitanteId("");
+    setFormSolicitanteId(""); setFormSolicitanteData(null);
     setFormSolicitanteNombre("");
     setFormObservaciones("");
     setSolicitanteSearch("");
@@ -573,7 +574,7 @@ export default function RegistroAccesosPage() {
               setSelectedResidencia(json.data);
               setResidencias([]);
               setResidenciaSearch("");
-              setFormSolicitanteId("");
+              setFormSolicitanteId(""); setFormSolicitanteData(null);
               setFormSolicitanteNombre("");
             } else if (json.matchLevel === "privada" && json.privada) {
               // Match a nivel privada (telefono o celular) - solo seleccionar la privada
@@ -583,7 +584,7 @@ export default function RegistroAccesosPage() {
               setSelectedResidencia(null);
               setResidencias([]);
               setResidenciaSearch("");
-              setFormSolicitanteId("");
+              setFormSolicitanteId(""); setFormSolicitanteData(null);
               setFormSolicitanteNombre("");
             }
 
@@ -620,10 +621,11 @@ export default function RegistroAccesosPage() {
     // Don't clear the form - let the operator finish the registro
   }, []);
 
-  const selectSolicitante = (id: string, nombre: string) => {
+  const selectSolicitante = (id: string, nombre: string, data?: SolicitanteResult) => {
     const nombreUpper = nombre.toUpperCase();
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombreUpper);
+    setFormSolicitanteData(data || null);
     setSolicitanteSearch(nombreUpper);
     setSolicitanteResults([]);
   };
@@ -1032,7 +1034,7 @@ export default function RegistroAccesosPage() {
                   setSelectedResidencia(null);
                   setResidencias([]);
                   setResidenciaSearch("");
-                  setFormSolicitanteId("");
+                  setFormSolicitanteId(""); setFormSolicitanteData(null);
                   setFormSolicitanteNombre("");
                 }}
                 className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
@@ -1081,7 +1083,7 @@ export default function RegistroAccesosPage() {
                     <button
                       onClick={() => {
                         setSelectedResidencia(null);
-                        setFormSolicitanteId("");
+                        setFormSolicitanteId(""); setFormSolicitanteData(null);
                         setFormSolicitanteNombre("");
                       }}
                       className="text-blue-400 hover:text-blue-600"
@@ -1134,7 +1136,7 @@ export default function RegistroAccesosPage() {
                               setSelectedResidencia(r);
                               setResidencias([]);
                               setResidenciaSearch("");
-                              setFormSolicitanteId("");
+                              setFormSolicitanteId(""); setFormSolicitanteData(null);
                               setFormSolicitanteNombre("");
                             }}
                             className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
@@ -1185,7 +1187,7 @@ export default function RegistroAccesosPage() {
                         onChange={(e) => {
                           setSolicitanteSearch(e.target.value.toUpperCase());
                           if (formSolicitanteId) {
-                            setFormSolicitanteId("");
+                            setFormSolicitanteId(""); setFormSolicitanteData(null);
                             setFormSolicitanteNombre("");
                           }
                         }}
@@ -1202,17 +1204,27 @@ export default function RegistroAccesosPage() {
                       type="button"
                       disabled={!selectedResidencia}
                       onClick={() => {
-                        // Tomar el texto visible del campo de busqueda y dividirlo
-                        const texto = solicitanteSearch.trim().toUpperCase();
-                        const partes = texto.split(/\s+/);
-                        setRegNombre(partes[0] || "");
-                        setRegApePaterno(partes[1] || "");
-                        setRegApeMaterno(partes.slice(2).join(" ") || "");
-                        setRegTelefono("");
-                        setRegCelular("");
-                        setRegEmail("");
-                        setRegObservaciones("");
-                        setFormSolicitanteId("");
+                        // Pre-fill from selected solicitante data or search text
+                        if (formSolicitanteData) {
+                          setRegNombre(formSolicitanteData.nombrePila || "");
+                          setRegApePaterno(formSolicitanteData.apePaterno || "");
+                          setRegApeMaterno(formSolicitanteData.apeMaterno || "");
+                          setRegCelular(formSolicitanteData.celular || "");
+                          setRegObservaciones(formSolicitanteData.observaciones || "");
+                          setRegTelefono("");
+                          setRegEmail("");
+                        } else {
+                          const texto = solicitanteSearch.trim().toUpperCase();
+                          const partes = texto.split(/\s+/);
+                          setRegNombre(partes[0] || "");
+                          setRegApePaterno(partes[1] || "");
+                          setRegApeMaterno(partes.slice(2).join(" ") || "");
+                          setRegTelefono("");
+                          setRegCelular("");
+                          setRegEmail("");
+                          setRegObservaciones("");
+                        }
+                        setFormSolicitanteId(""); setFormSolicitanteData(null);
                         setFormSolicitanteNombre("");
                         setSolicitanteResults([]);
                         setRegTipo("visitante");
@@ -1237,7 +1249,7 @@ export default function RegistroAccesosPage() {
                         <button
                           key={`${s.tipo}-${s.id}`}
                           type="button"
-                          onClick={() => selectSolicitante(s.id, s.nombre)}
+                          onClick={() => selectSolicitante(s.id, s.nombre, s)}
                           className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm border-b border-gray-100 last:border-b-0"
                         >
                           <span
@@ -1420,6 +1432,37 @@ export default function RegistroAccesosPage() {
                       <div className="p-3">
                         <button
                           onClick={() => {
+                            // Pre-fill from selected solicitante or search text
+                            if (formSolicitanteData) {
+                              setRegNombre(formSolicitanteData.nombrePila || "");
+                              setRegApePaterno(formSolicitanteData.apePaterno || "");
+                              setRegApeMaterno(formSolicitanteData.apeMaterno || "");
+                              setRegCelular(formSolicitanteData.celular || "");
+                              setRegObservaciones(formSolicitanteData.observaciones || "");
+                              setRegTelefono("");
+                              setRegEmail("");
+                            } else if (solicitanteSearch.trim()) {
+                              const texto = solicitanteSearch.trim().toUpperCase();
+                              const partes = texto.split(/\s+/);
+                              setRegNombre(partes[0] || "");
+                              setRegApePaterno(partes[1] || "");
+                              setRegApeMaterno(partes.slice(2).join(" ") || "");
+                              setRegTelefono("");
+                              setRegCelular("");
+                              setRegEmail("");
+                              setRegObservaciones("");
+                            } else {
+                              setRegNombre("");
+                              setRegApePaterno("");
+                              setRegApeMaterno("");
+                              setRegTelefono("");
+                              setRegCelular("");
+                              setRegEmail("");
+                              setRegObservaciones("");
+                            }
+                            setFormSolicitanteId(""); setFormSolicitanteData(null);
+                            setFormSolicitanteNombre("");
+                            setSolicitanteResults([]);
                             setRegTipo("visitante");
                             setShowRegGeneral(true);
                           }}
