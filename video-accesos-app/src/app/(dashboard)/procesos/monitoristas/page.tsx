@@ -116,6 +116,9 @@ interface RegistroAcceso {
 interface SolicitanteResult {
   id: string;
   nombre: string;
+  nombrePila: string;
+  apePaterno: string;
+  apeMaterno: string;
   tipo: "R" | "V" | "G";
   tipoLabel: string;
   celular: string;
@@ -262,6 +265,7 @@ export default function MonitoristasPage() {
   const [formTipoGestionId, setFormTipoGestionId] = useState("1");
   const [formSolicitanteId, setFormSolicitanteId] = useState("");
   const [formSolicitanteNombre, setFormSolicitanteNombre] = useState("");
+  const [formSolicitanteData, setFormSolicitanteData] = useState<SolicitanteResult | null>(null);
   const [formObservaciones, setFormObservaciones] = useState("");
 
   // Solicitante search
@@ -546,6 +550,7 @@ export default function MonitoristasPage() {
     setFormTipoGestionId("1");
     setFormSolicitanteId("");
     setFormSolicitanteNombre("");
+    setFormSolicitanteData(null);
     setFormObservaciones("");
     setSolicitanteSearch("");
     setSolicitanteResults([]);
@@ -598,6 +603,7 @@ export default function MonitoristasPage() {
               setResidenciaSearch("");
               setFormSolicitanteId("");
               setFormSolicitanteNombre("");
+              setFormSolicitanteData(null);
             } else if (json.matchLevel === "privada" && json.privada) {
               // Match a nivel privada - solo seleccionar la privada, dejar residencia limpia
               setIncomingCallResidencia(null);
@@ -608,6 +614,7 @@ export default function MonitoristasPage() {
               setResidenciaSearch("");
               setFormSolicitanteId("");
               setFormSolicitanteNombre("");
+              setFormSolicitanteData(null);
             }
 
             // Start timer
@@ -644,9 +651,10 @@ export default function MonitoristasPage() {
     setIncomingCallNumber("");
   }, []);
 
-  const selectSolicitante = (id: string, nombre: string) => {
+  const selectSolicitante = (id: string, nombre: string, data?: SolicitanteResult) => {
     setFormSolicitanteId(id);
     setFormSolicitanteNombre(nombre);
+    setFormSolicitanteData(data || null);
     setSolicitanteSearch(nombre);
     setSolicitanteResults([]);
   };
@@ -1071,6 +1079,7 @@ export default function MonitoristasPage() {
                   setResidenciaSearch("");
                   setFormSolicitanteId("");
                   setFormSolicitanteNombre("");
+                  setFormSolicitanteData(null);
                 }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition"
               >
@@ -1135,6 +1144,7 @@ export default function MonitoristasPage() {
                         setSelectedResidencia(null);
                         setFormSolicitanteId("");
                         setFormSolicitanteNombre("");
+                        setFormSolicitanteData(null);
                       }}
                       className="text-indigo-400 hover:text-indigo-600 ml-2 flex-shrink-0"
                     >
@@ -1187,6 +1197,7 @@ export default function MonitoristasPage() {
                               setResidenciaSearch("");
                               setFormSolicitanteId("");
                               setFormSolicitanteNombre("");
+                              setFormSolicitanteData(null);
                             }}
                             className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition text-sm border-b border-gray-100 last:border-b-0"
                           >
@@ -1230,6 +1241,7 @@ export default function MonitoristasPage() {
                           if (formSolicitanteId) {
                             setFormSolicitanteId("");
                             setFormSolicitanteNombre("");
+                            setFormSolicitanteData(null);
                           }
                         }}
                         disabled={!selectedResidencia}
@@ -1244,7 +1256,27 @@ export default function MonitoristasPage() {
                       type="button"
                       disabled={!selectedResidencia}
                       onClick={() => {
-                        setRegTipo("general");
+                        if (formSolicitanteData) {
+                          setRegNombre(formSolicitanteData.nombrePila || "");
+                          setRegApePaterno(formSolicitanteData.apePaterno || "");
+                          setRegApeMaterno(formSolicitanteData.apeMaterno || "");
+                          setRegCelular(formSolicitanteData.celular || "");
+                          setRegObservaciones(formSolicitanteData.observaciones || "");
+                          setRegTelefono("");
+                          setRegEmail("");
+                          setRegTipo(formSolicitanteData.tipo === "V" ? "visitante" : "general");
+                        } else {
+                          const texto = solicitanteSearch.trim().toUpperCase();
+                          const partes = texto.split(/\s+/);
+                          setRegNombre(partes[0] || "");
+                          setRegApePaterno(partes[1] || "");
+                          setRegApeMaterno(partes.slice(2).join(" ") || "");
+                          setRegTelefono("");
+                          setRegCelular("");
+                          setRegEmail("");
+                          setRegObservaciones("");
+                          setRegTipo("general");
+                        }
                         setShowRegGeneral(true);
                       }}
                       className="rounded-xl border border-gray-300 px-2.5 py-2 text-gray-700 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 transition"
@@ -1265,7 +1297,7 @@ export default function MonitoristasPage() {
                         <button
                           key={`${s.tipo}-${s.id}`}
                           type="button"
-                          onClick={() => selectSolicitante(s.id, s.nombre)}
+                          onClick={() => selectSolicitante(s.id, s.nombre, s)}
                           className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition text-sm border-b border-gray-100 last:border-b-0"
                         >
                           <span
