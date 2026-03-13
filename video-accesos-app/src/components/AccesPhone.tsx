@@ -17,6 +17,7 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
+  Bell,
   BellOff,
   Zap,
   LogOut,
@@ -87,6 +88,7 @@ interface AccesPhoneConfig {
   displayName: string;
   micDeviceId: string; // "" = default del navegador
   autoAnswer: boolean; // auto-answer incoming calls without ringing
+  ringVolume: number; // 0-100 ringtone volume
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -100,7 +102,7 @@ interface CallInfo {
 }
 
 interface AccesPhoneProps {
-  onIncomingCall?: (callerNumber: string) => void;
+  onIncomingCall?: (callerNumber: string, displayName?: string) => void;
   onCallAnswered?: (callerNumber: string) => void;
   onCallEnded?: () => void;
 }
@@ -114,6 +116,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   displayName: "Monitoreo",
   micDeviceId: "",
   autoAnswer: false,
+  ringVolume: 70,
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
@@ -196,6 +199,10 @@ export default function AccesPhone({
   const mountedRef = useRef(true);
   const answeringRef = useRef(false);
   const answerCallRef = useRef<() => void>(() => {});
+  const ringAudioContextRef = useRef<AudioContext | null>(null);
+  const ringOscillatorRef = useRef<OscillatorNode | null>(null);
+  const ringGainRef = useRef<GainNode | null>(null);
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -223,6 +230,98 @@ export default function AccesPhone({
   useEffect(() => {
     setConfig(loadConfig());
   }, []);
+
+  // -----------------------------------------------------------
+  // Ringtone using Web Audio API (classic phone ring pattern)
+  // -----------------------------------------------------------
+  const startRingtone = useCallback(() => {
+    const volume = configRef.current.ringVolume;
+    if (volume <= 0) return; // muted
+
+    try {
+      const ctx = new AudioContext();
+      ringAudioContextRef.current = ctx;
+
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 0; // start silent
+      gainNode.connect(ctx.destination);
+      ringGainRef.current = gainNode;
+
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = 440; // A4 tone
+      osc.connect(gainNode);
+      osc.start();
+      ringOscillatorRef.current = osc;
+
+      const maxGain = (volume / 100) * 0.5; // scale to 0-0.5
+
+      // Ring pattern: 1s on, 2s off (classic phone ring)
+      let ringOn = true;
+      gainNode.gain.value = maxGain;
+
+      ringIntervalRef.current = setInterval(() => {
+        ringOn = !ringOn;
+        if (ringGainRef.current) {
+          ringGainRef.current.gain.value = ringOn ? maxGain : 0;
+        }
+        // Alternate frequency for dual-tone effect
+        if (ringOn && ringOscillatorRef.current) {
+          ringOscillatorRef.current.frequency.value =
+            ringOscillatorRef.current.frequency.value === 440 ? 480 : 440;
+        }
+      }, ringOn ? 1000 : 2000);
+
+      // More precise: ring 1s, silence 2s pattern
+      if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
+      let phase = 0; // 0=ring, 1=silence
+      const tick = () => {
+        if (!ringGainRef.current) return;
+        if (phase === 0) {
+          // Ring for 1 second
+          ringGainRef.current.gain.value = maxGain;
+          if (ringOscillatorRef.current) ringOscillatorRef.current.frequency.value = 440;
+          setTimeout(() => {
+            if (ringGainRef.current) ringGainRef.current.gain.value = 0;
+          }, 1000);
+          phase = 1;
+          ringIntervalRef.current = setTimeout(tick, 3000) as unknown as ReturnType<typeof setInterval>;
+        }
+      };
+      tick();
+    } catch (e) {
+      console.error("[AccesPhone] Error starting ringtone:", e);
+    }
+  }, []);
+
+  const stopRingtone = useCallback(() => {
+    if (ringIntervalRef.current) {
+      clearTimeout(ringIntervalRef.current as unknown as ReturnType<typeof setTimeout>);
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (ringOscillatorRef.current) {
+      try { ringOscillatorRef.current.stop(); } catch { /* ignore */ }
+      ringOscillatorRef.current = null;
+    }
+    if (ringGainRef.current) {
+      ringGainRef.current = null;
+    }
+    if (ringAudioContextRef.current) {
+      try { ringAudioContextRef.current.close(); } catch { /* ignore */ }
+      ringAudioContextRef.current = null;
+    }
+  }, []);
+
+  // Start/stop ringtone when ringing state changes
+  useEffect(() => {
+    if (ringing) {
+      startRingtone();
+    } else {
+      stopRingtone();
+    }
+    return () => stopRingtone();
+  }, [ringing, startRingtone, stopRingtone]);
 
   // Call duration timer
   useEffect(() => {
@@ -628,7 +727,8 @@ export default function AccesPhone({
         if (data.originator === "remote") {
           // Incoming call
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
-          console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
+          const callerDisplayName = session.remote_identity?.display_name || "";
+          console.log("[AccesPhone] Incoming call from:", callerNumber, "displayName:", callerDisplayName, "session status:", session.status);
 
           // DND: reject immediately
           if (dndRef.current) {
@@ -667,8 +767,8 @@ export default function AccesPhone({
             })
             .catch(() => { /* silently ignore lookup failures */ });
 
-          // Notify parent about incoming call
-          onIncomingCallRef.current?.(callerNumber);
+          // Notify parent about incoming call (include display name from SIP)
+          onIncomingCallRef.current?.(callerNumber, callerDisplayName || undefined);
 
           // Setup session events
           setupSessionEvents(session, callerNumber);
@@ -1524,6 +1624,35 @@ export default function AccesPhone({
                 </select>
                 <p className="text-[10px] text-gray-700 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Volumen de timbrado
+                </label>
+                <div className="flex items-center gap-3">
+                  {config.ringVolume > 0 ? (
+                    <Bell className="h-4 w-4 text-gray-600 flex-shrink-0" />
+                  ) : (
+                    <BellOff className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={config.ringVolume}
+                    onChange={(e) =>
+                      setConfig({ ...config, ringVolume: parseInt(e.target.value) })
+                    }
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-xs font-mono text-gray-600 w-8 text-right">
+                    {config.ringVolume}%
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-700 mt-1">
+                  Intensidad del sonido al recibir llamadas (0 = silencio)
                 </p>
               </div>
 

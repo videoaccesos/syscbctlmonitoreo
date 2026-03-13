@@ -285,6 +285,7 @@ export default function MonitoristasPage() {
 
   // Incoming call notification
   const [incomingCallNumber, setIncomingCallNumber] = useState("");
+  const [incomingCallDisplayName, setIncomingCallDisplayName] = useState("");
   const [incomingCallResidencia, setIncomingCallResidencia] = useState<{
     id: number;
     nroCasa: string;
@@ -571,6 +572,7 @@ export default function MonitoristasPage() {
   const handleIncomingCall = useCallback(
     async (callerNumber: string, displayName?: string) => {
       setIncomingCallNumber(callerNumber);
+      setIncomingCallDisplayName(displayName || "");
       setIncomingCallResidencia(null);
       setLookingUpCaller(true);
 
@@ -649,6 +651,7 @@ export default function MonitoristasPage() {
 
   const handleCallEnded = useCallback(() => {
     setIncomingCallNumber("");
+    setIncomingCallDisplayName("");
   }, []);
 
   const selectSolicitante = (id: string, nombre: string, data?: SolicitanteResult) => {
@@ -961,6 +964,11 @@ export default function MonitoristasPage() {
                 {incomingCallResidencia.privada.descripcion}
               </div>
             )}
+            {incomingCallDisplayName && (
+              <div className="text-base font-extrabold text-gray-900 leading-tight">
+                {incomingCallDisplayName}
+              </div>
+            )}
             <div className="text-sm font-bold text-gray-900">
               Llamada entrante: <span className="font-mono">{incomingCallNumber}</span>
             </div>
@@ -989,6 +997,7 @@ export default function MonitoristasPage() {
           <button
             onClick={() => {
               setIncomingCallNumber("");
+              setIncomingCallDisplayName("");
               setIncomingCallResidencia(null);
             }}
             className="p-1.5 rounded-lg text-gray-600 hover:text-gray-600 hover:bg-white/60 transition"
