@@ -313,6 +313,31 @@ export default function MonitoristasPage() {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Refs to keep current form data accessible from handleIncomingCall (avoids stale closures)
+  const formDataRef = useRef({
+    privadaId: "",
+    selectedResidencia: null as Residencia | null,
+    tipoGestionId: "1",
+    solicitanteId: "",
+    solicitanteNombre: "",
+    solicitanteSearch: "",
+    observaciones: "",
+    timerSeconds: 0,
+  });
+  // Keep ref in sync with state
+  useEffect(() => {
+    formDataRef.current = {
+      privadaId: formPrivadaId,
+      selectedResidencia,
+      tipoGestionId: formTipoGestionId,
+      solicitanteId: formSolicitanteId,
+      solicitanteNombre: formSolicitanteNombre,
+      solicitanteSearch: solicitanteSearch,
+      observaciones: formObservaciones,
+      timerSeconds,
+    };
+  }, [formPrivadaId, selectedResidencia, formTipoGestionId, formSolicitanteId, formSolicitanteNombre, solicitanteSearch, formObservaciones, timerSeconds]);
+
   // Duracion de la ultima gestion
   const [ultimaDuracion, setUltimaDuracion] = useState("00:00:00");
 
@@ -567,10 +592,96 @@ export default function MonitoristasPage() {
   };
 
   // -----------------------------------------------------------
+  // Auto-save pending registro when a new call arrives
+  // -----------------------------------------------------------
+  const autoSavePendingRegistro = useCallback(async () => {
+    const fd = formDataRef.current;
+
+    // Only auto-save if there is a residencia selected (minimum required data)
+    if (!fd.selectedResidencia || !fd.privadaId) return;
+
+    const user = session?.user as Record<string, unknown> | undefined;
+    const empleadoId = user?.empleadoId;
+    const usuarioId = user?.usuarioId;
+    if (!empleadoId || !usuarioId) return;
+
+    // Determine solicitante - if one was selected use it, otherwise try to create from search text
+    let solicitanteId = fd.solicitanteId;
+    let solicitanteNombre = fd.solicitanteNombre;
+
+    if (!solicitanteId && fd.solicitanteSearch.trim()) {
+      // Auto-create a visitante from the search text
+      const partes = fd.solicitanteSearch.trim().split(/\s+/);
+      try {
+        const res = await fetch("/api/procesos/registro-accesos/registrar-visitante", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            residenciaId: fd.selectedResidencia.id,
+            nombre: partes[0] || "",
+            apePaterno: partes[1] || "",
+            apeMaterno: partes.slice(2).join(" ") || "",
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          solicitanteId = data.id;
+          solicitanteNombre = data.nombre;
+        }
+      } catch { /* silently fail */ }
+    }
+
+    if (!solicitanteId) return; // Cannot save without solicitante
+
+    const duracion = fd.timerSeconds > 0 ? formatTimer(fd.timerSeconds) : "00:00:00";
+    // Use tipo gestion as-is; if still "No concluida" (1), use it as-is since that's the actual state
+    const tipoGestionId = fd.tipoGestionId;
+    // Default to ACCESO (1) for auto-save
+    const estatusId = 1;
+
+    try {
+      const res = await fetch("/api/procesos/registro-accesos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          empleadoId,
+          privadaId: fd.privadaId,
+          residenciaId: fd.selectedResidencia.id,
+          tipoGestionId,
+          solicitanteId,
+          estatusId,
+          usuarioId,
+          observaciones: fd.observaciones || null,
+          duracion,
+        }),
+      });
+
+      if (res.ok) {
+        console.log("[Monitorista] Auto-guardado registro pendiente:", solicitanteNombre);
+        setSuccessMsg(`Auto-guardado: ACCESO - ${solicitanteNombre}`);
+        // Cache name
+        if (solicitanteId) {
+          setNombresCache((prev) => ({
+            ...prev,
+            [solicitanteId]: { nombre: solicitanteNombre, tipo: "?" },
+          }));
+        }
+        fetchRegistros();
+        setTimeout(() => setSuccessMsg(""), 5000);
+      }
+    } catch {
+      console.error("[Monitorista] Error en auto-guardado");
+    }
+  }, [session, fetchRegistros]);
+
+  // -----------------------------------------------------------
   // AccesPhone - Incoming call handler
   // -----------------------------------------------------------
   const handleIncomingCall = useCallback(
     async (callerNumber: string, displayName?: string) => {
+      // Auto-save any pending registro before overwriting form data
+      await autoSavePendingRegistro();
+
       setIncomingCallNumber(callerNumber);
       setIncomingCallDisplayName(displayName || "");
       setIncomingCallResidencia(null);
