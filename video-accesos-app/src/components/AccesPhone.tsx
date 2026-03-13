@@ -190,6 +190,7 @@ export default function AccesPhone({
   // Keep refs in sync to avoid stale closures in SIP event handlers
   useEffect(() => { dndRef.current = dndActive; }, [dndActive]);
   useEffect(() => { autoAnswerRef.current = autoAnswerActive; }, [autoAnswerActive]);
+  useEffect(() => { ringingRef.current = ringing; }, [ringing]);
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -210,6 +211,7 @@ export default function AccesPhone({
   const answeringRef = useRef(false);
   const answerCallRef = useRef<() => void>(() => {});
   const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ringingRef = useRef(false);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -331,6 +333,11 @@ export default function AccesPhone({
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
         setInCall(true);
+        // Restore remote audio volume after ringing (was muted to suppress Asterisk early media)
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.volume = 1.0;
+          console.log("[AccesPhone] Remote audio volume restored after answer");
+        }
         onCallAnsweredRef.current?.(callerNumber);
       });
 
@@ -440,7 +447,14 @@ export default function AccesPhone({
             console.log("[AccesPhone] Remote track received:", ev.track.kind);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
-              remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              // Mute remote audio while ringing to prevent Asterisk's early media
+              // ringtone from playing on top of our local ringtone
+              if (ringingRef.current) {
+                remoteAudioRef.current.volume = 0;
+                console.log("[AccesPhone] Remote audio muted during ringing (early media suppressed)");
+              } else {
+                remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              }
               remoteAudioRef.current.play().catch(() => {});
             }
           });
@@ -452,6 +466,12 @@ export default function AccesPhone({
             if (ev.stream && ev.stream.getAudioTracks().length > 0) {
               if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = ev.stream;
+                // Mute during ringing to suppress Asterisk early media
+                if (ringingRef.current) {
+                  remoteAudioRef.current.volume = 0;
+                } else {
+                  remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+                }
                 remoteAudioRef.current.play().catch(() => {});
               }
             }
