@@ -89,6 +89,7 @@ interface AccesPhoneConfig {
   micDeviceId: string; // "" = default del navegador
   autoAnswer: boolean; // auto-answer incoming calls without ringing
   ringVolume: number; // 0-100 ringtone volume
+  ringTone: string; // ringtone file name
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -117,10 +118,19 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   micDeviceId: "",
   autoAnswer: false,
   ringVolume: 70,
+  ringTone: "ringtone-classic.wav",
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
 };
+
+const RINGTONE_OPTIONS = [
+  { value: "ringtone-classic.wav", label: "Clasico" },
+  { value: "ringtone-phone.wav", label: "Telefono" },
+  { value: "ringtone-digital.wav", label: "Digital" },
+  { value: "ringtone-euro.wav", label: "Euro" },
+  { value: "ringtone.wav", label: "Simple" },
+];
 
 const STORAGE_KEY = "accesphone_config";
 
@@ -199,10 +209,7 @@ export default function AccesPhone({
   const mountedRef = useRef(true);
   const answeringRef = useRef(false);
   const answerCallRef = useRef<() => void>(() => {});
-  const ringAudioContextRef = useRef<AudioContext | null>(null);
-  const ringOscillatorRef = useRef<OscillatorNode | null>(null);
-  const ringGainRef = useRef<GainNode | null>(null);
-  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -232,84 +239,31 @@ export default function AccesPhone({
   }, []);
 
   // -----------------------------------------------------------
-  // Ringtone using Web Audio API (classic phone ring pattern)
+  // Ringtone using <audio> element with real WAV files
   // -----------------------------------------------------------
   const startRingtone = useCallback(() => {
     const volume = configRef.current.ringVolume;
     if (volume <= 0) return; // muted
 
     try {
-      const ctx = new AudioContext();
-      ringAudioContextRef.current = ctx;
-
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 0; // start silent
-      gainNode.connect(ctx.destination);
-      ringGainRef.current = gainNode;
-
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = 440; // A4 tone
-      osc.connect(gainNode);
-      osc.start();
-      ringOscillatorRef.current = osc;
-
-      const maxGain = (volume / 100) * 0.5; // scale to 0-0.5
-
-      // Ring pattern: 1s on, 2s off (classic phone ring)
-      let ringOn = true;
-      gainNode.gain.value = maxGain;
-
-      ringIntervalRef.current = setInterval(() => {
-        ringOn = !ringOn;
-        if (ringGainRef.current) {
-          ringGainRef.current.gain.value = ringOn ? maxGain : 0;
-        }
-        // Alternate frequency for dual-tone effect
-        if (ringOn && ringOscillatorRef.current) {
-          ringOscillatorRef.current.frequency.value =
-            ringOscillatorRef.current.frequency.value === 440 ? 480 : 440;
-        }
-      }, ringOn ? 1000 : 2000);
-
-      // More precise: ring 1s, silence 2s pattern
-      if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
-      let phase = 0; // 0=ring, 1=silence
-      const tick = () => {
-        if (!ringGainRef.current) return;
-        if (phase === 0) {
-          // Ring for 1 second
-          ringGainRef.current.gain.value = maxGain;
-          if (ringOscillatorRef.current) ringOscillatorRef.current.frequency.value = 440;
-          setTimeout(() => {
-            if (ringGainRef.current) ringGainRef.current.gain.value = 0;
-          }, 1000);
-          phase = 1;
-          ringIntervalRef.current = setTimeout(tick, 3000) as unknown as ReturnType<typeof setInterval>;
-        }
-      };
-      tick();
+      const tone = configRef.current.ringTone || "ringtone-classic.wav";
+      const audio = new Audio(`/sounds/${tone}`);
+      audio.loop = true;
+      audio.volume = volume / 100;
+      ringtoneAudioRef.current = audio;
+      audio.play().catch((e) => {
+        console.warn("[AccesPhone] Ringtone play blocked by browser:", e);
+      });
     } catch (e) {
       console.error("[AccesPhone] Error starting ringtone:", e);
     }
   }, []);
 
   const stopRingtone = useCallback(() => {
-    if (ringIntervalRef.current) {
-      clearTimeout(ringIntervalRef.current as unknown as ReturnType<typeof setTimeout>);
-      clearInterval(ringIntervalRef.current);
-      ringIntervalRef.current = null;
-    }
-    if (ringOscillatorRef.current) {
-      try { ringOscillatorRef.current.stop(); } catch { /* ignore */ }
-      ringOscillatorRef.current = null;
-    }
-    if (ringGainRef.current) {
-      ringGainRef.current = null;
-    }
-    if (ringAudioContextRef.current) {
-      try { ringAudioContextRef.current.close(); } catch { /* ignore */ }
-      ringAudioContextRef.current = null;
+    if (ringtoneAudioRef.current) {
+      ringtoneAudioRef.current.pause();
+      ringtoneAudioRef.current.currentTime = 0;
+      ringtoneAudioRef.current = null;
     }
   }, []);
 
@@ -1654,6 +1608,40 @@ export default function AccesPhone({
                 <p className="text-[10px] text-gray-700 mt-1">
                   Intensidad del sonido al recibir llamadas (0 = silencio)
                 </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Tono de timbrado
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={config.ringTone}
+                    onChange={(e) =>
+                      setConfig({ ...config, ringTone: e.target.value })
+                    }
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    {RINGTONE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Preview ringtone
+                      const audio = new Audio(`/sounds/${config.ringTone}`);
+                      audio.volume = config.ringVolume / 100;
+                      audio.play().catch(() => {});
+                      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
+                    }}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                    title="Probar tono"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Separador - Configuracion de Video */}
