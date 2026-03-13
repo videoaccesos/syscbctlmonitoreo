@@ -62,6 +62,35 @@ export async function GET(request: NextRequest) {
 
     const searchCondition = buildSearchCondition(palabras);
 
+    // Helper: when apePaterno/apeMaterno are empty but nombre contains
+    // multiple words (legacy data), split nombre into parts so the modal
+    // can pre-fill the fields correctly.
+    function splitNameParts(row: { nombre: string; apePaterno: string; apeMaterno: string }) {
+      const nom = (row.nombre || "").trim();
+      const pat = (row.apePaterno || "").trim();
+      const mat = (row.apeMaterno || "").trim();
+
+      // If apellidos are already populated, use them as-is
+      if (pat) {
+        return { nombrePila: nom, apePaterno: pat, apeMaterno: mat };
+      }
+
+      // Legacy data: full name stored in nombre, apellidos empty
+      // Try to split: last two words → apePaterno + apeMaterno, rest → nombre
+      const parts = nom.split(/\s+/);
+      if (parts.length >= 3) {
+        return {
+          nombrePila: parts.slice(0, -2).join(" "),
+          apePaterno: parts[parts.length - 2],
+          apeMaterno: parts[parts.length - 1],
+        };
+      }
+      if (parts.length === 2) {
+        return { nombrePila: parts[0], apePaterno: parts[1], apeMaterno: "" };
+      }
+      return { nombrePila: nom, apePaterno: "", apeMaterno: "" };
+    }
+
     // 1. Buscar en visitantes (sin filtro de residencia - es solo autocompletado)
     const visitantes = await prisma.visita.findMany({
       where: {
@@ -81,12 +110,13 @@ export async function GET(request: NextRequest) {
     });
 
     for (const v of visitantes) {
+      const parsed = splitNameParts(v);
       results.push({
         id: v.id,
         nombre: `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim(),
-        nombrePila: v.nombre || "",
-        apePaterno: v.apePaterno || "",
-        apeMaterno: v.apeMaterno || "",
+        nombrePila: parsed.nombrePila,
+        apePaterno: parsed.apePaterno,
+        apeMaterno: parsed.apeMaterno,
         tipo: "V",
         tipoLabel: "Visitante",
         celular: v.celular || "",
@@ -114,12 +144,13 @@ export async function GET(request: NextRequest) {
       });
 
       for (const g of generales) {
+        const parsed = splitNameParts(g);
         results.push({
           id: g.id,
           nombre: `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim(),
-          nombrePila: g.nombre || "",
-          apePaterno: g.apePaterno || "",
-          apeMaterno: g.apeMaterno || "",
+          nombrePila: parsed.nombrePila,
+          apePaterno: parsed.apePaterno,
+          apeMaterno: parsed.apeMaterno,
           tipo: "G",
           tipoLabel: "General",
           celular: g.celular || "",

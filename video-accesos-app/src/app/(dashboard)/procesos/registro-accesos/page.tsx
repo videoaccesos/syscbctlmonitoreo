@@ -818,8 +818,19 @@ export default function RegistroAccesosPage() {
       }
 
       const data = await res.json();
-      // Asignar como solicitante
-      selectSolicitante(data.id, data.nombre);
+      // Rebuild full solicitante data so the modal can pre-fill correctly if reopened
+      const savedData: SolicitanteResult = {
+        id: data.id,
+        nombre: data.nombre,
+        nombrePila: regNombre.trim(),
+        apePaterno: regApePaterno.trim(),
+        apeMaterno: regApeMaterno.trim(),
+        tipo: regTipo === "visitante" ? "V" : "G",
+        tipoLabel: regTipo === "visitante" ? "Visitante" : "General",
+        celular: regCelular.trim(),
+        observaciones: regObservaciones.trim(),
+      };
+      selectSolicitante(data.id, data.nombre, savedData);
 
       // Reset modal
       setShowRegGeneral(false);
