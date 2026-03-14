@@ -212,6 +212,8 @@ export default function AccesPhone({
   const answerCallRef = useRef<() => void>(() => {});
   const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
   const ringingRef = useRef(false);
+  const reconnectInProgressRef = useRef(false);
+  const connectingInProgressRef = useRef(false);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -543,6 +545,9 @@ export default function AccesPhone({
 
     reconnectTimerRef.current = setTimeout(() => {
       if (!mountedRef.current || manualDisconnectRef.current) return;
+      // Mark that we are intentionally reconnecting so the disconnected
+      // event from ua.stop() does not schedule yet another reconnect
+      reconnectInProgressRef.current = true;
       // Clean up old UA before reconnecting
       if (uaRef.current) {
         try {
@@ -553,6 +558,7 @@ export default function AccesPhone({
         uaRef.current = null;
       }
       setReconnecting(false);
+      reconnectInProgressRef.current = false;
       // Call via ref to always get the latest version (avoids stale closure)
       connectSIPInternalRef.current?.();
     }, delay);
@@ -578,6 +584,17 @@ export default function AccesPhone({
       console.log('[AccesPhone] Ya hay un UA activo, saliendo');
       return;
     }
+    // Prevent overlapping reconnect attempts
+    if (reconnectTimerRef.current) {
+      console.log('[AccesPhone] Reconnect timer pendiente, saliendo');
+      return;
+    }
+    // Prevent concurrent connection attempts
+    if (connectingInProgressRef.current) {
+      console.log('[AccesPhone] Conexion ya en progreso, saliendo');
+      return;
+    }
+    connectingInProgressRef.current = true;
 
     // Read config from ref, but fallback to localStorage if ref is stale
     // (React Strict Mode can cause configRef to be overwritten with defaults)
@@ -640,31 +657,37 @@ export default function AccesPhone({
       ua.on("disconnected", (e) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const evt = e as any;
-        const reason = evt?.error ? `error=${evt.error}` : "clean";
+        const isError = !!evt?.error;
+        const reason = isError ? `error=${evt.error}` : "clean";
         const code = evt?.code || "";
         const wsReason = evt?.reason || "";
         diag("WS_DISCONNECTED", `manual=${manualDisconnectRef.current} reason=${reason} code=${code} wsReason=${wsReason}`);
         console.log("[AccesPhone] WebSocket desconectado, manual:", manualDisconnectRef.current);
         setConnected(false);
         setConnecting(false);
+        connectingInProgressRef.current = false;
 
-        // Just clear the reference - do NOT call ua.stop() here as it can
-        // fire another 'disconnected' event recursively
-        uaRef.current = null;
-
-        if (manualDisconnectRef.current) {
-          setStatusText("Desconectado");
+        if (manualDisconnectRef.current || reconnectInProgressRef.current) {
+          // Manual disconnect or planned reconnect in progress - clean up
+          uaRef.current = null;
+          if (manualDisconnectRef.current) {
+            setStatusText("Desconectado");
+          } else {
+            console.log("[AccesPhone] Disconnected during planned reconnect, skipping scheduleReconnect");
+          }
         } else {
-          // Auto-reconnect - read attempt from ref to avoid stale closure
-          setStatusText("Conexion perdida");
-          diag("RECONNECT_TRIGGER", `attempt=${reconnectAttemptRef.current}`);
-          scheduleReconnect(reconnectAttemptRef.current);
+          // Unexpected disconnect - let JsSIP's built-in connection recovery
+          // handle the WebSocket reconnection (connection_recovery_min_interval=2s).
+          // Do NOT destroy the UA or create a new one; JsSIP will auto-reconnect.
+          setStatusText("Reconectando...");
+          console.log("[AccesPhone] Letting JsSIP handle WebSocket reconnection automatically");
         }
       });
 
       ua.on("registered", () => {
         diag("SIP_REGISTERED", `ext=${cfg.extension}`);
         console.log("[AccesPhone] SIP registrado exitosamente");
+        connectingInProgressRef.current = false;
         setConnected(true);
         setConnecting(false);
         setReconnecting(false);
@@ -683,12 +706,13 @@ export default function AccesPhone({
       ua.on("registrationFailed", (e) => {
         diag("SIP_REG_FAILED", `cause=${e.cause}`);
         console.error("[AccesPhone] Registro SIP fallido:", e.cause);
+        connectingInProgressRef.current = false;
         setConnected(false);
         setConnecting(false);
         setStatusText(`Error: ${e.cause || "registro fallido"}`);
 
         // If registration fails but WS is connected, schedule retry
-        if (!manualDisconnectRef.current) {
+        if (!manualDisconnectRef.current && !reconnectInProgressRef.current) {
           scheduleReconnect(reconnectAttemptRef.current);
         }
       });
@@ -773,6 +797,7 @@ export default function AccesPhone({
       const errMsg = err instanceof Error ? err.message : String(err);
       diag("CONNECT_ERROR", errMsg);
       console.error("[AccesPhone] Error al conectar SIP:", err);
+      connectingInProgressRef.current = false;
       setConnecting(false);
       setStatusText(`Error: ${errMsg}`);
 
