@@ -11,6 +11,9 @@ import {
   Loader2,
   XCircle,
   Trash2,
+  Printer,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -204,6 +207,12 @@ export default function AsignacionTarjetasPage() {
   // cancelar asignacion
   const [cancelTarget, setCancelTarget] = useState<Asignacion | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  // reporte modal
+  const [showReporte, setShowReporte] = useState(false);
+  const [reporteFechaIni, setReporteFechaIni] = useState("");
+  const [reporteFechaFin, setReporteFechaFin] = useState("");
+  const [generandoReporte, setGenerandoReporte] = useState(false);
 
   /* ---------- fetch data ---------- */
   const fetchData = useCallback(async () => {
@@ -601,6 +610,48 @@ export default function AsignacionTarjetasPage() {
     }
   };
 
+  /* ---------- imprimir comprobante ---------- */
+  const handlePrintComprobante = (asignacionId: number) => {
+    window.open(
+      `/api/procesos/asignacion-tarjetas/${asignacionId}/comprobante`,
+      "_blank"
+    );
+  };
+
+  /* ---------- generar reporte Excel ---------- */
+  const handleGenerarReporte = async () => {
+    if (!reporteFechaIni || !reporteFechaFin) return;
+    setGenerandoReporte(true);
+    try {
+      const params = new URLSearchParams({
+        fechaIni: reporteFechaIni,
+        fechaFin: reporteFechaFin,
+      });
+      const res = await fetch(
+        `/api/procesos/asignacion-tarjetas/reporte?${params}`
+      );
+      if (!res.ok) {
+        const json = await res.json();
+        alert(json.error || "Error al generar reporte");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Reporte_Asignacion_Tarjetas_${reporteFechaIni}_${reporteFechaFin}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setShowReporte(false);
+    } catch {
+      alert("Error de conexion al generar reporte");
+    } finally {
+      setGenerandoReporte(false);
+    }
+  };
+
   /* ---------- helpers de formato ---------- */
   const fmtDate = (v: string | null) => {
     if (!v) return "-";
@@ -642,13 +693,22 @@ export default function AsignacionTarjetasPage() {
             Gestiona la asignacion de tarjetas de acceso a residentes
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva Asignacion
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowReporte(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-green-600 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 transition"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Reporte de Ventas
+          </button>
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva Asignacion
+          </button>
+        </div>
       </div>
 
       {/* Barra de busqueda y filtros */}
@@ -851,6 +911,13 @@ export default function AsignacionTarjetasPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handlePrintComprobante(item.id)}
+                          title="Imprimir comprobante"
+                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600 transition"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
                         {item.estatusId === 1 && (
                           <button
                             onClick={() => setCancelTarget(item)}
@@ -1442,6 +1509,84 @@ export default function AsignacionTarjetasPage() {
               >
                 {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
                 {cancelling ? "Cancelando..." : "Cancelar Asignacion"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL REPORTE DE VENTAS ==================== */}
+      {showReporte && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowReporte(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                Reporte de Ventas
+              </h3>
+              <button
+                onClick={() => setShowReporte(false)}
+                className="p-1 rounded hover:bg-gray-100 transition"
+              >
+                <X className="h-5 w-5 text-gray-700" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Selecciona el rango de fechas para generar el reporte Excel con:
+              tarjetas vendidas, por seguro, canceladas, y concentrado por
+              privada.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha Inicio <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={reporteFechaIni}
+                  onChange={(e) => setReporteFechaIni(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha Fin <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={reporteFechaFin}
+                  onChange={(e) => setReporteFechaFin(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowReporte(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGenerarReporte}
+                disabled={
+                  generandoReporte || !reporteFechaIni || !reporteFechaFin
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generandoReporte ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {generandoReporte ? "Generando..." : "Descargar Excel"}
               </button>
             </div>
           </div>
