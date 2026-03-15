@@ -23,90 +23,73 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Query: Tarjetas vendidas (activas, sin seguro)
-    const sqlVendidas = `
-      SELECT CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
+    // Columnas comunes (sin fecha_vencimiento que solo existe en tabla H)
+    const commonCols = `asignacion_id, privada, tarjeta_id, tarjeta_id2, tarjeta_id3,
+             tarjeta_id4, tarjeta_id5, numero_serie, numero_serie2, numero_serie3,
+             numero_serie4, numero_serie5, residente_id, comprador_id,
+             mostrar_nombre_comprador, fecha, lectura_tipo_id, lectura_epc,
+             folio_contrato, precio, descuento, IVA, utilizo_seguro, utilizo_seguro2,
+             utilizo_seguro3, utilizo_seguro4, utilizo_seguro5, concepto,
+             interfon_extra, estatus_id, fecha_modificacion, tipo_pago,
+             usuario_id, observaciones`;
+
+    // Funcion helper para construir UNION ALL con columnas explicitas
+    const buildUnion = (whereH: string, whereB: string) => `
+      SELECT ${commonCols}, 'H' AS folio_tipo FROM residencias_residentes_tarjetas WHERE ${whereH}
+      UNION ALL
+      SELECT ${commonCols}, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion WHERE ${whereB}
+    `;
+
+    const joinsSql = `
+      INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
+      INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
+      INNER JOIN residencias res ON r.residencia_id = res.residencia_id
+      INNER JOIN privadas p ON res.privada_id = p.privada_id
+    `;
+
+    const outerCols = `CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
              a.folio_contrato, t.lectura, a.lectura_epc, t.tipo_id,
              (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
              a.precio, a.descuento, a.IVA,
              CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
              p.descripcion AS privada, res.nro_casa, res.calle,
-             a.folio_tipo
-      FROM (
-        SELECT *, 'H' AS folio_tipo FROM residencias_residentes_tarjetas
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0
-        UNION ALL
-        SELECT *, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0
-      ) a
-      INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
-      INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
-      INNER JOIN residencias res ON r.residencia_id = res.residencia_id
-      INNER JOIN privadas p ON res.privada_id = p.privada_id
-      ORDER BY a.fecha
+             a.folio_tipo`;
+
+    // Query: Tarjetas vendidas (activas, sin seguro)
+    const sqlVendidas = `
+      SELECT ${outerCols}
+      FROM (${buildUnion(
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0",
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0"
+      )}) a ${joinsSql} ORDER BY a.fecha
     `;
 
     // Query: Tarjetas por seguro (activas, con seguro)
     const sqlSeguro = `
-      SELECT CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
-             a.folio_contrato, t.lectura, a.lectura_epc, t.tipo_id,
-             (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
-             a.precio,
-             CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
-             p.descripcion AS privada, res.nro_casa, res.calle,
-             a.folio_tipo
-      FROM (
-        SELECT *, 'H' AS folio_tipo FROM residencias_residentes_tarjetas
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1
-        UNION ALL
-        SELECT *, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1
-      ) a
-      INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
-      INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
-      INNER JOIN residencias res ON r.residencia_id = res.residencia_id
-      INNER JOIN privadas p ON res.privada_id = p.privada_id
-      ORDER BY a.fecha
+      SELECT ${outerCols}
+      FROM (${buildUnion(
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1",
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1"
+      )}) a ${joinsSql} ORDER BY a.fecha
     `;
 
     // Query: Tarjetas canceladas
     const sqlCanceladas = `
-      SELECT CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
-             a.folio_contrato, t.lectura, a.lectura_epc, t.tipo_id,
-             (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
-             a.precio,
-             CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
-             p.descripcion AS privada, res.nro_casa, res.calle,
-             a.folio_tipo
-      FROM (
-        SELECT *, 'H' AS folio_tipo FROM residencias_residentes_tarjetas
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 2
-        UNION ALL
-        SELECT *, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 2
-      ) a
-      INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
-      INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
-      INNER JOIN residencias res ON r.residencia_id = res.residencia_id
-      INNER JOIN privadas p ON res.privada_id = p.privada_id
-      ORDER BY a.fecha
+      SELECT ${outerCols}
+      FROM (${buildUnion(
+        "fecha >= ? AND fecha <= ? AND estatus_id = 2",
+        "fecha >= ? AND fecha <= ? AND estatus_id = 2"
+      )}) a ${joinsSql} ORDER BY a.fecha
     `;
 
     // Query: Concentrado por privada
     const sqlConcentrado = `
       SELECT p.descripcion AS privada, t.tipo_id,
              COUNT(*) AS numTarjetas, SUM(a.precio) AS dblTotal
-      FROM (
-        SELECT * FROM residencias_residentes_tarjetas
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1
-        UNION ALL
-        SELECT * FROM residencias_residentes_tarjetas_no_renovacion
-        WHERE fecha >= ? AND fecha <= ? AND estatus_id = 1
-      ) a
-      INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
-      INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
-      INNER JOIN residencias res ON r.residencia_id = res.residencia_id
-      INNER JOIN privadas p ON res.privada_id = p.privada_id
+      FROM (${buildUnion(
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1",
+        "fecha >= ? AND fecha <= ? AND estatus_id = 1"
+      )}) a ${joinsSql}
       GROUP BY p.descripcion, t.tipo_id
       ORDER BY p.descripcion
     `;

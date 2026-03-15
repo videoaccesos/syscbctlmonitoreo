@@ -21,6 +21,16 @@ export async function GET(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
+    // Columnas comunes (sin fecha_vencimiento que solo existe en tabla H)
+    const commonCols = `asignacion_id, privada, tarjeta_id, tarjeta_id2, tarjeta_id3,
+             tarjeta_id4, tarjeta_id5, numero_serie, numero_serie2, numero_serie3,
+             numero_serie4, numero_serie5, residente_id, comprador_id,
+             mostrar_nombre_comprador, fecha, lectura_tipo_id, lectura_epc,
+             folio_contrato, precio, descuento, IVA, utilizo_seguro, utilizo_seguro2,
+             utilizo_seguro3, utilizo_seguro4, utilizo_seguro5, concepto,
+             interfon_extra, estatus_id, fecha_modificacion, tipo_pago,
+             usuario_id, observaciones`;
+
     // Buscar en ambas tablas
     const dataSql = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
@@ -38,11 +48,13 @@ export async function GET(
              res.nro_casa, res.calle,
              p.descripcion AS priv_descripcion
       FROM (
-        SELECT *, CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
+        SELECT ${commonCols},
+               CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
                'H' AS folio_tipo
         FROM residencias_residentes_tarjetas WHERE asignacion_id = ?
         UNION ALL
-        SELECT *, NULL AS fecha_vencimiento,
+        SELECT ${commonCols},
+               NULL AS fecha_vencimiento,
                'B' AS folio_tipo
         FROM residencias_residentes_tarjetas_no_renovacion WHERE asignacion_id = ?
       ) a
