@@ -208,11 +208,21 @@ export default function AsignacionTarjetasPage() {
   const [cancelTarget, setCancelTarget] = useState<Asignacion | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
-  // reporte modal
+  // reporte
   const [showReporte, setShowReporte] = useState(false);
   const [reporteFechaIni, setReporteFechaIni] = useState("");
   const [reporteFechaFin, setReporteFechaFin] = useState("");
   const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [reporteData, setReporteData] = useState<{
+    fechaIni: string;
+    fechaFin: string;
+    vendidas: Array<Record<string, unknown>>;
+    seguro: Array<Record<string, unknown>>;
+    canceladas: Array<Record<string, unknown>>;
+    concentrado: Array<Record<string, unknown>>;
+  } | null>(null);
+  const [reporteTab, setReporteTab] = useState<"vendidas" | "seguro" | "canceladas" | "concentrado">("vendidas");
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
 
   /* ---------- fetch data ---------- */
   const fetchData = useCallback(async () => {
@@ -295,16 +305,28 @@ export default function AsignacionTarjetasPage() {
     }
   };
 
+  // filtro de privada para el formulario de asignacion
+  const [formFilterPrivada, setFormFilterPrivada] = useState("");
+  const [formFilterDomicilio, setFormFilterDomicilio] = useState("");
+
   /* ---------- busqueda de residentes ---------- */
-  const searchResidentes = async (query: string) => {
-    if (query.length < 2) {
+  const searchResidentes = async (query: string, privadaIdOverride?: string, domicilioOverride?: string) => {
+    const privId = privadaIdOverride ?? formFilterPrivada;
+    const domicilio = domicilioOverride ?? formFilterDomicilio;
+
+    // Necesitamos al menos un criterio de busqueda
+    if (query.length < 2 && !privId && domicilio.length < 2) {
       setResidenteResults([]);
       return;
     }
     setSearchingResidentes(true);
     try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (privId) params.set("privadaId", privId);
+      if (domicilio.length >= 2) params.set("search", domicilio);
+
       const res = await fetch(
-        `/api/catalogos/residencias?search=${encodeURIComponent(query)}&limit=20`
+        `/api/catalogos/residencias?${params}`
       );
       if (!res.ok) return;
       const json = await res.json();
@@ -313,6 +335,11 @@ export default function AsignacionTarjetasPage() {
       for (const residencia of residencias) {
         if (residencia.residentes) {
           for (const residente of residencia.residentes) {
+            // Filtrar por nombre si se proporciono query
+            if (query.length >= 2) {
+              const fullName = `${residente.nombre} ${residente.apePaterno} ${residente.apeMaterno}`.toLowerCase();
+              if (!fullName.includes(query.toLowerCase())) continue;
+            }
             residentes.push({
               ...residente,
               residencia: {
@@ -425,6 +452,8 @@ export default function AsignacionTarjetasPage() {
     setResidenteResults([]);
     setCompradorResults([]);
     setPrecioInfo(null);
+    setFormFilterPrivada("");
+    setFormFilterDomicilio("");
     setError("");
     fetchTarjetasDisponibles();
     setShowModal(true);
@@ -618,7 +647,7 @@ export default function AsignacionTarjetasPage() {
     );
   };
 
-  /* ---------- generar reporte Excel ---------- */
+  /* ---------- generar reporte (JSON para visualizar) ---------- */
   const handleGenerarReporte = async () => {
     if (!reporteFechaIni || !reporteFechaFin) return;
     setGenerandoReporte(true);
@@ -626,6 +655,7 @@ export default function AsignacionTarjetasPage() {
       const params = new URLSearchParams({
         fechaIni: reporteFechaIni,
         fechaFin: reporteFechaFin,
+        format: "json",
       });
       const res = await fetch(
         `/api/procesos/asignacion-tarjetas/reporte?${params}`
@@ -635,20 +665,48 @@ export default function AsignacionTarjetasPage() {
         alert(json.error || "Error al generar reporte");
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Reporte_Asignacion_Tarjetas_${reporteFechaIni}_${reporteFechaFin}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const data = await res.json();
+      setReporteData(data);
+      setReporteTab("vendidas");
       setShowReporte(false);
     } catch {
       alert("Error de conexion al generar reporte");
     } finally {
       setGenerandoReporte(false);
+    }
+  };
+
+  /* ---------- descargar Excel ---------- */
+  const handleDescargarExcel = async () => {
+    if (!reporteData) return;
+    setDescargandoExcel(true);
+    try {
+      const params = new URLSearchParams({
+        fechaIni: reporteData.fechaIni,
+        fechaFin: reporteData.fechaFin,
+        format: "excel",
+      });
+      const res = await fetch(
+        `/api/procesos/asignacion-tarjetas/reporte?${params}`
+      );
+      if (!res.ok) {
+        const json = await res.json();
+        alert(json.error || "Error al descargar Excel");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Reporte_Asignacion_Tarjetas_${reporteData.fechaIni}_${reporteData.fechaFin}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Error de conexion al descargar Excel");
+    } finally {
+      setDescargandoExcel(false);
     }
   };
 
@@ -1043,53 +1101,106 @@ export default function AsignacionTarjetasPage() {
                 </div>
               </div>
 
-              {/* Residente (busqueda) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Residente <span className="text-red-500">*</span>
+              {/* Filtros de busqueda de residente */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Buscar Residente <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Buscar por nombre de residente..."
-                    value={residenteSearch}
-                    onChange={(e) => {
-                      setResidenteSearch(e.target.value);
-                      setSelectedResidente(null);
-                      setForm((prev) => ({ ...prev, residenteId: "" }));
-                      setPrecioInfo(null);
-                      searchResidentes(e.target.value);
-                    }}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  {searchingResidentes && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-600" />
-                  )}
 
-                  {residenteResults.length > 0 && !selectedResidente && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {residenteResults.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => selectResidente(r)}
-                          className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="font-medium text-gray-900">
-                            {r.apePaterno} {r.apeMaterno} {r.nombre}
-                          </div>
-                          <div className="text-xs text-gray-700">
-                            {r.residencia?.privada?.descripcion || ""} - Casa #
-                            {r.residencia?.nroCasa || ""}
-                          </div>
-                        </button>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Filtro por privada */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Privada
+                    </label>
+                    <select
+                      value={formFilterPrivada}
+                      onChange={(e) => {
+                        setFormFilterPrivada(e.target.value);
+                        setSelectedResidente(null);
+                        setForm((prev) => ({ ...prev, residenteId: "" }));
+                        setPrecioInfo(null);
+                        searchResidentes(residenteSearch, e.target.value);
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Todas las privadas</option>
+                      {privadas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.descripcion}
+                        </option>
                       ))}
-                    </div>
-                  )}
+                    </select>
+                  </div>
+
+                  {/* Filtro por domicilio */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Domicilio (casa/calle)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 101, Calle Norte..."
+                      value={formFilterDomicilio}
+                      onChange={(e) => {
+                        setFormFilterDomicilio(e.target.value);
+                        setSelectedResidente(null);
+                        setForm((prev) => ({ ...prev, residenteId: "" }));
+                        setPrecioInfo(null);
+                        searchResidentes(residenteSearch, undefined, e.target.value);
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Busqueda por nombre */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Nombre del residente
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre..."
+                      value={residenteSearch}
+                      onChange={(e) => {
+                        setResidenteSearch(e.target.value);
+                        setSelectedResidente(null);
+                        setForm((prev) => ({ ...prev, residenteId: "" }));
+                        setPrecioInfo(null);
+                        searchResidentes(e.target.value);
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    {searchingResidentes && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-600" />
+                    )}
+
+                    {residenteResults.length > 0 && !selectedResidente && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {residenteResults.map((r) => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => selectResidente(r)}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">
+                              {r.apePaterno} {r.apeMaterno} {r.nombre}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {r.residencia?.privada?.descripcion || ""} | Casa #{r.residencia?.nroCasa || ""}, {r.residencia?.calle || ""}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {selectedResidente && (
-                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
                     <div className="font-medium text-blue-900">
                       {selectedResidente.apePaterno}{" "}
                       {selectedResidente.apeMaterno}{" "}
@@ -1098,7 +1209,7 @@ export default function AsignacionTarjetasPage() {
                     <div className="text-blue-700">
                       {selectedResidente.residencia?.privada?.descripcion ||
                         ""}{" "}
-                      - Casa #{selectedResidente.residencia?.nroCasa || ""}
+                      - Casa #{selectedResidente.residencia?.nroCasa || ""}, {selectedResidente.residencia?.calle || ""}
                     </div>
                     {precioInfo && (
                       <div className="text-xs text-blue-600 mt-1">
@@ -1515,7 +1626,7 @@ export default function AsignacionTarjetasPage() {
         </div>
       )}
 
-      {/* ==================== MODAL REPORTE DE VENTAS ==================== */}
+      {/* ==================== MODAL SELECCION DE FECHAS ==================== */}
       {showReporte && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -1537,8 +1648,8 @@ export default function AsignacionTarjetasPage() {
             </div>
 
             <p className="text-sm text-gray-600 mb-4">
-              Selecciona el rango de fechas para generar el reporte Excel con:
-              tarjetas vendidas, por seguro, canceladas, y concentrado por
+              Selecciona el rango de fechas para consultar el reporte de
+              tarjetas vendidas, por seguro, canceladas y concentrado por
               privada.
             </p>
 
@@ -1584,10 +1695,319 @@ export default function AsignacionTarjetasPage() {
                 {generandoReporte ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                {generandoReporte ? "Consultando..." : "Consultar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== VISTA COMPLETA DEL REPORTE ==================== */}
+      {reporteData && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 print:static print:bg-white">
+          {/* Header del reporte */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 print:border-0">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-green-600 print:hidden" />
+                Reporte de Asignacion de Tarjetas
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Del {reporteData.fechaIni} al {reporteData.fechaFin}
+              </p>
+            </div>
+            <div className="flex items-center gap-3 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </button>
+              <button
+                onClick={handleDescargarExcel}
+                disabled={descargandoExcel}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition disabled:opacity-50"
+              >
+                {descargandoExcel ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
                   <Download className="h-4 w-4" />
                 )}
-                {generandoReporte ? "Generando..." : "Descargar Excel"}
+                {descargandoExcel ? "Descargando..." : "Descargar Excel"}
               </button>
+              <button
+                onClick={() => setReporteData(null)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <X className="h-5 w-5 text-gray-700" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="bg-white border-b border-gray-200 px-6 shrink-0 print:hidden">
+            <div className="flex gap-1">
+              {([
+                { key: "vendidas" as const, label: "Vendidas", count: reporteData.vendidas.length },
+                { key: "seguro" as const, label: "Por Seguro", count: reporteData.seguro.length },
+                { key: "canceladas" as const, label: "Canceladas", count: reporteData.canceladas.length },
+                { key: "concentrado" as const, label: "Concentrado", count: reporteData.concentrado.length },
+              ]).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setReporteTab(tab.key)}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                    reporteTab === tab.key
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  {tab.label}
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Contenido */}
+          <div className="flex-1 overflow-auto p-6">
+            {(reporteTab === "vendidas" || reporteTab === "seguro" || reporteTab === "canceladas") && (
+              <ReporteTabla
+                rows={reporteData[reporteTab]}
+                showDescuento={reporteTab === "vendidas"}
+              />
+            )}
+            {reporteTab === "concentrado" && (
+              <ReporteConcentrado rows={reporteData.concentrado} />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==================== Componentes auxiliares del reporte ==================== */
+
+function ReporteTabla({
+  rows,
+  showDescuento,
+}: {
+  rows: Array<Record<string, unknown>>;
+  showDescuento: boolean;
+}) {
+  const fmtMoney = (v: unknown) => {
+    const n = Number(v) || 0;
+    return `$${n.toFixed(2)}`;
+  };
+
+  let totalVehicular = 0;
+  let totalPeatonal = 0;
+  let numVehicular = 0;
+  let numPeatonal = 0;
+
+  for (const row of rows) {
+    const precio = Number(row.precio) || 0;
+    if (Number(row.tipo_id) === 1) {
+      numPeatonal++;
+      totalPeatonal += precio;
+    } else {
+      numVehicular++;
+      totalVehicular += precio;
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Fecha</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Folio</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Lectura</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Tipo</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Precio</th>
+              {showDescuento && (
+                <>
+                  <th className="text-right px-4 py-3 font-medium text-gray-700">Descuento</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-700">IVA</th>
+                </>
+              )}
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Residente</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Privada</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Direccion</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-700">Folio</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={showDescuento ? 11 : 9} className="text-center py-8 text-gray-400">
+                  Sin registros en este periodo
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 text-gray-600">{String(row.fecha || "-")}</td>
+                  <td className="px-4 py-2 text-gray-600">{String(row.folio_contrato || "-")}</td>
+                  <td className="px-4 py-2 font-mono text-gray-800">{String(row.lectura || "-")}</td>
+                  <td className="px-4 py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      Number(row.tipo_id) === 2
+                        ? "bg-purple-100 text-purple-700"
+                        : "bg-teal-100 text-teal-700"
+                    }`}>
+                      {String(row.tipo || "-")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right font-medium">{fmtMoney(row.precio)}</td>
+                  {showDescuento && (
+                    <>
+                      <td className="px-4 py-2 text-right text-gray-600">{fmtMoney(row.descuento)}</td>
+                      <td className="px-4 py-2 text-right text-gray-600">{fmtMoney(row.IVA)}</td>
+                    </>
+                  )}
+                  <td className="px-4 py-2 text-gray-800">{String(row.residente || "-")}</td>
+                  <td className="px-4 py-2 text-gray-600">{String(row.privada || "-")}</td>
+                  <td className="px-4 py-2 text-gray-600">{String(row.nro_casa || "")}, {String(row.calle || "")}</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                      row.folio_tipo === "H" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                    }`}>
+                      {String(row.folio_tipo || "-")}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Totales */}
+      {rows.length > 0 && (
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex flex-wrap gap-6 justify-end text-sm">
+            <div>
+              <span className="text-gray-500">Peatonal:</span>{" "}
+              <span className="font-medium">{numPeatonal}</span>{" "}
+              <span className="text-gray-400">|</span>{" "}
+              <span className="font-medium text-green-700">{fmtMoney(totalPeatonal)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Vehicular:</span>{" "}
+              <span className="font-medium">{numVehicular}</span>{" "}
+              <span className="text-gray-400">|</span>{" "}
+              <span className="font-medium text-green-700">{fmtMoney(totalVehicular)}</span>
+            </div>
+            <div className="font-bold text-blue-700">
+              Total: {numPeatonal + numVehicular} tarjetas | {fmtMoney(totalPeatonal + totalVehicular)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReporteConcentrado({
+  rows,
+}: {
+  rows: Array<Record<string, unknown>>;
+}) {
+  const fmtMoney = (v: unknown) => {
+    const n = Number(v) || 0;
+    return `$${n.toFixed(2)}`;
+  };
+
+  // Agrupar por privada
+  const porPrivada: Record<
+    string,
+    { peatonales: number; totalPeatonal: number; vehiculares: number; totalVehicular: number }
+  > = {};
+
+  for (const row of rows) {
+    const priv = String(row.privada);
+    if (!porPrivada[priv])
+      porPrivada[priv] = { peatonales: 0, totalPeatonal: 0, vehiculares: 0, totalVehicular: 0 };
+    if (Number(row.tipo_id) === 1) {
+      porPrivada[priv].peatonales = Number(row.numTarjetas) || 0;
+      porPrivada[priv].totalPeatonal = Number(row.dblTotal) || 0;
+    } else {
+      porPrivada[priv].vehiculares = Number(row.numTarjetas) || 0;
+      porPrivada[priv].totalVehicular = Number(row.dblTotal) || 0;
+    }
+  }
+
+  const entries = Object.entries(porPrivada);
+  let grandTotal = 0;
+  let grandPeatonal = 0;
+  let grandVehicular = 0;
+  for (const [, d] of entries) {
+    grandPeatonal += d.totalPeatonal;
+    grandVehicular += d.totalVehicular;
+    grandTotal += d.totalPeatonal + d.totalVehicular;
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Privada</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Peatonales</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Total Peatonal</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Vehiculares</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Total Vehicular</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-700">Total General</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {entries.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-gray-400">
+                  Sin registros en este periodo
+                </td>
+              </tr>
+            ) : (
+              entries.map(([priv, d]) => (
+                <tr key={priv} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 font-medium text-gray-800">{priv}</td>
+                  <td className="px-4 py-2 text-right">{d.peatonales}</td>
+                  <td className="px-4 py-2 text-right">{fmtMoney(d.totalPeatonal)}</td>
+                  <td className="px-4 py-2 text-right">{d.vehiculares}</td>
+                  <td className="px-4 py-2 text-right">{fmtMoney(d.totalVehicular)}</td>
+                  <td className="px-4 py-2 text-right font-medium text-blue-700">
+                    {fmtMoney(d.totalPeatonal + d.totalVehicular)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {entries.length > 0 && (
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex flex-wrap gap-6 justify-end text-sm">
+            <div>
+              <span className="text-gray-500">Total Peatonal:</span>{" "}
+              <span className="font-medium text-green-700">{fmtMoney(grandPeatonal)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Total Vehicular:</span>{" "}
+              <span className="font-medium text-green-700">{fmtMoney(grandVehicular)}</span>
+            </div>
+            <div className="font-bold text-blue-700">
+              Gran Total: {fmtMoney(grandTotal)}
             </div>
           </div>
         </div>

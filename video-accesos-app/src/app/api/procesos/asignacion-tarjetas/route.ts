@@ -271,6 +271,7 @@ export async function POST(request: NextRequest) {
       tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
       residenteId: String(residenteId),
       privada: privada ? parseInt(String(privada), 10) : 0,
+      fecha: new Date(),
       lecturaTipoId: lecturaTipoId ? parseInt(String(lecturaTipoId), 10) : 0,
       lecturaEpc: lecturaEpc?.trim() || "",
       folioContrato: folioContrato?.trim() || "",
@@ -348,9 +349,10 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error al crear asignacion de tarjeta:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Error al crear asignacion de tarjeta:", msg, error);
     return NextResponse.json(
-      { error: "Error al crear asignacion de tarjeta" },
+      { error: `Error al crear asignacion de tarjeta: ${msg}` },
       { status: 500 }
     );
   }
