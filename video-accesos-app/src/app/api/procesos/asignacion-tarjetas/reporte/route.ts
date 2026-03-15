@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
              mostrar_nombre_comprador, fecha, lectura_tipo_id, lectura_epc,
              folio_contrato, precio, descuento, IVA, utilizo_seguro, utilizo_seguro2,
              utilizo_seguro3, utilizo_seguro4, utilizo_seguro5, concepto,
-             interfon_extra, estatus_id, fecha_modificacion, tipo_pago,
+             estatus_id, fecha_modificacion, tipo_pago,
              usuario_id, observaciones`;
 
     const buildUnion = (whereH: string, whereB: string) => `

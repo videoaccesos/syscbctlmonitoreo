@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const privadaId = searchParams.get("privadaId");
     const residenciaId = searchParams.get("residenciaId");
+    const nroCasa = searchParams.get("nroCasa");
     const skip = (page - 1) * limit;
 
     // Excluir eliminados (estatus 5) replicando el comportamiento legacy
@@ -36,6 +37,11 @@ export async function GET(request: NextRequest) {
       where.privadaId = parseInt(privadaId);
     }
 
+    // Filtro exacto por numero de casa
+    if (nroCasa) {
+      where.nroCasa = nroCasa;
+    }
+
     if (search) {
       where.OR = [
         { nroCasa: { contains: search } },
@@ -48,7 +54,7 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           privada: {
-            select: { id: true, descripcion: true },
+            select: { id: true, descripcion: true, precioVehicular: true, precioPeatonal: true },
           },
           residentes: {
             select: {
@@ -83,7 +89,7 @@ export async function GET(request: NextRequest) {
             orderBy: { apePaterno: "asc" },
           },
         },
-        orderBy: { id: "desc" },
+        orderBy: { nroCasa: "asc" },
         skip,
         take: limit,
       }),

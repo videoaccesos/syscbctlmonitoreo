@@ -307,27 +307,23 @@ export default function AsignacionTarjetasPage() {
 
   // filtro de privada para el formulario de asignacion
   const [formFilterPrivada, setFormFilterPrivada] = useState("");
-  const [formFilterDomicilio, setFormFilterDomicilio] = useState("");
+  const [formFilterNroCasa, setFormFilterNroCasa] = useState("");
+  // cache de todos los residentes de una privada
+  const [allResidentesPrivada, setAllResidentesPrivada] = useState<ResidenteSearch[]>([]);
+  const [loadingResidentesPrivada, setLoadingResidentesPrivada] = useState(false);
 
-  /* ---------- busqueda de residentes ---------- */
-  const searchResidentes = async (query: string, privadaIdOverride?: string, domicilioOverride?: string) => {
-    const privId = privadaIdOverride ?? formFilterPrivada;
-    const domicilio = domicilioOverride ?? formFilterDomicilio;
-
-    // Necesitamos al menos un criterio de busqueda
-    if (query.length < 2 && !privId && domicilio.length < 2) {
+  /* ---------- cargar todos los residentes de una privada ---------- */
+  const loadResidentesByPrivada = async (privId: string) => {
+    if (!privId) {
+      setAllResidentesPrivada([]);
       setResidenteResults([]);
       return;
     }
+    setLoadingResidentesPrivada(true);
     setSearchingResidentes(true);
     try {
-      const params = new URLSearchParams({ limit: "50" });
-      if (privId) params.set("privadaId", privId);
-      if (domicilio.length >= 2) params.set("search", domicilio);
-
-      const res = await fetch(
-        `/api/catalogos/residencias?${params}`
-      );
+      const params = new URLSearchParams({ privadaId: privId, limit: "500" });
+      const res = await fetch(`/api/catalogos/residencias?${params}`);
       if (!res.ok) return;
       const json = await res.json();
       const residentes: ResidenteSearch[] = [];
@@ -335,11 +331,83 @@ export default function AsignacionTarjetasPage() {
       for (const residencia of residencias) {
         if (residencia.residentes) {
           for (const residente of residencia.residentes) {
-            // Filtrar por nombre si se proporciono query
-            if (query.length >= 2) {
-              const fullName = `${residente.nombre} ${residente.apePaterno} ${residente.apeMaterno}`.toLowerCase();
-              if (!fullName.includes(query.toLowerCase())) continue;
-            }
+            residentes.push({
+              ...residente,
+              residencia: {
+                id: residencia.id,
+                nroCasa: residencia.nroCasa,
+                calle: residencia.calle,
+                privada: residencia.privada,
+              },
+            });
+          }
+        }
+      }
+      // Ordenar por numero de casa y luego por apellido
+      residentes.sort((a, b) => {
+        const casaA = parseInt(a.residencia?.nroCasa || "0") || 0;
+        const casaB = parseInt(b.residencia?.nroCasa || "0") || 0;
+        if (casaA !== casaB) return casaA - casaB;
+        return (a.apePaterno || "").localeCompare(b.apePaterno || "");
+      });
+      setAllResidentesPrivada(residentes);
+      // Mostrar todos inicialmente
+      filterResidentesList(residentes, "", "");
+    } catch {
+      console.error("Error al cargar residentes de privada");
+    } finally {
+      setLoadingResidentesPrivada(false);
+      setSearchingResidentes(false);
+    }
+  };
+
+  /* ---------- filtrar residentes en memoria ---------- */
+  const filterResidentesList = (
+    all: ResidenteSearch[],
+    nroCasa: string,
+    nombre: string
+  ) => {
+    let filtered = all;
+    if (nroCasa.trim()) {
+      filtered = filtered.filter((r) => {
+        const casa = r.residencia?.nroCasa || "";
+        // Busqueda exacta si es un numero completo, sino contains
+        return casa === nroCasa.trim() || casa.startsWith(nroCasa.trim());
+      });
+    }
+    if (nombre.trim().length >= 2) {
+      const q = nombre.trim().toLowerCase();
+      filtered = filtered.filter((r) => {
+        const fullName = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.toLowerCase();
+        return fullName.includes(q);
+      });
+    }
+    setResidenteResults(filtered);
+  };
+
+  /* ---------- busqueda de residentes (sin privada seleccionada) ---------- */
+  const searchResidentes = async (query: string) => {
+    // Si hay privada seleccionada, filtrar en memoria
+    if (formFilterPrivada && allResidentesPrivada.length > 0) {
+      filterResidentesList(allResidentesPrivada, formFilterNroCasa, query);
+      return;
+    }
+    // Sin privada: buscar por nombre en el servidor
+    if (query.length < 2) {
+      setResidenteResults([]);
+      return;
+    }
+    setSearchingResidentes(true);
+    try {
+      const params = new URLSearchParams({ limit: "50", search: query });
+      const res = await fetch(`/api/catalogos/residencias?${params}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const residentes: ResidenteSearch[] = [];
+      const residencias = json.data || json;
+      for (const residencia of residencias) {
+        if (residencia.residentes) {
+          for (const residente of residencia.residentes) {
             residentes.push({
               ...residente,
               residencia: {
@@ -453,7 +521,8 @@ export default function AsignacionTarjetasPage() {
     setCompradorResults([]);
     setPrecioInfo(null);
     setFormFilterPrivada("");
-    setFormFilterDomicilio("");
+    setFormFilterNroCasa("");
+    setAllResidentesPrivada([]);
     setError("");
     fetchTarjetasDisponibles();
     setShowModal(true);
@@ -1107,7 +1176,7 @@ export default function AsignacionTarjetasPage() {
                   Buscar Residente <span className="text-red-500">*</span>
                 </label>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {/* Filtro por privada */}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1116,15 +1185,18 @@ export default function AsignacionTarjetasPage() {
                     <select
                       value={formFilterPrivada}
                       onChange={(e) => {
-                        setFormFilterPrivada(e.target.value);
+                        const val = e.target.value;
+                        setFormFilterPrivada(val);
+                        setFormFilterNroCasa("");
+                        setResidenteSearch("");
                         setSelectedResidente(null);
                         setForm((prev) => ({ ...prev, residenteId: "" }));
                         setPrecioInfo(null);
-                        searchResidentes(residenteSearch, e.target.value);
+                        loadResidentesByPrivada(val);
                       }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="">Todas las privadas</option>
+                      <option value="">Seleccionar privada...</option>
                       {privadas.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.descripcion}
@@ -1133,78 +1205,118 @@ export default function AsignacionTarjetasPage() {
                     </select>
                   </div>
 
-                  {/* Filtro por domicilio */}
+                  {/* Filtro por numero de casa */}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Domicilio (casa/calle)
+                      No. Casa
                     </label>
                     <input
                       type="text"
-                      placeholder="Ej: 101, Calle Norte..."
-                      value={formFilterDomicilio}
+                      placeholder="Ej: 2, 15..."
+                      value={formFilterNroCasa}
                       onChange={(e) => {
-                        setFormFilterDomicilio(e.target.value);
+                        const val = e.target.value;
+                        setFormFilterNroCasa(val);
                         setSelectedResidente(null);
                         setForm((prev) => ({ ...prev, residenteId: "" }));
                         setPrecioInfo(null);
-                        searchResidentes(residenteSearch, undefined, e.target.value);
+                        if (formFilterPrivada && allResidentesPrivada.length > 0) {
+                          filterResidentesList(allResidentesPrivada, val, residenteSearch);
+                        }
                       }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={!formFilterPrivada}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
                     />
                   </div>
-                </div>
 
-                {/* Busqueda por nombre */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Nombre del residente
-                  </label>
-                  <div className="relative">
+                  {/* Filtro por nombre */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Nombre
+                    </label>
                     <input
                       type="text"
                       placeholder="Buscar por nombre..."
                       value={residenteSearch}
                       onChange={(e) => {
-                        setResidenteSearch(e.target.value);
+                        const val = e.target.value;
+                        setResidenteSearch(val);
                         setSelectedResidente(null);
                         setForm((prev) => ({ ...prev, residenteId: "" }));
                         setPrecioInfo(null);
-                        searchResidentes(e.target.value);
+                        searchResidentes(val);
                       }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    {searchingResidentes && (
-                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-600" />
-                    )}
-
-                    {residenteResults.length > 0 && !selectedResidente && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {residenteResults.map((r) => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => selectResidente(r)}
-                            className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
-                          >
-                            <div className="font-medium text-gray-900">
-                              {r.apePaterno} {r.apeMaterno} {r.nombre}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {r.residencia?.privada?.descripcion || ""} | Casa #{r.residencia?.nroCasa || ""}, {r.residencia?.calle || ""}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
+                {/* Indicador de carga */}
+                {(searchingResidentes || loadingResidentesPrivada) && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando residentes...
+                  </div>
+                )}
+
+                {/* Lista de residentes encontrados */}
+                {residenteResults.length > 0 && !selectedResidente && (
+                  <div className="border border-gray-200 rounded-lg bg-white max-h-52 overflow-y-auto">
+                    <div className="text-xs text-gray-400 px-3 py-1 border-b border-gray-100 bg-gray-50">
+                      {residenteResults.length} residente(s) encontrado(s)
+                    </div>
+                    {residenteResults.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => selectResidente(r)}
+                        className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900">
+                            {r.apePaterno} {r.apeMaterno} {r.nombre}
+                          </span>
+                          <span className="text-xs text-gray-400 ml-2">
+                            Casa #{r.residencia?.nroCasa || "?"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {r.residencia?.privada?.descripcion || ""} | {r.residencia?.calle || ""}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Residente sin resultados */}
+                {formFilterPrivada && !searchingResidentes && !loadingResidentesPrivada && residenteResults.length === 0 && !selectedResidente && allResidentesPrivada.length > 0 && (formFilterNroCasa || residenteSearch) && (
+                  <div className="text-sm text-gray-400 text-center py-2">
+                    No se encontraron residentes con esos criterios
+                  </div>
+                )}
+
                 {selectedResidente && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                    <div className="font-medium text-blue-900">
-                      {selectedResidente.apePaterno}{" "}
-                      {selectedResidente.apeMaterno}{" "}
-                      {selectedResidente.nombre}
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-blue-900">
+                        {selectedResidente.apePaterno}{" "}
+                        {selectedResidente.apeMaterno}{" "}
+                        {selectedResidente.nombre}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedResidente(null);
+                          setForm((prev) => ({ ...prev, residenteId: "" }));
+                          setPrecioInfo(null);
+                          if (formFilterPrivada && allResidentesPrivada.length > 0) {
+                            filterResidentesList(allResidentesPrivada, formFilterNroCasa, residenteSearch);
+                          }
+                        }}
+                        className="text-blue-400 hover:text-blue-600"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
                     </div>
                     <div className="text-blue-700">
                       {selectedResidente.residencia?.privada?.descripcion ||
