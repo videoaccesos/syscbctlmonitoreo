@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const privadaId = searchParams.get("privadaId");
     const estatusId = searchParams.get("estatusId");
+    const folioTipo = searchParams.get("folioTipo");
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
@@ -44,9 +45,9 @@ export async function GET(request: NextRequest) {
     const whereClause =
       conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // UNION ALL de ambas tablas de asignaciones
+    // UNION ALL de ambas tablas de asignaciones (o solo una si hay filtro de folioTipo)
     // Usamos CAST(NULLIF(...)) para convertir fechas 0000-00-00 a NULL y evitar P2020
-    const unionSql = `
+    const sqlH = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
              a.tarjeta_id4, a.tarjeta_id5, a.residente_id,
              CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
@@ -54,8 +55,9 @@ export async function GET(request: NextRequest) {
              a.lectura_tipo_id, a.lectura_epc, a.folio_contrato,
              a.precio, a.estatus_id,
              a.observaciones, 'H' AS folio_tipo
-      FROM residencias_residentes_tarjetas a
-      UNION ALL
+      FROM residencias_residentes_tarjetas a`;
+
+    const sqlB = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
              a.tarjeta_id4, a.tarjeta_id5, a.residente_id,
              CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
@@ -63,8 +65,16 @@ export async function GET(request: NextRequest) {
              a.lectura_tipo_id, a.lectura_epc, a.folio_contrato,
              a.precio, a.estatus_id,
              a.observaciones, 'B' AS folio_tipo
-      FROM residencias_residentes_tarjetas_no_renovacion a
-    `;
+      FROM residencias_residentes_tarjetas_no_renovacion a`;
+
+    let unionSql: string;
+    if (folioTipo === "H") {
+      unionSql = sqlH;
+    } else if (folioTipo === "B") {
+      unionSql = sqlB;
+    } else {
+      unionSql = `${sqlH} UNION ALL ${sqlB}`;
+    }
 
     // Base FROM con JOINs a residente -> residencia -> privada
     const baseSql = `
@@ -183,7 +193,20 @@ export async function POST(request: NextRequest) {
       lecturaEpc,
       folioContrato,
       precio,
+      descuento,
+      IVA,
+      tipoPago,
+      compradorId,
+      mostrarNombreComprador,
+      concepto,
+      observaciones,
+      utilizoSeguro,
+      utilizoSeguro2,
+      utilizoSeguro3,
+      utilizoSeguro4,
+      utilizoSeguro5,
       privada,
+      folioTipo,
     } = body;
 
     // Validacion de campos requeridos
@@ -206,50 +229,124 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear asignacion
-    const asignacion = await prisma.residenteTarjeta.create({
-      data: {
-        tarjetaId: String(tarjetaId) || "",
-        tarjetaId2: tarjetaId2 ? String(tarjetaId2) : "",
-        tarjetaId3: tarjetaId3 ? String(tarjetaId3) : "",
-        tarjetaId4: tarjetaId4 ? String(tarjetaId4) : "",
-        tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
-        residenteId: String(residenteId),
-        privada: privada ? parseInt(privada, 10) : 0,
-        fechaVencimiento: fechaVencimiento
-          ? new Date(fechaVencimiento)
-          : new Date(),
-        lecturaTipoId: lecturaTipoId ? parseInt(lecturaTipoId, 10) : 0,
-        lecturaEpc: lecturaEpc?.trim() || "",
-        folioContrato: folioContrato?.trim() || "",
-        precio: precio ? parseFloat(precio) : 0,
-      },
-      include: {
-        residente: {
-          select: {
-            id: true,
-            nombre: true,
-            apePaterno: true,
-            apeMaterno: true,
-            residencia: {
-              select: {
-                id: true,
-                nroCasa: true,
-                calle: true,
-                privada: {
-                  select: {
-                    id: true,
-                    descripcion: true,
-                  },
+    // Validar que la tarjeta principal esta disponible (estatusId=1)
+    const tarjetaPrincipal = await prisma.tarjeta.findUnique({
+      where: { id: parseInt(String(tarjetaId), 10) },
+    });
+
+    if (!tarjetaPrincipal) {
+      return NextResponse.json(
+        { error: "Tarjeta no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    if (tarjetaPrincipal.estatusId !== 1) {
+      return NextResponse.json(
+        { error: "La tarjeta no esta disponible (ya esta asignada o inactiva)" },
+        { status: 400 }
+      );
+    }
+
+    // Validar tarjetas adicionales si se proporcionan
+    const tarjetaIdsAdicionales = [tarjetaId2, tarjetaId3, tarjetaId4, tarjetaId5].filter(Boolean);
+    for (const tid of tarjetaIdsAdicionales) {
+      const t = await prisma.tarjeta.findUnique({
+        where: { id: parseInt(String(tid), 10) },
+      });
+      if (t && t.estatusId !== 1) {
+        return NextResponse.json(
+          { error: `La tarjeta ${tid} no esta disponible` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Datos comunes para ambos tipos de folio
+    const dataComun = {
+      tarjetaId: String(tarjetaId) || "",
+      tarjetaId2: tarjetaId2 ? String(tarjetaId2) : "",
+      tarjetaId3: tarjetaId3 ? String(tarjetaId3) : "",
+      tarjetaId4: tarjetaId4 ? String(tarjetaId4) : "",
+      tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
+      residenteId: String(residenteId),
+      privada: privada ? parseInt(String(privada), 10) : 0,
+      lecturaTipoId: lecturaTipoId ? parseInt(String(lecturaTipoId), 10) : 0,
+      lecturaEpc: lecturaEpc?.trim() || "",
+      folioContrato: folioContrato?.trim() || "",
+      precio: precio ? parseFloat(String(precio)) : 0,
+      descuento: descuento ? parseFloat(String(descuento)) : 0,
+      IVA: IVA ? parseFloat(String(IVA)) : 0,
+      tipoPago: tipoPago ? parseInt(String(tipoPago), 10) : 0,
+      compradorId: compradorId ? String(compradorId).trim() : "",
+      mostrarNombreComprador: mostrarNombreComprador ? 1 : 0,
+      concepto: concepto?.trim() || "",
+      observaciones: observaciones?.trim() || "",
+      utilizoSeguro: utilizoSeguro ? 1 : 0,
+      utilizoSeguro2: utilizoSeguro2 ? 1 : 0,
+      utilizoSeguro3: utilizoSeguro3 ? 1 : 0,
+      utilizoSeguro4: utilizoSeguro4 ? 1 : 0,
+      utilizoSeguro5: utilizoSeguro5 ? 1 : 0,
+    };
+
+    const includeResidente = {
+      residente: {
+        select: {
+          id: true,
+          nombre: true,
+          apePaterno: true,
+          apeMaterno: true,
+          residencia: {
+            select: {
+              id: true,
+              nroCasa: true,
+              calle: true,
+              privada: {
+                select: {
+                  id: true,
+                  descripcion: true,
                 },
               },
             },
           },
         },
       },
+    };
+
+    let asignacion;
+
+    if (folioTipo === "B") {
+      // Folio B: Sin renovacion (no fecha_vencimiento)
+      asignacion = await prisma.residenteTarjetaNoRenovacion.create({
+        data: dataComun,
+        include: includeResidente,
+      });
+    } else {
+      // Folio H: Con renovacion (con fecha_vencimiento)
+      asignacion = await prisma.residenteTarjeta.create({
+        data: {
+          ...dataComun,
+          fechaVencimiento: fechaVencimiento
+            ? new Date(fechaVencimiento)
+            : new Date(),
+        },
+        include: includeResidente,
+      });
+    }
+
+    // Marcar tarjeta(s) como Asignada (estatusId=2)
+    const allTarjetaIds = [tarjetaId, ...tarjetaIdsAdicionales].map((tid) =>
+      parseInt(String(tid), 10)
+    );
+    await prisma.tarjeta.updateMany({
+      where: { id: { in: allTarjetaIds } },
+      data: { estatusId: 2 },
     });
 
-    return NextResponse.json(asignacion, { status: 201 });
+    return NextResponse.json(
+      { ...asignacion, folioTipo: folioTipo === "B" ? "B" : "H" },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error al crear asignacion de tarjeta:", error);
     return NextResponse.json(

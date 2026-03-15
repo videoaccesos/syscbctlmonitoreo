@@ -208,9 +208,31 @@ export async function DELETE(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
-    const existente = await prisma.residenteTarjeta.findUnique({
+    // Buscar en ambas tablas (Folio H y Folio B)
+    const existenteH = await prisma.residenteTarjeta.findUnique({
       where: { id: asignacionId },
     });
+    let foundFolioTipo = "H";
+
+    let existente: {
+      id: number;
+      estatusId: number;
+      tarjetaId: string;
+      tarjetaId2: string;
+      tarjetaId3: string;
+      tarjetaId4: string;
+      tarjetaId5: string;
+    } | null = existenteH;
+
+    if (!existente) {
+      const existenteB = await prisma.residenteTarjetaNoRenovacion.findUnique({
+        where: { id: asignacionId },
+      });
+      if (existenteB) {
+        existente = existenteB;
+        foundFolioTipo = "B";
+      }
+    }
 
     if (!existente) {
       return NextResponse.json(
@@ -226,11 +248,37 @@ export async function DELETE(
       );
     }
 
-    // Cancelar asignacion: cambiar estatus a 2 (Cancelada)
-    await prisma.residenteTarjeta.update({
-      where: { id: asignacionId },
-      data: { estatusId: 2 },
-    });
+    // Cancelar en la tabla correspondiente
+    if (foundFolioTipo === "B") {
+      await prisma.residenteTarjetaNoRenovacion.update({
+        where: { id: asignacionId },
+        data: { estatusId: 2 },
+      });
+    } else {
+      await prisma.residenteTarjeta.update({
+        where: { id: asignacionId },
+        data: { estatusId: 2 },
+      });
+    }
+
+    // Liberar tarjeta(s): cambiar estatus a 1 (Activa)
+    const tarjetaIds = [
+      existente.tarjetaId,
+      existente.tarjetaId2,
+      existente.tarjetaId3,
+      existente.tarjetaId4,
+      existente.tarjetaId5,
+    ]
+      .filter((tid) => tid && tid.trim() !== "")
+      .map((tid) => parseInt(String(tid), 10))
+      .filter((tid) => !isNaN(tid));
+
+    if (tarjetaIds.length > 0) {
+      await prisma.tarjeta.updateMany({
+        where: { id: { in: tarjetaIds } },
+        data: { estatusId: 1 },
+      });
+    }
 
     return NextResponse.json({
       message: "Asignacion cancelada correctamente",
