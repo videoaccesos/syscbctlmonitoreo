@@ -59,9 +59,4 @@ body {
     overflow: visible !important;
     background: white !important;
   }
-
-  /* Ocultar elementos marcados como print:hidden */
-  .print\\:hidden {
-    display: none !important;
-  }
 }
