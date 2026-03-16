@@ -147,33 +147,28 @@ export async function GET(request: NextRequest) {
 
     // Hoja 1: Vendidas
     const ws1 = workbook.addWorksheet("Tarjetas Vendidas");
-    ws1.mergeCells("A1:K1");
+    ws1.mergeCells("A1:H1");
     const t1 = ws1.getCell("A1");
     t1.value = `REPORTE DE TARJETAS VENDIDAS - Del ${fechaIni} al ${fechaFin}`;
     t1.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
     t1.alignment = { horizontal: "center" };
     ws1.addRow([]);
-    const h1 = ws1.addRow(["Fecha","Folio","Lectura","Tipo","Precio","Descuento","IVA","Residente","Privada","Direccion","Folio Tipo"]);
+    const h1 = ws1.addRow(["Fecha","Folio","Privada","Casa","Residente","Tipo","Lectura","Precio"]);
     h1.eachCell((c) => { c.style = headerStyle; });
 
     let totalV = 0, totalP = 0, numV = 0, numP = 0;
     for (const row of vendidas) {
       const p = Number(row.precio) || 0;
-      const d = Number(row.descuento) || 0;
-      const iv = Number(row.IVA) || 0;
-      const dr = ws1.addRow([row.fecha||"",row.folio_contrato||"",row.lectura||"",row.tipo||"",p,d,iv,row.residente||"",row.privada||"",`${row.nro_casa}, ${row.calle}`,row.folio_tipo||""]);
+      const dr = ws1.addRow([row.fecha||"",row.folio_contrato||"",row.privada||"",row.nro_casa||"",row.residente||"",row.tipo||"",row.lectura||"",p]);
       dr.eachCell((c) => { c.border = cellBorder; });
-      dr.getCell(5).numFmt = "$#,##0.00";
-      dr.getCell(6).numFmt = "$#,##0.00";
-      dr.getCell(7).numFmt = "$#,##0.00";
+      dr.getCell(8).numFmt = "$#,##0.00";
       if (Number(row.tipo_id) === 1) { numP++; totalP += p; } else { numV++; totalV += p; }
     }
     ws1.addRow([]);
-    ws1.addRow(["","","","TOTAL GENERAL"]).getCell(4).font = { bold: true };
-    const rP = ws1.addRow(["","","",`${numP} PEATONAL`,totalP]); rP.getCell(5).numFmt = "$#,##0.00"; rP.getCell(4).font = { bold: true };
-    const rV = ws1.addRow(["","","",`${numV} VEHICULAR`,totalV]); rV.getCell(5).numFmt = "$#,##0.00"; rV.getCell(4).font = { bold: true };
-    const rT = ws1.addRow(["","","",`${numP+numV} TOTAL`,totalP+totalV]); rT.getCell(5).numFmt = "$#,##0.00"; rT.getCell(4).font = { bold: true, size: 12 }; rT.getCell(5).font = { bold: true, size: 12 };
-    ws1.columns = [{width:12},{width:12},{width:18},{width:12},{width:12},{width:12},{width:12},{width:30},{width:20},{width:25},{width:10}];
+    const rP = ws1.addRow(["","","","","","PEA",`${numP} tarjeta(s)`,totalP]); rP.getCell(8).numFmt = "$#,##0.00"; rP.getCell(6).font = { bold: true }; rP.getCell(7).font = { bold: true }; rP.getCell(8).font = { bold: true };
+    const rV = ws1.addRow(["","","","","","VEH",`${numV} tarjeta(s)`,totalV]); rV.getCell(8).numFmt = "$#,##0.00"; rV.getCell(6).font = { bold: true }; rV.getCell(7).font = { bold: true }; rV.getCell(8).font = { bold: true };
+    const rT = ws1.addRow(["","","","","","TOTAL",`${numP+numV} tarjeta(s)`,totalP+totalV]); rT.getCell(8).numFmt = "$#,##0.00"; rT.getCell(6).font = { bold: true, size: 12 }; rT.getCell(7).font = { bold: true, size: 12 }; rT.getCell(8).font = { bold: true, size: 12 };
+    ws1.columns = [{width:12},{width:12},{width:20},{width:8},{width:30},{width:12},{width:18},{width:14}];
 
     // Hoja 2: Seguro
     const ws2 = workbook.addWorksheet("Por Seguro");
@@ -183,15 +178,15 @@ export async function GET(request: NextRequest) {
     t2.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
     t2.alignment = { horizontal: "center" };
     ws2.addRow([]);
-    const headers2 = ["Fecha","Folio","Lectura","Tipo","Precio","Residente","Privada","Direccion"];
+    const headers2 = ["Fecha","Folio","Privada","Casa","Residente","Tipo","Lectura","Precio"];
     ws2.addRow(headers2).eachCell((c) => { c.style = headerStyle; });
     for (const row of seguro) {
-      const dr = ws2.addRow([row.fecha||"",row.folio_contrato||"",row.lectura||"",row.tipo||"",Number(row.precio)||0,row.residente||"",row.privada||"",`${row.nro_casa}, ${row.calle}`]);
+      const dr = ws2.addRow([row.fecha||"",row.folio_contrato||"",row.privada||"",row.nro_casa||"",row.residente||"",row.tipo||"",row.lectura||"",Number(row.precio)||0]);
       dr.eachCell((c) => { c.border = cellBorder; });
-      dr.getCell(5).numFmt = "$#,##0.00";
+      dr.getCell(8).numFmt = "$#,##0.00";
     }
-    ws2.addRow([]); ws2.addRow(["","","",`Total: ${seguro.length} tarjetas`]);
-    ws2.columns = [{width:12},{width:12},{width:18},{width:12},{width:12},{width:30},{width:20},{width:25}];
+    ws2.addRow([]); ws2.addRow(["","","","","",`Total: ${seguro.length} tarjetas`]);
+    ws2.columns = [{width:12},{width:12},{width:20},{width:8},{width:30},{width:12},{width:18},{width:14}];
 
     // Hoja 3: Canceladas
     const ws3 = workbook.addWorksheet("Canceladas");
@@ -203,12 +198,12 @@ export async function GET(request: NextRequest) {
     ws3.addRow([]);
     ws3.addRow(headers2).eachCell((c) => { c.style = headerStyle; });
     for (const row of canceladas) {
-      const dr = ws3.addRow([row.fecha||"",row.folio_contrato||"",row.lectura||"",row.tipo||"",Number(row.precio)||0,row.residente||"",row.privada||"",`${row.nro_casa}, ${row.calle}`]);
+      const dr = ws3.addRow([row.fecha||"",row.folio_contrato||"",row.privada||"",row.nro_casa||"",row.residente||"",row.tipo||"",row.lectura||"",Number(row.precio)||0]);
       dr.eachCell((c) => { c.border = cellBorder; });
-      dr.getCell(5).numFmt = "$#,##0.00";
+      dr.getCell(8).numFmt = "$#,##0.00";
     }
-    ws3.addRow([]); ws3.addRow(["","","",`Total: ${canceladas.length} tarjetas`]);
-    ws3.columns = [{width:12},{width:12},{width:18},{width:12},{width:12},{width:30},{width:20},{width:25}];
+    ws3.addRow([]); ws3.addRow(["","","","","",`Total: ${canceladas.length} tarjetas`]);
+    ws3.columns = [{width:12},{width:12},{width:20},{width:8},{width:30},{width:12},{width:18},{width:14}];
 
     // Hoja 4: Concentrado
     const ws4 = workbook.addWorksheet("Concentrado");
