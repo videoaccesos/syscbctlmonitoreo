@@ -12,8 +12,6 @@ import {
   XCircle,
   Trash2,
   Printer,
-  FileSpreadsheet,
-  Download,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -208,21 +206,7 @@ export default function AsignacionTarjetasPage() {
   const [cancelTarget, setCancelTarget] = useState<Asignacion | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
-  // reporte
-  const [showReporte, setShowReporte] = useState(false);
-  const [reporteFechaIni, setReporteFechaIni] = useState("");
-  const [reporteFechaFin, setReporteFechaFin] = useState("");
-  const [generandoReporte, setGenerandoReporte] = useState(false);
-  const [reporteData, setReporteData] = useState<{
-    fechaIni: string;
-    fechaFin: string;
-    vendidas: Array<Record<string, unknown>>;
-    seguro: Array<Record<string, unknown>>;
-    canceladas: Array<Record<string, unknown>>;
-    concentrado: Array<Record<string, unknown>>;
-  } | null>(null);
-  const [reporteTab, setReporteTab] = useState<"vendidas" | "seguro" | "canceladas" | "concentrado">("vendidas");
-  const [descargandoExcel, setDescargandoExcel] = useState(false);
+  // (reporte de ventas movido a /reportes/reporte-ventas)
 
   /* ---------- fetch data ---------- */
   const fetchData = useCallback(async () => {
@@ -489,14 +473,12 @@ export default function AsignacionTarjetasPage() {
         subtotal += calcularPrecioTarjeta(slot.tarjetaId);
       }
       const descuento = parseFloat(descuentoStr) || 0;
-      const conDescuento = Math.max(0, subtotal - descuento);
-      const iva = conDescuento * 0.16;
 
       setForm((prev) => ({
         ...prev,
         precio: subtotal.toFixed(2),
         descuento: descuento.toFixed(2),
-        iva: iva.toFixed(2),
+        iva: "0",
       }));
     },
     [precioInfo, calcularPrecioTarjeta]
@@ -716,68 +698,6 @@ export default function AsignacionTarjetasPage() {
     );
   };
 
-  /* ---------- generar reporte (JSON para visualizar) ---------- */
-  const handleGenerarReporte = async () => {
-    if (!reporteFechaIni || !reporteFechaFin) return;
-    setGenerandoReporte(true);
-    try {
-      const params = new URLSearchParams({
-        fechaIni: reporteFechaIni,
-        fechaFin: reporteFechaFin,
-        format: "json",
-      });
-      const res = await fetch(
-        `/api/procesos/asignacion-tarjetas/reporte?${params}`
-      );
-      if (!res.ok) {
-        const json = await res.json();
-        alert(json.error || "Error al generar reporte");
-        return;
-      }
-      const data = await res.json();
-      setReporteData(data);
-      setReporteTab("vendidas");
-      setShowReporte(false);
-    } catch {
-      alert("Error de conexion al generar reporte");
-    } finally {
-      setGenerandoReporte(false);
-    }
-  };
-
-  /* ---------- descargar Excel ---------- */
-  const handleDescargarExcel = async () => {
-    if (!reporteData) return;
-    setDescargandoExcel(true);
-    try {
-      const params = new URLSearchParams({
-        fechaIni: reporteData.fechaIni,
-        fechaFin: reporteData.fechaFin,
-        format: "excel",
-      });
-      const res = await fetch(
-        `/api/procesos/asignacion-tarjetas/reporte?${params}`
-      );
-      if (!res.ok) {
-        const json = await res.json();
-        alert(json.error || "Error al descargar Excel");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Reporte_Asignacion_Tarjetas_${reporteData.fechaIni}_${reporteData.fechaFin}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      alert("Error de conexion al descargar Excel");
-    } finally {
-      setDescargandoExcel(false);
-    }
-  };
 
   /* ---------- helpers de formato ---------- */
   const fmtDate = (v: string | null) => {
@@ -801,8 +721,7 @@ export default function AsignacionTarjetasPage() {
   /* ---------- calcular totales del formulario ---------- */
   const subtotal = parseFloat(form.precio) || 0;
   const descuento = parseFloat(form.descuento) || 0;
-  const iva = parseFloat(form.iva) || 0;
-  const totalFinal = subtotal - descuento + iva;
+  const totalFinal = Math.max(0, subtotal - descuento);
 
   /* ================================================================ */
   /* RENDER                                                           */
@@ -821,13 +740,6 @@ export default function AsignacionTarjetasPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowReporte(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-green-600 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 transition"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Reporte de Ventas
-          </button>
           <button
             onClick={openCreate}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition"
@@ -1510,23 +1422,17 @@ export default function AsignacionTarjetasPage() {
                 <h3 className="text-sm font-semibold text-gray-700">
                   Detalle de Venta
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Subtotal
+                      Precio Unitario / Subtotal
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
                       value={form.precio}
-                      onChange={(e) => {
-                        setField("precio", e.target.value);
-                        const sub = parseFloat(e.target.value) || 0;
-                        const desc = parseFloat(form.descuento) || 0;
-                        const newIva = Math.max(0, sub - desc) * 0.16;
-                        setField("iva", newIva.toFixed(2));
-                      }}
+                      onChange={(e) => setField("precio", e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="0.00"
                     />
@@ -1540,28 +1446,9 @@ export default function AsignacionTarjetasPage() {
                       step="0.01"
                       min="0"
                       value={form.descuento}
-                      onChange={(e) => {
-                        setField("descuento", e.target.value);
-                        const sub = parseFloat(form.precio) || 0;
-                        const desc = parseFloat(e.target.value) || 0;
-                        const newIva = Math.max(0, sub - desc) * 0.16;
-                        setField("iva", newIva.toFixed(2));
-                      }}
+                      onChange={(e) => setField("descuento", e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      IVA (16%)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={form.iva}
-                      readOnly
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-600"
                     />
                   </div>
                 </div>
@@ -1738,392 +1625,6 @@ export default function AsignacionTarjetasPage() {
         </div>
       )}
 
-      {/* ==================== MODAL SELECCION DE FECHAS ==================== */}
-      {showReporte && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowReporte(false)}
-          />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                Reporte de Ventas
-              </h3>
-              <button
-                onClick={() => setShowReporte(false)}
-                className="p-1 rounded hover:bg-gray-100 transition"
-              >
-                <X className="h-5 w-5 text-gray-700" />
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">
-              Selecciona el rango de fechas para consultar el reporte de
-              tarjetas vendidas, por seguro, canceladas y concentrado por
-              privada.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha Inicio <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={reporteFechaIni}
-                  onChange={(e) => setReporteFechaIni(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha Fin <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={reporteFechaFin}
-                  onChange={(e) => setReporteFechaFin(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowReporte(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleGenerarReporte}
-                disabled={
-                  generandoReporte || !reporteFechaIni || !reporteFechaFin
-                }
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generandoReporte ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
-                {generandoReporte ? "Consultando..." : "Consultar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================== VISTA COMPLETA DEL REPORTE ==================== */}
-      {reporteData && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 print:static print:bg-white">
-          {/* Header del reporte */}
-          <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0 print:border-0">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-green-600 print:hidden" />
-                Reporte de Asignacion de Tarjetas
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Del {reporteData.fechaIni} al {reporteData.fechaFin}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 print:hidden">
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-              >
-                <Printer className="h-4 w-4" />
-                Imprimir
-              </button>
-              <button
-                onClick={handleDescargarExcel}
-                disabled={descargandoExcel}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition disabled:opacity-50"
-              >
-                {descargandoExcel ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {descargandoExcel ? "Descargando..." : "Descargar Excel"}
-              </button>
-              <button
-                onClick={() => setReporteData(null)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition"
-              >
-                <X className="h-5 w-5 text-gray-700" />
-              </button>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="bg-white border-b border-gray-200 px-6 shrink-0 print:hidden">
-            <div className="flex gap-1">
-              {([
-                { key: "vendidas" as const, label: "Vendidas", count: reporteData.vendidas.length },
-                { key: "seguro" as const, label: "Por Seguro", count: reporteData.seguro.length },
-                { key: "canceladas" as const, label: "Canceladas", count: reporteData.canceladas.length },
-                { key: "concentrado" as const, label: "Concentrado", count: reporteData.concentrado.length },
-              ]).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setReporteTab(tab.key)}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
-                    reporteTab === tab.key
-                      ? "border-blue-600 text-blue-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
-                >
-                  {tab.label}
-                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
-                    {tab.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Contenido */}
-          <div className="flex-1 overflow-auto p-6">
-            {(reporteTab === "vendidas" || reporteTab === "seguro" || reporteTab === "canceladas") && (
-              <ReporteTabla
-                rows={reporteData[reporteTab]}
-                showDescuento={reporteTab === "vendidas"}
-              />
-            )}
-            {reporteTab === "concentrado" && (
-              <ReporteConcentrado rows={reporteData.concentrado} />
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ==================== Componentes auxiliares del reporte ==================== */
-
-function ReporteTabla({
-  rows,
-  showDescuento,
-}: {
-  rows: Array<Record<string, unknown>>;
-  showDescuento: boolean;
-}) {
-  const fmtMoney = (v: unknown) => {
-    const n = Number(v) || 0;
-    return `$${n.toFixed(2)}`;
-  };
-
-  let totalVehicular = 0;
-  let totalPeatonal = 0;
-  let numVehicular = 0;
-  let numPeatonal = 0;
-
-  for (const row of rows) {
-    const precio = Number(row.precio) || 0;
-    if (Number(row.tipo_id) === 1) {
-      numPeatonal++;
-      totalPeatonal += precio;
-    } else {
-      numVehicular++;
-      totalVehicular += precio;
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Fecha</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Folio</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Lectura</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Tipo</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Precio</th>
-              {showDescuento && (
-                <>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">Descuento</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">IVA</th>
-                </>
-              )}
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Residente</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Privada</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Direccion</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-700">Folio</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={showDescuento ? 11 : 9} className="text-center py-8 text-gray-400">
-                  Sin registros en este periodo
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-600">{String(row.fecha || "-")}</td>
-                  <td className="px-4 py-2 text-gray-600">{String(row.folio_contrato || "-")}</td>
-                  <td className="px-4 py-2 font-mono text-gray-800">{String(row.lectura || "-")}</td>
-                  <td className="px-4 py-2">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      Number(row.tipo_id) === 2
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-teal-100 text-teal-700"
-                    }`}>
-                      {String(row.tipo || "-")}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right font-medium">{fmtMoney(row.precio)}</td>
-                  {showDescuento && (
-                    <>
-                      <td className="px-4 py-2 text-right text-gray-600">{fmtMoney(row.descuento)}</td>
-                      <td className="px-4 py-2 text-right text-gray-600">{fmtMoney(row.IVA)}</td>
-                    </>
-                  )}
-                  <td className="px-4 py-2 text-gray-800">{String(row.residente || "-")}</td>
-                  <td className="px-4 py-2 text-gray-600">{String(row.privada || "-")}</td>
-                  <td className="px-4 py-2 text-gray-600">{String(row.nro_casa || "")}, {String(row.calle || "")}</td>
-                  <td className="px-4 py-2 text-center">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      row.folio_tipo === "H" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
-                    }`}>
-                      {String(row.folio_tipo || "-")}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Totales */}
-      {rows.length > 0 && (
-        <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="flex flex-wrap gap-6 justify-end text-sm">
-            <div>
-              <span className="text-gray-500">Peatonal:</span>{" "}
-              <span className="font-medium">{numPeatonal}</span>{" "}
-              <span className="text-gray-400">|</span>{" "}
-              <span className="font-medium text-green-700">{fmtMoney(totalPeatonal)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Vehicular:</span>{" "}
-              <span className="font-medium">{numVehicular}</span>{" "}
-              <span className="text-gray-400">|</span>{" "}
-              <span className="font-medium text-green-700">{fmtMoney(totalVehicular)}</span>
-            </div>
-            <div className="font-bold text-blue-700">
-              Total: {numPeatonal + numVehicular} tarjetas | {fmtMoney(totalPeatonal + totalVehicular)}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReporteConcentrado({
-  rows,
-}: {
-  rows: Array<Record<string, unknown>>;
-}) {
-  const fmtMoney = (v: unknown) => {
-    const n = Number(v) || 0;
-    return `$${n.toFixed(2)}`;
-  };
-
-  // Agrupar por privada
-  const porPrivada: Record<
-    string,
-    { peatonales: number; totalPeatonal: number; vehiculares: number; totalVehicular: number }
-  > = {};
-
-  for (const row of rows) {
-    const priv = String(row.privada);
-    if (!porPrivada[priv])
-      porPrivada[priv] = { peatonales: 0, totalPeatonal: 0, vehiculares: 0, totalVehicular: 0 };
-    if (Number(row.tipo_id) === 1) {
-      porPrivada[priv].peatonales = Number(row.numTarjetas) || 0;
-      porPrivada[priv].totalPeatonal = Number(row.dblTotal) || 0;
-    } else {
-      porPrivada[priv].vehiculares = Number(row.numTarjetas) || 0;
-      porPrivada[priv].totalVehicular = Number(row.dblTotal) || 0;
-    }
-  }
-
-  const entries = Object.entries(porPrivada);
-  let grandTotal = 0;
-  let grandPeatonal = 0;
-  let grandVehicular = 0;
-  for (const [, d] of entries) {
-    grandPeatonal += d.totalPeatonal;
-    grandVehicular += d.totalVehicular;
-    grandTotal += d.totalPeatonal + d.totalVehicular;
-  }
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Privada</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Peatonales</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Total Peatonal</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Vehiculares</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Total Vehicular</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-700">Total General</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {entries.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">
-                  Sin registros en este periodo
-                </td>
-              </tr>
-            ) : (
-              entries.map(([priv, d]) => (
-                <tr key={priv} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium text-gray-800">{priv}</td>
-                  <td className="px-4 py-2 text-right">{d.peatonales}</td>
-                  <td className="px-4 py-2 text-right">{fmtMoney(d.totalPeatonal)}</td>
-                  <td className="px-4 py-2 text-right">{d.vehiculares}</td>
-                  <td className="px-4 py-2 text-right">{fmtMoney(d.totalVehicular)}</td>
-                  <td className="px-4 py-2 text-right font-medium text-blue-700">
-                    {fmtMoney(d.totalPeatonal + d.totalVehicular)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {entries.length > 0 && (
-        <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="flex flex-wrap gap-6 justify-end text-sm">
-            <div>
-              <span className="text-gray-500">Total Peatonal:</span>{" "}
-              <span className="font-medium text-green-700">{fmtMoney(grandPeatonal)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Total Vehicular:</span>{" "}
-              <span className="font-medium text-green-700">{fmtMoney(grandVehicular)}</span>
-            </div>
-            <div className="font-bold text-blue-700">
-              Gran Total: {fmtMoney(grandTotal)}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
