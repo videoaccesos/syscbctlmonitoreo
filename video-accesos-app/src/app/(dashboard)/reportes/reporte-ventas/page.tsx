@@ -236,20 +236,20 @@ function TablaTarjetas({
   rows: Array<Record<string, unknown>>;
   titulo: string;
 }) {
-  // Calcular totales
+  // Calcular totales usando neto (precio - descuento)
   let totalVehicular = 0;
   let totalPeatonal = 0;
   let numVehicular = 0;
   let numPeatonal = 0;
 
   for (const row of rows) {
-    const precio = Number(row.precio) || 0;
+    const neto = Number(row.neto) || 0;
     if (Number(row.tipo_id) === 1) {
       numPeatonal++;
-      totalPeatonal += precio;
+      totalPeatonal += neto;
     } else {
       numVehicular++;
-      totalVehicular += precio;
+      totalVehicular += neto;
     }
   }
 
@@ -279,6 +279,8 @@ function TablaTarjetas({
               <th className="text-center px-3 py-2 font-medium">Tipo</th>
               <th className="text-left px-3 py-2 font-medium">Lectura</th>
               <th className="text-right px-3 py-2 font-medium">Precio</th>
+              <th className="text-right px-3 py-2 font-medium">Desc.</th>
+              <th className="text-right px-3 py-2 font-medium">Neto</th>
             </tr>
           </thead>
           <tbody>
@@ -301,26 +303,28 @@ function TablaTarjetas({
                   </span>
                 </td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || "-")}</td>
-                <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmtMoney(row.precio)}</td>
+                <td className="px-3 py-1.5 text-right text-gray-600">{fmtMoney(row.precio)}</td>
+                <td className="px-3 py-1.5 text-right text-red-600">{Number(row.descuento) ? fmtMoney(row.descuento) : "-"}</td>
+                <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmtMoney(row.neto)}</td>
               </tr>
             ))}
           </tbody>
           {/* Totales al final de la tabla */}
           <tfoot>
             <tr className="border-t-2 border-gray-400 bg-gray-100 print:bg-gray-200">
-              <td colSpan={6} className="px-3 py-2"></td>
+              <td colSpan={8} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">PEA</td>
               <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numPeatonal} tarjeta(s)</td>
               <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalPeatonal)}</td>
             </tr>
             <tr className="bg-gray-100 print:bg-gray-200">
-              <td colSpan={6} className="px-3 py-2"></td>
+              <td colSpan={8} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">VEH</td>
               <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numVehicular} tarjeta(s)</td>
               <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalVehicular)}</td>
             </tr>
             <tr className="bg-slate-700 text-white print:bg-gray-800">
-              <td colSpan={6} className="px-3 py-2"></td>
+              <td colSpan={8} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-sm font-bold">TOTAL</td>
               <td className="px-3 py-2 text-right text-sm font-bold">{totalTarjetas} tarjeta(s)</td>
               <td className="px-3 py-2 text-right text-lg font-bold">{fmtMoney(totalGeneral)}</td>
