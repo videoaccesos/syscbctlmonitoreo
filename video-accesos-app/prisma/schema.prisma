@@ -395,7 +395,7 @@ model Visita {
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   residencia Residencia @relation(fields: [residenciaId], references: [id])
 
@@ -419,7 +419,7 @@ model RegistroGeneral {
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("registros_generales")
 }
