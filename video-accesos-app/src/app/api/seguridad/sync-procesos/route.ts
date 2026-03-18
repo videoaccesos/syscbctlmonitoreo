@@ -46,6 +46,7 @@ const CATALOGO_RAMAS = [
       { nombre: "Accesos Consultas", funcion: "/reportes/accesos-consultas" },
       { nombre: "Accesos Gráficas", funcion: "/reportes/accesos-graficas" },
       { nombre: "Supervisión Llamadas", funcion: "/reportes/supervision-llamadas" },
+      { nombre: "Reporte de Ventas", funcion: "/reportes/reporte-ventas" },
     ],
   },
   {
