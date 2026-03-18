@@ -25,6 +25,7 @@ import {
   RotateCcw,
   PanelLeftOpen,
   PanelLeftClose,
+  ClipboardList,
 } from "lucide-react";
 
 // Softphone minimo - requires browser APIs (WebRTC, WebSocket)
@@ -42,6 +43,7 @@ const CameraGrid = dynamic(() => import("@/components/CameraGrid"), {
 interface Privada {
   id: number;
   descripcion: string;
+  observaciones?: string;
 }
 
 interface Residencia {
@@ -1021,11 +1023,11 @@ export default function MonitoristasPage() {
       {/* HEADER + SOFTPHONE MINIMO                                          */}
       {/* ================================================================= */}
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25 flex-shrink-0">
             <Headset className="h-6 w-6 text-white" />
           </div>
-          <div>
+          <div className="flex-shrink-0">
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
               Consola de Monitorista
             </h1>
@@ -1033,10 +1035,28 @@ export default function MonitoristasPage() {
               Registro y control de accesos a privadas
             </p>
           </div>
+
+          {/* Consignas de la privada seleccionada */}
+          {formPrivadaId && (() => {
+            const privadaSel = privadas.find((p) => String(p.id) === formPrivadaId);
+            return privadaSel?.observaciones ? (
+              <div className="ml-4 flex-1 min-w-0 bg-amber-50 border border-amber-300 rounded-xl px-4 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <ClipboardList className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">
+                    Consignas — {privadaSel.descripcion}
+                  </span>
+                </div>
+                <p className="text-sm text-amber-900 whitespace-pre-line leading-snug">
+                  {privadaSel.observaciones}
+                </p>
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Timer */}
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
           <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 font-mono transition-all ${
             timerRunning
               ? "bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg"
