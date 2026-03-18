@@ -655,8 +655,19 @@ export default function AsignacionTarjetasPage() {
         return;
       }
 
+      const result = await res.json();
+      const newId = result.id;
+
       closeModal();
       fetchData();
+
+      // Abrir comprobante automaticamente
+      if (newId) {
+        window.open(
+          `/api/procesos/asignacion-tarjetas/${newId}/comprobante`,
+          "_blank"
+        );
+      }
     } catch {
       setError("Error de conexion");
     } finally {
