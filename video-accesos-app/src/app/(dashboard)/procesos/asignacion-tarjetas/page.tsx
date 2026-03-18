@@ -306,7 +306,7 @@ export default function AsignacionTarjetasPage() {
     setLoadingResidentesPrivada(true);
     setSearchingResidentes(true);
     try {
-      const params = new URLSearchParams({ privadaId: privId, limit: "500" });
+      const params = new URLSearchParams({ privadaId: privId, limit: "500", includeTarjetas: "false" });
       const res = await fetch(`/api/catalogos/residencias?${params}`);
       if (!res.ok) return;
       const json = await res.json();
@@ -383,7 +383,7 @@ export default function AsignacionTarjetasPage() {
     }
     setSearchingResidentes(true);
     try {
-      const params = new URLSearchParams({ limit: "50", search: query });
+      const params = new URLSearchParams({ limit: "50", search: query, includeTarjetas: "false" });
       const res = await fetch(`/api/catalogos/residencias?${params}`);
       if (!res.ok) return;
       const json = await res.json();
@@ -421,7 +421,7 @@ export default function AsignacionTarjetasPage() {
     setSearchingComprador(true);
     try {
       const res = await fetch(
-        `/api/catalogos/residencias?search=${encodeURIComponent(query)}&limit=20`
+        `/api/catalogos/residencias?search=${encodeURIComponent(query)}&limit=20&includeTarjetas=false`
       );
       if (!res.ok) return;
       const json = await res.json();

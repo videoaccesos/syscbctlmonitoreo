@@ -36,10 +36,10 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       conditions.push(
-        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ?)"
+        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ? OR res.nro_casa LIKE ? OR res.calle LIKE ?)"
       );
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
     }
 
     const whereClause =
