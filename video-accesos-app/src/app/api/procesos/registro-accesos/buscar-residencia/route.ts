@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { nroCasa: "asc" },
-      take: 50, // Limitar resultados para rendimiento
+      take: 500, // Limitar resultados para rendimiento
     });
 
     return NextResponse.json({

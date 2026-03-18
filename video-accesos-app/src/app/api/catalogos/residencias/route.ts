@@ -21,12 +21,8 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Excluir eliminados (estatus 5) replicando el comportamiento legacy
-    // Excluir residencias cuya privada esta dada de baja (estatusId 2) o sistema (4)
     const where: Record<string, unknown> = {
       estatusId: { not: 5 },
-      privada: {
-        estatusId: { notIn: [2, 4] },
-      },
     };
 
     if (residenciaId) {

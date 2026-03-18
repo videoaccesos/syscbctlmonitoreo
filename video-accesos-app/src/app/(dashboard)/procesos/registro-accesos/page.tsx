@@ -443,9 +443,9 @@ export default function RegistroAccesosPage() {
     }
   }, [formPrivadaId, residenciaSearch]);
 
-  // Auto-search residencias when typing
+  // Auto-search residencias when privada selected or typing
   useEffect(() => {
-    if (formPrivadaId && residenciaSearch.length >= 1) {
+    if (formPrivadaId) {
       const timeout = setTimeout(() => buscarResidencias(), 300);
       return () => clearTimeout(timeout);
     }
