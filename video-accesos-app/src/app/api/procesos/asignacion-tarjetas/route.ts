@@ -117,37 +117,47 @@ export async function GET(request: NextRequest) {
 
     const total = Number(totalResult[0]?.total || 0);
 
+    // Helper para convertir BigInt a Number (MySQL puede devolver BigInt en raw queries)
+    const toNum = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      return Number(v);
+    };
+    const toStr = (v: unknown): string | null => {
+      if (v === null || v === undefined) return null;
+      return String(v);
+    };
+
     // Transformar filas planas a estructura anidada esperada por el frontend
     const data = rows.map((row) => ({
-      id: row.asignacion_id,
-      tarjetaId: row.tarjeta_id || null,
-      tarjetaId2: row.tarjeta_id2 || null,
-      tarjetaId3: row.tarjeta_id3 || null,
-      tarjetaId4: row.tarjeta_id4 || null,
-      tarjetaId5: row.tarjeta_id5 || null,
-      residenteId: row.residente_id,
-      fecha: row.fecha || null,
-      fechaVencimiento: row.fecha_vencimiento || null,
-      lecturaTipoId: row.lectura_tipo_id,
-      lecturaEpc: row.lectura_epc,
-      folioContrato: row.folio_contrato,
-      precio: row.precio,
-      estatusId: row.estatus_id,
-      observaciones: row.observaciones,
-      folioTipo: row.folio_tipo,
+      id: toNum(row.asignacion_id),
+      tarjetaId: toStr(row.tarjeta_id),
+      tarjetaId2: toStr(row.tarjeta_id2),
+      tarjetaId3: toStr(row.tarjeta_id3),
+      tarjetaId4: toStr(row.tarjeta_id4),
+      tarjetaId5: toStr(row.tarjeta_id5),
+      residenteId: toStr(row.residente_id),
+      fecha: toStr(row.fecha),
+      fechaVencimiento: toStr(row.fecha_vencimiento),
+      lecturaTipoId: toNum(row.lectura_tipo_id),
+      lecturaEpc: toStr(row.lectura_epc),
+      folioContrato: toStr(row.folio_contrato),
+      precio: toNum(row.precio),
+      estatusId: toNum(row.estatus_id),
+      observaciones: toStr(row.observaciones),
+      folioTipo: toStr(row.folio_tipo),
       tarjeta: null,
       residente: {
-        id: row.res_id,
-        nombre: row.res_nombre,
-        apePaterno: row.res_ape_paterno,
-        apeMaterno: row.res_ape_materno,
+        id: toStr(row.res_id),
+        nombre: toStr(row.res_nombre),
+        apePaterno: toStr(row.res_ape_paterno),
+        apeMaterno: toStr(row.res_ape_materno),
         residencia: {
-          id: row.residencia_id,
-          nroCasa: row.nro_casa,
-          calle: row.calle,
+          id: toNum(row.residencia_id),
+          nroCasa: toStr(row.nro_casa),
+          calle: toStr(row.calle),
           privada: {
-            id: row.priv_id,
-            descripcion: row.priv_descripcion,
+            id: toNum(row.priv_id),
+            descripcion: toStr(row.priv_descripcion),
           },
         },
       },
@@ -272,6 +282,7 @@ export async function POST(request: NextRequest) {
       residenteId: String(residenteId),
       privada: privada ? parseInt(String(privada), 10) : 0,
       fecha: new Date(),
+      fechaModificacion: new Date(),
       lecturaTipoId: lecturaTipoId ? parseInt(String(lecturaTipoId), 10) : 0,
       lecturaEpc: lecturaEpc?.trim() || "",
       folioContrato: folioContrato?.trim() || "",

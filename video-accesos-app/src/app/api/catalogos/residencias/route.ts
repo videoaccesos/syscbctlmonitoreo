@@ -80,10 +80,23 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    // Usar select en vez de include para evitar traer fecha_modificacion
+    // que puede tener valores invalidos (0000-00-00) en la BD
     const [residencias, total] = await Promise.all([
       prisma.residencia.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          nroCasa: true,
+          calle: true,
+          telefono1: true,
+          telefono2: true,
+          interfon: true,
+          telefonoInterfon: true,
+          observaciones: true,
+          estatusId: true,
+          privadaId: true,
+          usuarioModId: true,
           privada: {
             select: { id: true, descripcion: true, precioVehicular: true, precioPeatonal: true },
           },
@@ -110,74 +123,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error al listar residencias:", error);
-
-    // Si falla con tarjetas incluidas, reintentar sin ellas
-    try {
-      const { searchParams } = new URL(request.url);
-      const page = parseInt(searchParams.get("page") || "1");
-      const limit = parseInt(searchParams.get("limit") || "10");
-      const search = searchParams.get("search") || "";
-      const privadaId = searchParams.get("privadaId");
-      const residenciaId = searchParams.get("residenciaId");
-      const nroCasa = searchParams.get("nroCasa");
-      const skip = (page - 1) * limit;
-
-      const where: Record<string, unknown> = { estatusId: { not: 5 } };
-      if (residenciaId) where.id = parseInt(residenciaId);
-      if (privadaId) where.privadaId = parseInt(privadaId);
-      if (nroCasa) where.nroCasa = nroCasa;
-      if (search) {
-        where.OR = [
-          { nroCasa: { contains: search } },
-          { calle: { contains: search } },
-        ];
-      }
-
-      const [residencias, total] = await Promise.all([
-        prisma.residencia.findMany({
-          where,
-          include: {
-            privada: {
-              select: { id: true, descripcion: true, precioVehicular: true, precioPeatonal: true },
-            },
-            residentes: {
-              select: {
-                id: true,
-                nombre: true,
-                apePaterno: true,
-                apeMaterno: true,
-                celular: true,
-                email: true,
-                estatusId: true,
-              },
-              orderBy: { apePaterno: "asc" },
-            },
-          },
-          orderBy: { nroCasa: "asc" },
-          skip,
-          take: limit,
-        }),
-        prisma.residencia.count({ where }),
-      ]);
-
-      console.warn("Residencias cargadas sin datos de tarjetas (fallback por error previo)");
-
-      return NextResponse.json({
-        data: residencias,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      });
-    } catch (fallbackError) {
-      console.error("Error en fallback de residencias:", fallbackError);
-      return NextResponse.json(
-        { error: "Error al listar residencias" },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json(
+      { error: "Error al listar residencias" },
+      { status: 500 }
+    );
   }
 }
 
@@ -222,7 +171,17 @@ export async function POST(request: NextRequest) {
         estatusId: estatusId ? parseInt(estatusId) : 1,
         usuarioModId: 0,
       },
-      include: {
+      select: {
+        id: true,
+        nroCasa: true,
+        calle: true,
+        telefono1: true,
+        telefono2: true,
+        interfon: true,
+        telefonoInterfon: true,
+        observaciones: true,
+        estatusId: true,
+        privadaId: true,
         privada: {
           select: { id: true, descripcion: true },
         },
