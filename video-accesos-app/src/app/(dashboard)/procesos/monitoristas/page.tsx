@@ -492,11 +492,13 @@ export default function MonitoristasPage() {
     }
   }, [formPrivadaId, residenciaSearch]);
 
-  // Auto-search residencias when privada selected or typing
+  // Auto-search residencias when typing (not when just selecting privada)
   useEffect(() => {
-    if (formPrivadaId) {
+    if (formPrivadaId && residenciaSearch.trim()) {
       const timeout = setTimeout(() => buscarResidencias(), 300);
       return () => clearTimeout(timeout);
+    } else {
+      setResidencias([]);
     }
   }, [residenciaSearch, formPrivadaId]);
 
@@ -1326,6 +1328,8 @@ export default function MonitoristasPage() {
                       if (e.key === "Enter") {
                         e.preventDefault();
                         buscarResidencias();
+                      } else if (e.key === "Escape") {
+                        setResidencias([]);
                       }
                     }}
                     className="w-full rounded-xl border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:bg-gray-100 disabled:text-gray-600 transition"
@@ -1337,6 +1341,17 @@ export default function MonitoristasPage() {
                   )}
                   {!residenciasLoading && residencias.length > 0 && (
                     <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 shadow-xl max-h-52 overflow-y-auto">
+                      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+                        <span className="text-[11px] text-gray-500">{residencias.length} resultado(s)</span>
+                        <button
+                          type="button"
+                          onClick={() => setResidencias([])}
+                          className="text-gray-400 hover:text-gray-600 transition"
+                          title="Cerrar"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       {residencias.map((r) => {
                         const estatus = getResidenciaEstatusLabel(r.estatusId);
                         return (
@@ -1687,25 +1702,25 @@ export default function MonitoristasPage() {
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Fecha/Hora
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Privada
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   #Casa
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Solicitante
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Tipo
                 </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Estado
                 </th>
-                <th className="px-4 py-3 text-center text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Ver
                 </th>
               </tr>
@@ -1715,12 +1730,12 @@ export default function MonitoristasPage() {
                 <tr>
                   <td colSpan={7} className="text-center py-10">
                     <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mx-auto" />
-                    <p className="text-gray-600 text-xs mt-2">Cargando registros...</p>
+                    <p className="text-gray-600 text-sm mt-2">Cargando registros...</p>
                   </td>
                 </tr>
               ) : registros.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-gray-600 text-xs">
+                  <td colSpan={7} className="text-center py-10 text-gray-600 text-sm">
                     No se encontraron registros para el periodo seleccionado
                   </td>
                 </tr>
@@ -1732,27 +1747,27 @@ export default function MonitoristasPage() {
                       idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"
                     }`}
                   >
-                    <td className="px-4 py-2.5 text-gray-700 text-[11px] font-mono whitespace-nowrap">
+                    <td className="px-4 py-2.5 text-gray-700 text-xs font-mono whitespace-nowrap">
                       {formatFechaHora(reg.fechaModificacion)}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-700 text-[11px]">
+                    <td className="px-4 py-2.5 text-gray-700 text-xs">
                       {reg.privada?.descripcion || "-"}
                     </td>
-                    <td className="px-4 py-2.5 text-[11px]">
+                    <td className="px-4 py-2.5 text-xs">
                       <span className="font-bold text-gray-900">
                         {reg.residencia?.nroCasa || "-"}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-[11px] text-gray-700 max-w-[180px] truncate">
+                    <td className="px-4 py-2.5 text-xs text-gray-700 max-w-[220px] truncate">
                       {getNombreSolicitante(reg.solicitanteId)}
                     </td>
-                    <td className="px-4 py-2.5 text-[11px] text-gray-700">
+                    <td className="px-4 py-2.5 text-xs text-gray-700">
                       {TIPO_GESTION_LABELS[reg.tipoGestionId] ||
                         `Tipo ${reg.tipoGestionId}`}
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${getEstatusColor(reg.estatusId)}`}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${getEstatusColor(reg.estatusId)}`}
                       >
                         {getEstatusLabel(reg.estatusId)}
                       </span>
@@ -1776,7 +1791,7 @@ export default function MonitoristasPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/30 px-5 py-2.5">
-            <p className="text-[11px] text-gray-700">
+            <p className="text-xs text-gray-700">
               Mostrando {(page - 1) * limit + 1}-{Math.min(page * limit, total)} de{" "}
               {total} registros
             </p>
@@ -1786,9 +1801,9 @@ export default function MonitoristasPage() {
                 disabled={page <= 1}
                 className="p-1 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-3 py-1 text-[11px] font-medium text-gray-700 bg-white rounded-lg border border-gray-200">
+              <span className="px-3 py-1 text-xs font-medium text-gray-700 bg-white rounded-lg border border-gray-200">
                 {page} / {totalPages}
               </span>
               <button
@@ -1796,7 +1811,7 @@ export default function MonitoristasPage() {
                 disabled={page >= totalPages}
                 className="p-1 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition"
               >
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>
