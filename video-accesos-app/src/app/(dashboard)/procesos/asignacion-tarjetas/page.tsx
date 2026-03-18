@@ -757,7 +757,7 @@ export default function AsignacionTarjetasPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600" />
             <input
               type="text"
-              placeholder="Buscar por nombre de residente..."
+              placeholder="Buscar por nombre, #casa o calle..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={handleSearchKeyDown}
@@ -857,6 +857,9 @@ export default function AsignacionTarjetasPage() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">
                   #Casa
                 </th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">
+                  Calle
+                </th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">
                   Precio
                 </th>
@@ -877,7 +880,7 @@ export default function AsignacionTarjetasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12">
+                  <td colSpan={11} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
                     <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
@@ -885,7 +888,7 @@ export default function AsignacionTarjetasPage() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="text-center py-12 text-gray-600"
                   >
                     No se encontraron asignaciones
@@ -923,6 +926,9 @@ export default function AsignacionTarjetasPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">
                       {item.residente.residencia?.nroCasa || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {item.residente.residencia?.calle || "-"}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">
                       {fmtMoney(item.precio)}
