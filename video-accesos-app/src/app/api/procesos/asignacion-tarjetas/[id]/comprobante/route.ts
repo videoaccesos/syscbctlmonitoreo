@@ -21,6 +21,10 @@ export async function GET(
       return NextResponse.json({ error: "ID invalido" }, { status: 400 });
     }
 
+    // Obtener folioTipo del query param para buscar en la tabla correcta
+    const { searchParams } = new URL(request.url);
+    const folioTipo = searchParams.get("folioTipo"); // 'H' o 'B'
+
     // Columnas comunes (sin fecha_vencimiento que solo existe en tabla H)
     const commonCols = `asignacion_id, privada, tarjeta_id, tarjeta_id2, tarjeta_id3,
              tarjeta_id4, tarjeta_id5, numero_serie, numero_serie2, numero_serie3,
@@ -31,7 +35,39 @@ export async function GET(
              estatus_id, fecha_modificacion, tipo_pago,
              usuario_id, observaciones`;
 
-    // Buscar en ambas tablas
+    // Construir subquery segun folioTipo para buscar en la tabla correcta
+    let unionSql: string;
+    const queryParams: unknown[] = [];
+
+    if (folioTipo === "H") {
+      unionSql = `
+        SELECT ${commonCols},
+               CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
+               'H' AS folio_tipo
+        FROM residencias_residentes_tarjetas WHERE asignacion_id = ?`;
+      queryParams.push(asignacionId);
+    } else if (folioTipo === "B") {
+      unionSql = `
+        SELECT ${commonCols},
+               NULL AS fecha_vencimiento,
+               'B' AS folio_tipo
+        FROM residencias_residentes_tarjetas_no_renovacion WHERE asignacion_id = ?`;
+      queryParams.push(asignacionId);
+    } else {
+      // Fallback: buscar en ambas (compatibilidad con llamadas antiguas)
+      unionSql = `
+        SELECT ${commonCols},
+               CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
+               'H' AS folio_tipo
+        FROM residencias_residentes_tarjetas WHERE asignacion_id = ?
+        UNION ALL
+        SELECT ${commonCols},
+               NULL AS fecha_vencimiento,
+               'B' AS folio_tipo
+        FROM residencias_residentes_tarjetas_no_renovacion WHERE asignacion_id = ?`;
+      queryParams.push(asignacionId, asignacionId);
+    }
+
     const dataSql = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
              a.tarjeta_id4, a.tarjeta_id5, a.residente_id,
@@ -47,17 +83,7 @@ export async function GET(
              r.ape_materno AS res_ape_materno,
              res.nro_casa, res.calle,
              p.descripcion AS priv_descripcion
-      FROM (
-        SELECT ${commonCols},
-               CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
-               'H' AS folio_tipo
-        FROM residencias_residentes_tarjetas WHERE asignacion_id = ?
-        UNION ALL
-        SELECT ${commonCols},
-               NULL AS fecha_vencimiento,
-               'B' AS folio_tipo
-        FROM residencias_residentes_tarjetas_no_renovacion WHERE asignacion_id = ?
-      ) a
+      FROM (${unionSql}) a
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
       INNER JOIN residencias res ON r.residencia_id = res.residencia_id
       INNER JOIN privadas p ON res.privada_id = p.privada_id
@@ -66,8 +92,7 @@ export async function GET(
 
     const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       dataSql,
-      asignacionId,
-      asignacionId
+      ...queryParams
     );
 
     if (!rows || rows.length === 0) {

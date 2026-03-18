@@ -664,7 +664,7 @@ export default function AsignacionTarjetasPage() {
       // Abrir comprobante automaticamente
       if (newId) {
         window.open(
-          `/api/procesos/asignacion-tarjetas/${newId}/comprobante`,
+          `/api/procesos/asignacion-tarjetas/${newId}/comprobante?folioTipo=${form.folioTipo}`,
           "_blank"
         );
       }
@@ -702,9 +702,9 @@ export default function AsignacionTarjetasPage() {
   };
 
   /* ---------- imprimir comprobante ---------- */
-  const handlePrintComprobante = (asignacionId: number) => {
+  const handlePrintComprobante = (asignacionId: number, folioTipo: string) => {
     window.open(
-      `/api/procesos/asignacion-tarjetas/${asignacionId}/comprobante`,
+      `/api/procesos/asignacion-tarjetas/${asignacionId}/comprobante?folioTipo=${folioTipo}`,
       "_blank"
     );
   };
@@ -968,7 +968,7 @@ export default function AsignacionTarjetasPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => handlePrintComprobante(item.id)}
+                          onClick={() => handlePrintComprobante(item.id, item.folioTipo)}
                           title="Imprimir comprobante"
                           className="p-1.5 rounded hover:bg-blue-50 text-blue-600 transition"
                         >
