@@ -49,7 +49,7 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <div>
               <label
                 htmlFor="usuario"
@@ -59,6 +59,7 @@ export default function LoginPage() {
               </label>
               <input
                 id="usuario"
+                name="usuario_nocomplete"
                 type="text"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
@@ -66,6 +67,7 @@ export default function LoginPage() {
                 placeholder="Ingresa tu usuario"
                 required
                 autoFocus
+                autoComplete="off"
               />
             </div>
 
@@ -79,12 +81,14 @@ export default function LoginPage() {
               <div className="relative">
                 <input
                   id="contrasena"
+                  name="contrasena_nocomplete"
                   type={showPassword ? "text" : "password"}
                   value={contrasena}
                   onChange={(e) => setContrasena(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition pr-12"
                   placeholder="Ingresa tu contraseña"
                   required
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
