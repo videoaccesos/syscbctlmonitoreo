@@ -472,7 +472,7 @@ model ResidenteTarjeta {
   utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
   utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
   concepto                String   @default("") @db.VarChar(100)
-  interfonExtra           Int      @default(0) @map("interfon_extra")
+  motivoDescuento         String   @default("") @map("motivo_descuento") @db.VarChar(50)
   estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
   tipoPago                Int      @default(0) @map("tipo_pago")
@@ -515,7 +515,7 @@ model ResidenteTarjetaNoRenovacion {
   utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
   utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
   concepto                String   @default("") @db.VarChar(100)
-  interfonExtra           Int      @default(0) @map("interfon_extra")
+  motivoDescuento         String   @default("") @map("motivo_descuento") @db.VarChar(50)
   estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
   tipoPago                Int      @default(0) @map("tipo_pago")

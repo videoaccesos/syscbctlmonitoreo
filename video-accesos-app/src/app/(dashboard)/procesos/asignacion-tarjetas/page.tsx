@@ -95,6 +95,7 @@ interface AsignacionForm {
   folioContrato: string;
   precio: string;
   descuento: string;
+  motivoDescuento: string;
   iva: string;
   tipoPago: string;
   compradorId: string;
@@ -112,6 +113,7 @@ const emptyForm: AsignacionForm = {
   folioContrato: "",
   precio: "",
   descuento: "0",
+  motivoDescuento: "",
   iva: "0",
   tipoPago: "",
   compradorId: "",
@@ -633,6 +635,7 @@ export default function AsignacionTarjetasPage() {
           folioContrato: form.folioContrato || null,
           precio: form.precio || null,
           descuento: form.descuento || null,
+          motivoDescuento: form.motivoDescuento || "",
           IVA: form.iva || null,
           tipoPago: form.tipoPago || null,
           compradorId: form.compradorId || null,
@@ -1510,6 +1513,21 @@ export default function AsignacionTarjetasPage() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="0.00"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Motivo Descuento
+                    </label>
+                    <select
+                      value={form.motivoDescuento}
+                      onChange={(e) => setField("motivoDescuento", e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Sin descuento</option>
+                      <option value="reposicion">Reposicion</option>
+                      <option value="garantia">Garantia</option>
+                      <option value="gerencia">Gerencia</option>
+                    </select>
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-gray-200">
