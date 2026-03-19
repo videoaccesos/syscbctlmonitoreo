@@ -645,7 +645,7 @@ export default function AsignacionTarjetasPage() {
           tarjetaId5: tarjetaSlots[4]?.tarjetaId || null,
           residenteId: form.residenteId,
           fechaVencimiento:
-            form.folioTipo === "H" ? form.fechaVencimiento : null,
+            form.folioTipo === "H" ? form.fechaVencimiento : new Date().toISOString().split("T")[0],
           lecturaTipoId: form.tipoLectura || null,
           lecturaEpc: form.lecturaEpc || null,
           folioContrato: form.folioContrato || null,
