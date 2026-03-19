@@ -330,29 +330,28 @@ export async function POST(request: NextRequest) {
     let asignacion;
 
     // Helper: create a date-only value (YYYY-MM-DD) compatible with @db.Date columns
-    const toDateOnly = (d?: string) => {
+    const toDateOnly = (d?: string, defaultYears = 1) => {
       if (d) return new Date(d + "T00:00:00.000Z");
-      // Default: 1 año después de la fecha de compra
       const hoy = new Date();
-      hoy.setFullYear(hoy.getFullYear() + 1);
+      hoy.setFullYear(hoy.getFullYear() + defaultYears);
       return new Date(hoy.toISOString().split("T")[0] + "T00:00:00.000Z");
     };
 
     if (folioTipo === "B") {
-      // Folio B: Sin renovacion (vencimiento default = hoy + 1 año)
+      // Folio B: Sin renovacion (vencimiento default = hoy + 10 años)
       asignacion = await prisma.residenteTarjetaNoRenovacion.create({
         data: {
           ...dataComun,
-          fechaVencimiento: toDateOnly(fechaVencimiento),
+          fechaVencimiento: toDateOnly(fechaVencimiento, 10),
         },
         include: includeResidente,
       });
     } else {
-      // Folio H: Con renovacion (con fecha_vencimiento del frontend o default +1 año)
+      // Folio H: Con renovacion (vencimiento default = hoy + 1 año)
       asignacion = await prisma.residenteTarjeta.create({
         data: {
           ...dataComun,
-          fechaVencimiento: toDateOnly(fechaVencimiento),
+          fechaVencimiento: toDateOnly(fechaVencimiento, 1),
         },
         include: includeResidente,
       });

@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
           privadaId: true,
           usuarioModId: true,
           privada: {
-            select: { id: true, descripcion: true, precioVehicular: true, precioPeatonal: true },
+            select: { id: true, descripcion: true, precioVehicular: true, precioPeatonal: true, renovacion: true },
           },
           residentes: {
             select: residentesSelect,
