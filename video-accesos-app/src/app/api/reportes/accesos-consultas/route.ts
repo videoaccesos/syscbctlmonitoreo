@@ -94,8 +94,31 @@ export async function GET(request: NextRequest) {
       prisma.registroAcceso.count({ where }),
     ]);
 
+    // Resolver nombres de solicitantes desde la tabla de residentes
+    const solicitanteIds = [
+      ...new Set(registros.map((r) => r.solicitanteId).filter(Boolean)),
+    ];
+    const residentes =
+      solicitanteIds.length > 0
+        ? await prisma.residente.findMany({
+            where: { id: { in: solicitanteIds } },
+            select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
+          })
+        : [];
+    const residenteMap = new Map(residentes.map((r) => [r.id, r]));
+
+    const data = registros.map((r) => {
+      const sol = residenteMap.get(r.solicitanteId);
+      return {
+        ...r,
+        solicitanteNombre: sol
+          ? `${sol.nombre} ${sol.apePaterno} ${sol.apeMaterno}`.trim()
+          : r.solicitanteId,
+      };
+    });
+
     return NextResponse.json({
-      data: registros,
+      data,
       total,
       page,
       limit,

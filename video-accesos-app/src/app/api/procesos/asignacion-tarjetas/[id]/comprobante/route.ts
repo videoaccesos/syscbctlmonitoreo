@@ -207,7 +207,7 @@ export async function GET(
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Recibo Folio ${row.folio_tipo}</title>
+  <title>Recibo Folio ${row.folio_tipo}-${row.asignacion_id}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -235,8 +235,9 @@ export async function GET(
     .header-brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px; }
     .header-brand p { font-size: 11px; opacity: 0.7; font-weight: 400; }
     .header-id { text-align: right; }
-    .header-id .folio-num { font-size: 28px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
-    .header-id .folio-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.7; }
+    .header-id .folio-label { font-size: 16px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; opacity: 0.85; }
+    .header-id .folio-num { font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+    .header-id .folio-detail { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; }
     .header-badges { display: flex; gap: 8px; margin-top: 14px; position: relative; z-index: 1; }
     .hbadge {
       display: inline-flex; align-items: center; gap: 4px;
@@ -370,7 +371,8 @@ export async function GET(
         </div>
         <div class="header-id">
           <div class="folio-label">FOLIO</div>
-          <div class="folio-num">${row.folio_tipo}</div>
+          <div class="folio-num">${row.folio_tipo}-${row.asignacion_id}</div>
+          <div class="folio-detail">No. ${row.asignacion_id}</div>
         </div>
       </div>
       <div class="header-badges">

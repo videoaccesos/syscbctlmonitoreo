@@ -9,11 +9,18 @@ interface Privada {
   descripcion: string;
 }
 
+interface ResidenciaOption {
+  id: number;
+  nroCasa: string;
+  calle: string;
+}
+
 interface RegistroAcceso {
   id: number;
   tipoGestionId: number;
   estatusId: number;
   solicitanteId: string;
+  solicitanteNombre: string;
   observaciones: string | null;
   duracion: string | null;
   fechaModificacion: string;
@@ -26,11 +33,6 @@ interface RegistroAcceso {
     apeMaterno: string;
     nroOperador: string | null;
   };
-  usuario: {
-    id: number;
-    usuario: string;
-    empleado: { nombre: string; apePaterno: string } | null;
-  } | null;
 }
 
 interface ApiResponse {
@@ -88,20 +90,32 @@ function getDefaultFechaHasta(): string {
   return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
 }
 
+function formatDuracion(iso: string | null): string {
+  if (!iso) return "-";
+  // duracion is a Time field returned as ISO datetime (1970-01-01T...)
+  // Extract HH:MM:SS from the ISO string
+  const match = iso.match(/T(\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return "-";
+  const [, hh, mm, ss] = match;
+  if (hh === "00" && mm === "00" && ss === "00") return "-";
+  if (hh === "00") return `${mm}:${ss}`;
+  return `${hh}:${mm}:${ss}`;
+}
+
 function registroToCsvRow(r: RegistroAcceso): string {
-  const operador = r.usuario?.empleado
-    ? `${r.usuario.empleado.nombre} ${r.usuario.empleado.apePaterno}`
-    : r.usuario?.usuario || "";
+  const operador = r.empleado
+    ? `${r.empleado.nombre} ${r.empleado.apePaterno} ${r.empleado.apeMaterno}`.trim()
+    : "";
   const cols = [
     formatFecha(r.fechaModificacion),
     r.privada.descripcion,
     r.residencia.nroCasa,
     r.residencia.calle,
-    r.solicitanteId,
+    r.solicitanteNombre || r.solicitanteId,
     TIPOS_GESTION[r.tipoGestionId] || String(r.tipoGestionId),
     RESULTADOS[r.estatusId] || String(r.estatusId),
     operador,
-    r.duracion || "",
+    formatDuracion(r.duracion),
   ];
   return cols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",");
 }
@@ -111,6 +125,7 @@ function registroToCsvRow(r: RegistroAcceso): string {
 export default function AccesosConsultasPage() {
   /* ---------- state ---------- */
   const [privadas, setPrivadas] = useState<Privada[]>([]);
+  const [residencias, setResidencias] = useState<ResidenciaOption[]>([]);
   const [registros, setRegistros] = useState<RegistroAcceso[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -150,6 +165,29 @@ export default function AccesosConsultasPage() {
     }
     loadPrivadas();
   }, []);
+
+  /* ---------- cargar residencias al cambiar privada ---------- */
+  useEffect(() => {
+    if (!filtroPrivadaId) {
+      setResidencias([]);
+      setFiltroNroCasa("");
+      return;
+    }
+    async function loadResidencias() {
+      try {
+        const res = await fetch(
+          `/api/catalogos/residencias?privadaId=${filtroPrivadaId}&limit=1000&includeTarjetas=false`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        setResidencias(json.data || []);
+        setFiltroNroCasa("");
+      } catch {
+        console.error("Error al cargar residencias");
+      }
+    }
+    loadResidencias();
+  }, [filtroPrivadaId]);
 
   /* ---------- fetch registros ---------- */
   const fetchRegistros = useCallback(async () => {
@@ -246,16 +284,22 @@ export default function AccesosConsultasPage() {
             </select>
           </div>
 
-          {/* #Casa */}
+          {/* Casa (Calle + #Casa) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">#Casa</label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Casa</label>
+            <select
               value={filtroNroCasa}
               onChange={(e) => setFiltroNroCasa(e.target.value)}
-              placeholder="Ej: 169"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+              disabled={!filtroPrivadaId}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            >
+              <option value="">{filtroPrivadaId ? "Todas" : "Seleccione privada"}</option>
+              {residencias.map((r) => (
+                <option key={r.id} value={r.nroCasa}>
+                  {r.calle} #{r.nroCasa}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Fecha Desde */}
@@ -388,7 +432,7 @@ export default function AccesosConsultasPage() {
                       {r.residencia.calle}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {r.solicitanteId}
+                      {r.solicitanteNombre || r.solicitanteId}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {TIPOS_GESTION[r.tipoGestionId] || r.tipoGestionId}
@@ -403,12 +447,12 @@ export default function AccesosConsultasPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {r.usuario?.empleado
-                        ? `${r.usuario.empleado.nombre} ${r.usuario.empleado.apePaterno}`
-                        : r.usuario?.usuario || "-"}
+                      {r.empleado
+                        ? `${r.empleado.nombre} ${r.empleado.apePaterno} ${r.empleado.apeMaterno}`.trim()
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">
-                      {r.duracion || "-"}
+                      {formatDuracion(r.duracion)}
                     </td>
                   </tr>
                 ))
