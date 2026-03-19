@@ -330,9 +330,12 @@ export async function POST(request: NextRequest) {
     let asignacion;
 
     if (folioTipo === "B") {
-      // Folio B: Sin renovacion (no fecha_vencimiento)
+      // Folio B: Sin renovacion (fecha_vencimiento requerida por BD, se usa fecha actual)
       asignacion = await prisma.residenteTarjetaNoRenovacion.create({
-        data: dataComun,
+        data: {
+          ...dataComun,
+          fechaVencimiento: new Date(),
+        },
         include: includeResidente,
       });
     } else {

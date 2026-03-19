@@ -506,6 +506,7 @@ model ResidenteTarjetaNoRenovacion {
   compradorId             String   @default("") @map("comprador_id") @db.VarChar(100)
   mostrarNombreComprador  Int      @default(0) @map("mostrar_nombre_comprador") @db.TinyInt
   fecha                   DateTime? @db.Date
+  fechaVencimiento        DateTime? @map("fecha_vencimiento") @db.Date
   lecturaTipoId           Int      @default(0) @map("lectura_tipo_id") @db.SmallInt
   lecturaEpc              String   @default("") @map("lectura_epc") @db.VarChar(20)
   folioContrato           String   @default("") @map("folio_contrato") @db.VarChar(10)
