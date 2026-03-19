@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const skip = (page - 1) * limit;
 
+    const allowedSortFields = ["descripcion", "estatusId"];
+    const sortByParam = searchParams.get("sortBy") || "descripcion";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "descripcion";
+    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
+
     const where = {
       estatusId: 1,
       ...(search
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest) {
     const [turnos, total] = await Promise.all([
       prisma.turno.findMany({
         where,
-        orderBy: { descripcion: "asc" },
+        orderBy: { [sortBy]: sortDir },
         skip,
         take: limit,
       }),

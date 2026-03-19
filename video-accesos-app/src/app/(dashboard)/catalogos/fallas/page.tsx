@@ -45,6 +45,21 @@ export default function FallasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Falla | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // sorting
+  const [sortBy, setSortBy] = useState("codigo");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   /* ---------- fetch ---------- */
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -54,6 +69,8 @@ export default function FallasPage() {
         limit: String(pageSize),
       });
       if (search) params.set("search", search);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/fallas?${params}`);
       if (!res.ok) throw new Error("Error al obtener fallas");
@@ -66,7 +83,7 @@ export default function FallasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, sortBy, sortDir]);
 
   useEffect(() => {
     fetchData();
@@ -242,9 +259,33 @@ export default function FallasPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700 w-32">Codigo</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Descripcion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Estado</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("codigo")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Codigo
+                    {sortBy === "codigo" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("descripcion")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Descripcion
+                    {sortBy === "descripcion" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
               </tr>
             </thead>

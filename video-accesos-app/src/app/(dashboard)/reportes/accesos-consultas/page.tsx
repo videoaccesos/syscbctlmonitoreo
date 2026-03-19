@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Search, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Search, FileSpreadsheet, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 /* ---------- tipos ---------- */
 interface Privada {
@@ -166,28 +166,54 @@ export default function AccesosConsultasPage() {
     loadPrivadas();
   }, []);
 
-  /* ---------- cargar residencias al cambiar privada ---------- */
+  /* ---------- busqueda inteligente de residencias ---------- */
+  const [searchCasa, setSearchCasa] = useState("");
+  const [showCasaDropdown, setShowCasaDropdown] = useState(false);
+  const [selectedCasaLabel, setSelectedCasaLabel] = useState("");
+  const casaRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Limpiar seleccion al cambiar privada
   useEffect(() => {
-    if (!filtroPrivadaId) {
+    setResidencias([]);
+    setFiltroNroCasa("");
+    setSearchCasa("");
+    setSelectedCasaLabel("");
+  }, [filtroPrivadaId]);
+
+  // Buscar residencias con debounce
+  useEffect(() => {
+    if (!filtroPrivadaId || searchCasa.length < 1) {
       setResidencias([]);
-      setFiltroNroCasa("");
       return;
     }
-    async function loadResidencias() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/catalogos/residencias?privadaId=${filtroPrivadaId}&limit=1000&includeTarjetas=false`
+          `/api/catalogos/residencias?privadaId=${filtroPrivadaId}&search=${encodeURIComponent(searchCasa)}&limit=20&includeTarjetas=false`
         );
         if (!res.ok) return;
         const json = await res.json();
         setResidencias(json.data || []);
-        setFiltroNroCasa("");
+        setShowCasaDropdown(true);
       } catch {
-        console.error("Error al cargar residencias");
+        console.error("Error al buscar residencias");
+      }
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [filtroPrivadaId, searchCasa]);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (casaRef.current && !casaRef.current.contains(e.target as Node)) {
+        setShowCasaDropdown(false);
       }
     }
-    loadResidencias();
-  }, [filtroPrivadaId]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   /* ---------- fetch registros ---------- */
   const fetchRegistros = useCallback(async () => {
@@ -284,22 +310,51 @@ export default function AccesosConsultasPage() {
             </select>
           </div>
 
-          {/* Casa (Calle + #Casa) */}
-          <div>
+          {/* Casa (busqueda inteligente por calle/#casa) */}
+          <div ref={casaRef} className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1">Casa</label>
-            <select
-              value={filtroNroCasa}
-              onChange={(e) => setFiltroNroCasa(e.target.value)}
-              disabled={!filtroPrivadaId}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">{filtroPrivadaId ? "Todas" : "Seleccione privada"}</option>
-              {residencias.map((r) => (
-                <option key={r.id} value={r.nroCasa}>
-                  {r.calle} #{r.nroCasa}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={selectedCasaLabel || searchCasa}
+                onChange={(e) => {
+                  setSelectedCasaLabel("");
+                  setFiltroNroCasa("");
+                  setSearchCasa(e.target.value);
+                }}
+                onFocus={() => { if (residencias.length > 0) setShowCasaDropdown(true); }}
+                disabled={!filtroPrivadaId}
+                placeholder={filtroPrivadaId ? "Buscar por calle o #casa..." : "Seleccione privada"}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed pr-8"
+              />
+              {(selectedCasaLabel || searchCasa) && filtroPrivadaId && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchCasa(""); setSelectedCasaLabel(""); setFiltroNroCasa(""); setResidencias([]); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {showCasaDropdown && residencias.length > 0 && (
+              <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {residencias.map((r) => (
+                  <li
+                    key={r.id}
+                    onClick={() => {
+                      setFiltroNroCasa(r.nroCasa);
+                      setSelectedCasaLabel(`${r.calle} #${r.nroCasa}`);
+                      setSearchCasa("");
+                      setShowCasaDropdown(false);
+                    }}
+                    className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {r.calle} <span className="font-semibold">#{r.nroCasa}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Fecha Desde */}

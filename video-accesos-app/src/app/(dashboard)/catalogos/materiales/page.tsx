@@ -46,6 +46,21 @@ export default function MaterialesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Material | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // sorting
+  const [sortBy, setSortBy] = useState("codigo");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   /* ---------- fetch ---------- */
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -55,6 +70,8 @@ export default function MaterialesPage() {
         limit: String(pageSize),
       });
       if (search) params.set("search", search);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/materiales?${params}`);
       if (!res.ok) throw new Error("Error al obtener materiales");
@@ -67,7 +84,7 @@ export default function MaterialesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, sortBy, sortDir]);
 
   useEffect(() => {
     fetchData();

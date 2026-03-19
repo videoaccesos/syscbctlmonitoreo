@@ -4,16 +4,22 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/catalogos/puestos - Listar todos los puestos activos
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const allowedSortFields = ["descripcion", "estatusId"];
+    const sortByParam = searchParams.get("sortBy") || "descripcion";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "descripcion";
+    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
+
     const puestos = await prisma.puesto.findMany({
       where: { estatusId: 1 },
-      orderBy: { descripcion: "asc" },
+      orderBy: { [sortBy]: sortDir },
     });
 
     return NextResponse.json(puestos);

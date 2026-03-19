@@ -122,6 +122,21 @@ export default function EmpleadosPage() {
   const [form, setForm] = useState<EmpleadoForm>(emptyForm);
   const [usedOperadores, setUsedOperadores] = useState<OperadorEnUso[]>([]);
   const [error, setError] = useState("");
+  const [sortBy, setSortBy] = useState("apePaterno");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // -----------------------------------------------------------
+  // Sort handler
+  // -----------------------------------------------------------
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
 
   // -----------------------------------------------------------
   // Fetch empleados
@@ -135,6 +150,8 @@ export default function EmpleadosPage() {
         estatus: statusFilter,
       });
       if (search) params.set("search", search);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/empleados?${params}`);
       if (!res.ok) throw new Error("Error al obtener empleados");
@@ -147,7 +164,7 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, sortBy, sortDir]);
 
   // -----------------------------------------------------------
   // Fetch puestos (for dropdown)
@@ -430,11 +447,23 @@ export default function EmpleadosPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Nro Operador
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("nroOperador")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nro Operador
+                    {sortBy === "nroOperador" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Nombre Completo
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("apePaterno")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nombre Completo
+                    {sortBy === "apePaterno" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Puesto
@@ -445,8 +474,14 @@ export default function EmpleadosPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Estado
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Acciones

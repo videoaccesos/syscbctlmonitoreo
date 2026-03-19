@@ -127,6 +127,8 @@ export default function ResidenciasPage() {
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState("nroCasa");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // Residente CRUD
   const [residenteModalOpen, setResidenteModalOpen] = useState(false);
@@ -169,6 +171,18 @@ export default function ResidenciasPage() {
     }
   }, []);
 
+  // ── Sort handler ────────────────────────────────────────────────────────
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   // ── Cargar residencias ───────────────────────────────────────────────────
 
   const fetchResidencias = useCallback(async () => {
@@ -180,6 +194,8 @@ export default function ResidenciasPage() {
       });
       if (search) params.set("search", search);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/residencias?${params}`);
       if (!res.ok) throw new Error();
@@ -193,7 +209,7 @@ export default function ResidenciasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterPrivadaId]);
+  }, [page, search, filterPrivadaId, sortBy, sortDir]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -498,11 +514,23 @@ export default function ResidenciasPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="w-10 px-2 py-3"></th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  #Casa
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("nroCasa")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    #Casa
+                    {sortBy === "nroCasa" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  Calle
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("calle")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Calle
+                    {sortBy === "calle" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   Privada
@@ -516,8 +544,14 @@ export default function ResidenciasPage() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">
                   Residentes
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  Estado
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">
                   Acciones

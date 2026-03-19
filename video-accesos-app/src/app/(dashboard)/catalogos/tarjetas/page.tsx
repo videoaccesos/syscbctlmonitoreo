@@ -81,6 +81,21 @@ export default function TarjetasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Tarjeta | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // sorting
+  const [sortBy, setSortBy] = useState("fecha");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   /* ---------- fetch privadas ---------- */
   const fetchPrivadas = useCallback(async () => {
     try {
@@ -109,6 +124,8 @@ export default function TarjetasPage() {
       if (filterEstatus) params.set("estatusId", filterEstatus);
       if (filterTipo) params.set("tipoId", filterTipo);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/tarjetas?${params}`);
       if (!res.ok) throw new Error("Error al obtener tarjetas");
@@ -121,7 +138,7 @@ export default function TarjetasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, filterEstatus, filterTipo, filterPrivadaId]);
+  }, [page, pageSize, search, filterEstatus, filterTipo, filterPrivadaId, sortBy, sortDir]);
 
   useEffect(() => {
     fetchData();
@@ -374,12 +391,52 @@ export default function TarjetasPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Lectura</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Nro. Serie</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Tipo</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("lectura")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Lectura
+                    {sortBy === "lectura" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("numeroSerie")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nro. Serie
+                    {sortBy === "numeroSerie" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("tipoId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Tipo
+                    {sortBy === "tipoId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Privada</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Estado</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Fecha</th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("fecha")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Fecha
+                    {sortBy === "fecha" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
               </tr>
             </thead>

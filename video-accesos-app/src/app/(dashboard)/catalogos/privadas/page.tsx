@@ -104,8 +104,10 @@ export default function PrivadasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [filterEstatus, setFilterEstatus] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1");
   const [loading, setLoading] = useState(false);
+  const [sortBy, setSortBy] = useState("descripcion");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // modal
   const [showModal, setShowModal] = useState(false);
@@ -118,6 +120,17 @@ export default function PrivadasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Privada | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   /* ---------- fetch ---------- */
   const fetchPrivadas = useCallback(async () => {
     setLoading(true);
@@ -128,6 +141,8 @@ export default function PrivadasPage() {
       });
       if (search) params.set("search", search);
       if (filterEstatus) params.set("estatusId", filterEstatus);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/privadas?${params}`);
       if (!res.ok) throw new Error("Error al obtener privadas");
@@ -140,7 +155,7 @@ export default function PrivadasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, filterEstatus]);
+  }, [page, pageSize, search, filterEstatus, sortBy, sortDir]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -374,12 +389,28 @@ export default function PrivadasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Descripcion</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("descripcion")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Descripcion
+                    {sortBy === "descripcion" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Contacto</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Telefono</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Mensualidad</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Estado</th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Acciones</th>
               </tr>
             </thead>

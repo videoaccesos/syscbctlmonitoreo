@@ -21,6 +21,11 @@ export async function GET(request: NextRequest) {
     const includeTarjetas = searchParams.get("includeTarjetas") !== "false";
     const skip = (page - 1) * limit;
 
+    const allowedSortFields = ["nroCasa", "calle", "estatusId"];
+    const sortByParam = searchParams.get("sortBy") || "nroCasa";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "nroCasa";
+    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
+
     // Excluir eliminados (estatus 5) replicando el comportamiento legacy
     const where: Record<string, unknown> = {
       estatusId: { not: 5 },
@@ -105,7 +110,7 @@ export async function GET(request: NextRequest) {
             orderBy: { apePaterno: "asc" },
           },
         },
-        orderBy: { nroCasa: "asc" },
+        orderBy: { [sortBy]: sortDir },
         skip,
         take: limit,
       }),

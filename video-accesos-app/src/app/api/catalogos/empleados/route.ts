@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get("pageSize") || "10", 10);
     const skip = (page - 1) * pageSize;
 
+    const allowedSortFields = ["apePaterno", "nombre", "nroOperador", "estatusId"];
+    const sortByParam = searchParams.get("sortBy") || "apePaterno";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "apePaterno";
+    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = {};
 
@@ -41,7 +46,7 @@ export async function GET(request: NextRequest) {
       prisma.empleado.findMany({
         where,
         include: { puesto: true },
-        orderBy: { apePaterno: "asc" },
+        orderBy: { [sortBy]: sortDir },
         skip,
         take: pageSize,
       }),
