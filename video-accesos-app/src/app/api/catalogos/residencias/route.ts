@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const privadaId = searchParams.get("privadaId");
     const residenciaId = searchParams.get("residenciaId");
     const nroCasa = searchParams.get("nroCasa");
+    const estatusIdParam = searchParams.get("estatusId");
     const includeTarjetas = searchParams.get("includeTarjetas") !== "false";
     const skip = (page - 1) * limit;
 
@@ -32,6 +33,16 @@ export async function GET(request: NextRequest) {
       estatusId: { not: 5 },
       privadaId: { gt: 0 },
     };
+
+    // Filtro por estatusId: soporta valores separados por coma (ej: "1,2")
+    if (estatusIdParam) {
+      const ids = estatusIdParam.split(",").map((s) => parseInt(s.trim())).filter((n) => !isNaN(n));
+      if (ids.length === 1) {
+        where.estatusId = ids[0];
+      } else if (ids.length > 1) {
+        where.estatusId = { in: ids };
+      }
+    }
 
     if (residenciaId) {
       where.id = parseInt(residenciaId);

@@ -114,6 +114,7 @@ export default function ResidenciasPage() {
   // Filtros
   const [search, setSearch] = useState("");
   const [filterPrivadaId, setFilterPrivadaId] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1,2"); // Default: Interfón Activo + Sin Interfón
   const [page, setPage] = useState(1);
 
   // Modal
@@ -194,6 +195,7 @@ export default function ResidenciasPage() {
       });
       if (search) params.set("search", search);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
+      if (filterEstatus) params.set("estatusId", filterEstatus);
       params.set("sortBy", sortBy);
       params.set("sortDir", sortDir);
 
@@ -209,7 +211,7 @@ export default function ResidenciasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterPrivadaId, sortBy, sortDir]);
+  }, [page, search, filterPrivadaId, filterEstatus, sortBy, sortDir]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -502,6 +504,25 @@ export default function ResidenciasPage() {
                   {p.descripcion}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Filtro por estado */}
+          <div className="sm:w-64">
+            <select
+              value={filterEstatus}
+              onChange={(e) => {
+                setFilterEstatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            >
+              <option value="1,2">Interfon Activo + Sin Interfon</option>
+              <option value="">Todos los estados</option>
+              <option value="1">Interfon Activo</option>
+              <option value="2">Sin Interfon</option>
+              <option value="3">Moroso</option>
+              <option value="4">Sin Derechos</option>
             </select>
           </div>
         </div>
@@ -835,25 +856,66 @@ export default function ResidenciasPage() {
               de <span className="font-medium">{pagination.total}</span>{" "}
               resultados
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="p-1.5 rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-gray-600">
-                Página {pagination.page} de {pagination.totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setPage((p) => Math.min(pagination.totalPages, p + 1))
+              {(() => {
+                const tp = pagination.totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
                 }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400 text-sm">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+              <button
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                 disabled={page >= pagination.totalPages}
-                className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="p-1.5 rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(pagination.totalPages)}
+                disabled={page >= pagination.totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>
