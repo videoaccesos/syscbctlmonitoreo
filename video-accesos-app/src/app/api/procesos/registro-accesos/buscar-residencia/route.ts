@@ -3,7 +3,9 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/procesos/registro-accesos/buscar-residencia - Buscar residencias por privada para el formulario de registro
+// GET /api/procesos/registro-accesos/buscar-residencia - Buscar residencias por privada
+// Búsqueda ligera: solo datos básicos de la residencia (sin residentes/visitantes)
+// Los detalles completos se cargan con el endpoint detalle-residencia al seleccionar
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -30,18 +32,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Si no hay texto de búsqueda, no retornar nada
+    // (evita cargar cientos de residencias al seleccionar la privada)
+    if (!search.trim()) {
+      return NextResponse.json({ data: [], total: 0 });
+    }
+
     // Construir filtro de busqueda
     const where: Record<string, unknown> = {
       privadaId: privadaIdNum,
-      estatusId: { in: [1, 2, 3] }, // Incluir todas las residencias activas (1=Activo, 2=Sin Interfon, 3=Moroso)
-    };
-
-    if (search) {
-      where.OR = [
+      estatusId: { in: [1, 2, 3] },
+      OR: [
         { nroCasa: { contains: search } },
         { calle: { contains: search } },
-      ];
-    }
+      ],
+    };
 
     const residencias = await prisma.residencia.findMany({
       where,
@@ -49,41 +54,12 @@ export async function GET(request: NextRequest) {
         id: true,
         nroCasa: true,
         calle: true,
-        telefono1: true,
-        telefono2: true,
         interfon: true,
-        telefonoInterfon: true,
-        observaciones: true,
         estatusId: true,
-        residentes: {
-          where: { estatusId: 1 }, // Solo residentes activos
-          select: {
-            id: true,
-            nombre: true,
-            apePaterno: true,
-            apeMaterno: true,
-            celular: true,
-            email: true,
-            reportarAcceso: true,
-          },
-          orderBy: { apePaterno: "asc" },
-        },
-        visitas: {
-          where: { estatusId: 1 },
-          select: {
-            id: true,
-            nombre: true,
-            apePaterno: true,
-            apeMaterno: true,
-            telefono: true,
-            celular: true,
-            observaciones: true,
-          },
-          orderBy: { apePaterno: "asc" },
-        },
+        observaciones: true,
       },
       orderBy: { nroCasa: "asc" },
-      take: 500, // Limitar resultados para rendimiento
+      take: 20,
     });
 
     return NextResponse.json({

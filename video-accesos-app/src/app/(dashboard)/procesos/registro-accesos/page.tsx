@@ -35,6 +35,15 @@ interface Privada {
   descripcion: string;
 }
 
+interface ResidenciaBasica {
+  id: number;
+  nroCasa: string;
+  calle: string;
+  interfon: string | null;
+  estatusId: number;
+  observaciones: string | null;
+}
+
 interface Residencia {
   id: number;
   nroCasa: string;
@@ -261,7 +270,7 @@ export default function RegistroAccesosPage() {
   // Form state - siempre visible como panel de trabajo
   const [formPrivadaId, setFormPrivadaId] = useState("");
   const [residenciaSearch, setResidenciaSearch] = useState("");
-  const [residencias, setResidencias] = useState<Residencia[]>([]);
+  const [residencias, setResidencias] = useState<ResidenciaBasica[]>([]);
   const [residenciasLoading, setResidenciasLoading] = useState(false);
   const [selectedResidencia, setSelectedResidencia] =
     useState<Residencia | null>(null);
@@ -421,15 +430,13 @@ export default function RegistroAccesosPage() {
   // Search residencias
   // -----------------------------------------------------------
   const buscarResidencias = useCallback(async () => {
-    if (!formPrivadaId) {
+    if (!formPrivadaId || !residenciaSearch.trim()) {
       setResidencias([]);
       return;
     }
     setResidenciasLoading(true);
     try {
-      const params = new URLSearchParams({ privadaId: formPrivadaId });
-      if (residenciaSearch) params.set("search", residenciaSearch);
-
+      const params = new URLSearchParams({ privadaId: formPrivadaId, search: residenciaSearch });
       const res = await fetch(
         `/api/procesos/registro-accesos/buscar-residencia?${params}`
       );
@@ -443,11 +450,27 @@ export default function RegistroAccesosPage() {
     }
   }, [formPrivadaId, residenciaSearch]);
 
-  // Auto-search residencias when privada selected or typing
+  // Cargar detalle completo de residencia (residentes, visitantes) al seleccionar
+  const cargarDetalleResidencia = useCallback(async (residenciaId: number) => {
+    try {
+      const res = await fetch(
+        `/api/procesos/registro-accesos/detalle-residencia?id=${residenciaId}`
+      );
+      if (!res.ok) throw new Error("Error al cargar detalle");
+      const json = await res.json();
+      setSelectedResidencia(json.data || null);
+    } catch {
+      console.error("Error al cargar detalle de residencia");
+    }
+  }, []);
+
+  // Auto-search residencias when typing (requires search text)
   useEffect(() => {
-    if (formPrivadaId) {
+    if (formPrivadaId && residenciaSearch.trim()) {
       const timeout = setTimeout(() => buscarResidencias(), 300);
       return () => clearTimeout(timeout);
+    } else {
+      setResidencias([]);
     }
   }, [residenciaSearch, formPrivadaId]);
 
@@ -1144,7 +1167,7 @@ export default function RegistroAccesosPage() {
                             key={r.id}
                             type="button"
                             onClick={() => {
-                              setSelectedResidencia(r);
+                              cargarDetalleResidencia(r.id);
                               setResidencias([]);
                               setResidenciaSearch("");
                               setFormSolicitanteId(""); setFormSolicitanteData(null);
