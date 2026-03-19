@@ -124,6 +124,7 @@ export default function AccesosConsultasPage() {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState(getDefaultFechaHasta);
   const [filtroTipoGestionId, setFiltroTipoGestionId] = useState("");
   const [filtroEstatusId, setFiltroEstatusId] = useState("");
+  const [filtroNroCasa, setFiltroNroCasa] = useState("");
 
   // filtros aplicados (se aplican al hacer click en Buscar)
   const [appliedFilters, setAppliedFilters] = useState({
@@ -132,6 +133,7 @@ export default function AccesosConsultasPage() {
     fechaHasta: getDefaultFechaHasta(),
     tipoGestionId: "",
     estatusId: "",
+    nroCasa: "",
   });
 
   /* ---------- cargar privadas ---------- */
@@ -163,6 +165,7 @@ export default function AccesosConsultasPage() {
       if (appliedFilters.fechaHasta) params.set("fechaHasta", appliedFilters.fechaHasta);
       if (appliedFilters.tipoGestionId) params.set("tipoGestionId", appliedFilters.tipoGestionId);
       if (appliedFilters.estatusId) params.set("estatusId", appliedFilters.estatusId);
+      if (appliedFilters.nroCasa) params.set("nroCasa", appliedFilters.nroCasa);
 
       const res = await fetch(`/api/reportes/accesos-consultas?${params}`);
       if (!res.ok) throw new Error("Error al consultar");
@@ -190,6 +193,7 @@ export default function AccesosConsultasPage() {
       fechaHasta: filtroFechaHasta,
       tipoGestionId: filtroTipoGestionId,
       estatusId: filtroEstatusId,
+      nroCasa: filtroNroCasa,
     });
   };
 
@@ -224,7 +228,7 @@ export default function AccesosConsultasPage() {
 
       {/* Panel de Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
           {/* Privada */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Privada</label>
@@ -240,6 +244,18 @@ export default function AccesosConsultasPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* #Casa */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">#Casa</label>
+            <input
+              type="text"
+              value={filtroNroCasa}
+              onChange={(e) => setFiltroNroCasa(e.target.value)}
+              placeholder="Ej: 169"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
 
           {/* Fecha Desde */}
