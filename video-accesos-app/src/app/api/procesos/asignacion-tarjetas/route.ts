@@ -321,6 +321,7 @@ export async function POST(request: NextRequest) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO \`${tableName}\` (
         tarjeta_id, tarjeta_id2, tarjeta_id3, tarjeta_id4, tarjeta_id5,
+        numero_serie, numero_serie2, numero_serie3, numero_serie4, numero_serie5,
         residente_id, privada, fecha, fecha_vencimiento, fecha_modificacion,
         lectura_tipo_id, lectura_epc, folio_contrato,
         precio, descuento, IVA, tipo_pago,
@@ -328,7 +329,7 @@ export async function POST(request: NextRequest) {
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
         estatus_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
