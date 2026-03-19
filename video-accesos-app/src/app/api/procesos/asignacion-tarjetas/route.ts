@@ -328,8 +328,8 @@ export async function POST(request: NextRequest) {
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        estatus_id
-      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        estatus_id, usuario_id
+      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
