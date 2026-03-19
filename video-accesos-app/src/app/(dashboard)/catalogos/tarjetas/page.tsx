@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 /* ---------- tipos ---------- */
 interface Privada {
@@ -59,7 +59,7 @@ export default function TarjetasPage() {
   const [privadas, setPrivadas] = useState<Privada[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize] = useState(100);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -80,6 +80,21 @@ export default function TarjetasPage() {
   // confirmacion eliminar
   const [deleteTarget, setDeleteTarget] = useState<Tarjeta | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // sorting
+  const [sortBy, setSortBy] = useState("fecha");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
 
   /* ---------- fetch privadas ---------- */
   const fetchPrivadas = useCallback(async () => {
@@ -109,6 +124,8 @@ export default function TarjetasPage() {
       if (filterEstatus) params.set("estatusId", filterEstatus);
       if (filterTipo) params.set("tipoId", filterTipo);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/tarjetas?${params}`);
       if (!res.ok) throw new Error("Error al obtener tarjetas");
@@ -121,7 +138,7 @@ export default function TarjetasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, filterEstatus, filterTipo, filterPrivadaId]);
+  }, [page, pageSize, search, filterEstatus, filterTipo, filterPrivadaId, sortBy, sortDir]);
 
   useEffect(() => {
     fetchData();
@@ -374,12 +391,52 @@ export default function TarjetasPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Lectura</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Nro. Serie</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Tipo</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("lectura")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Lectura
+                    {sortBy === "lectura" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("numeroSerie")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nro. Serie
+                    {sortBy === "numeroSerie" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("tipoId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Tipo
+                    {sortBy === "tipoId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Privada</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Estado</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-32">Fecha</th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("fecha")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Fecha
+                    {sortBy === "fecha" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
               </tr>
             </thead>
@@ -457,7 +514,14 @@ export default function TarjetasPage() {
             <span className="text-gray-600">
               Mostrando {items.length} de {total} registros
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
               <button
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -465,15 +529,51 @@ export default function TarjetasPage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-gray-700">
-                Pagina {page} de {totalPages}
-              </span>
+              {(() => {
+                const tp = totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
+                }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="p-1.5 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>

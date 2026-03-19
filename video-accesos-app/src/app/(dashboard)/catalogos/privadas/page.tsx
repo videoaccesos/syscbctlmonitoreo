@@ -39,6 +39,7 @@ interface Privada {
   precioVehicular: number | null;
   precioPeatonal: number | null;
   precioMensualidad: number | null;
+  renovacion: number;
   venceContrato: string | null;
   observaciones: string | null;
   estatusId: number;
@@ -86,6 +87,7 @@ const emptyForm = {
   precioVehicular: "",
   precioPeatonal: "",
   precioMensualidad: "",
+  renovacion: "0",
   venceContrato: "",
   observaciones: "",
   estatusId: "1",
@@ -104,8 +106,10 @@ export default function PrivadasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [filterEstatus, setFilterEstatus] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1");
   const [loading, setLoading] = useState(false);
+  const [sortBy, setSortBy] = useState("descripcion");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // modal
   const [showModal, setShowModal] = useState(false);
@@ -118,6 +122,17 @@ export default function PrivadasPage() {
   const [deleteTarget, setDeleteTarget] = useState<Privada | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /* ---------- sort handler ---------- */
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   /* ---------- fetch ---------- */
   const fetchPrivadas = useCallback(async () => {
     setLoading(true);
@@ -128,6 +143,8 @@ export default function PrivadasPage() {
       });
       if (search) params.set("search", search);
       if (filterEstatus) params.set("estatusId", filterEstatus);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/privadas?${params}`);
       if (!res.ok) throw new Error("Error al obtener privadas");
@@ -140,7 +157,7 @@ export default function PrivadasPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, filterEstatus]);
+  }, [page, pageSize, search, filterEstatus, sortBy, sortDir]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -207,6 +224,7 @@ export default function PrivadasPage() {
       precioVehicular: p.precioVehicular != null ? String(p.precioVehicular) : "",
       precioPeatonal: p.precioPeatonal != null ? String(p.precioPeatonal) : "",
       precioMensualidad: p.precioMensualidad != null ? String(p.precioMensualidad) : "",
+      renovacion: String(p.renovacion ?? 0),
       venceContrato: p.venceContrato ? p.venceContrato.substring(0, 10) : "",
       observaciones: p.observaciones || "",
       estatusId: String(p.estatusId),
@@ -374,25 +392,42 @@ export default function PrivadasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Descripcion</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("descripcion")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Descripcion
+                    {sortBy === "descripcion" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Contacto</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Telefono</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Mensualidad</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Estado</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700">Folio</th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-600">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : privadas.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-600">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     No se encontraron privadas
                   </td>
                 </tr>
@@ -404,6 +439,17 @@ export default function PrivadasPage() {
                     <td className="px-4 py-3 text-gray-600">{p.telefono || p.celular || "-"}</td>
                     <td className="px-4 py-3 text-gray-600">{p.email || "-"}</td>
                     <td className="px-4 py-3 text-gray-600 text-right">{fmtCurrency(p.precioMensualidad)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                          p.renovacion === 1
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {p.renovacion === 1 ? "Folio H" : "Folio B"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -446,7 +492,14 @@ export default function PrivadasPage() {
             <span className="text-gray-600">
               Mostrando {privadas.length} de {total} registros
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
               <button
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -454,15 +507,51 @@ export default function PrivadasPage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-gray-700">
-                Pagina {page} de {totalPages}
-              </span>
+              {(() => {
+                const tp = totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
+                }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="p-1.5 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>
@@ -638,6 +727,17 @@ export default function PrivadasPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="0"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Folio</label>
+                  <select
+                    value={form.renovacion}
+                    onChange={(e) => setField("renovacion", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="0">Folio B - Sin Renovacion</option>
+                    <option value="1">Folio H - Con Renovacion</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vence Contrato</label>

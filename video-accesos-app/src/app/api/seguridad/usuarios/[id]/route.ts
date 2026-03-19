@@ -139,8 +139,13 @@ export async function PUT(
       const salt = saltChars[Math.floor(Math.random() * saltChars.length)] + saltChars[Math.floor(Math.random() * saltChars.length)];
       const hashed = crypt(contrasena, salt).substring(0, 10);
       updateData.contrasena = hashed;
-      updateData.cambioContrasena = new Date();
+      const ahora = new Date();
+      updateData.cambioContrasena = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     }
+
+    // Setear fechaModificacion como DATE (sin hora) para MySQL DATE column
+    const hoy = new Date();
+    updateData.fechaModificacion = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
 
     const usuarioActualizado = await prisma.usuario.update({
       where: { id: usuarioId },
@@ -197,9 +202,11 @@ export async function DELETE(
     }
 
     // Soft delete: cambiar estatus a 2 (Baja)
+    const hoy = new Date();
+    const fechaHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     await prisma.usuario.update({
       where: { id: usuarioId },
-      data: { estatusId: 2 },
+      data: { estatusId: 2, fechaModificacion: fechaHoy },
     });
 
     return NextResponse.json({ message: "Usuario dado de baja correctamente" });

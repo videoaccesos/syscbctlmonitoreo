@@ -17,6 +17,7 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
+  Bell,
   BellOff,
   Zap,
   LogOut,
@@ -87,6 +88,8 @@ interface AccesPhoneConfig {
   displayName: string;
   micDeviceId: string; // "" = default del navegador
   autoAnswer: boolean; // auto-answer incoming calls without ringing
+  ringVolume: number; // 0-100 ringtone volume
+  ringTone: string; // ringtone file name
   cameraProxyUrl: string;
   cameraRefreshMs: number;
   videoAutoOnCall: boolean;
@@ -100,7 +103,7 @@ interface CallInfo {
 }
 
 interface AccesPhoneProps {
-  onIncomingCall?: (callerNumber: string) => void;
+  onIncomingCall?: (callerNumber: string, displayName?: string) => void;
   onCallAnswered?: (callerNumber: string) => void;
   onCallEnded?: () => void;
 }
@@ -114,10 +117,20 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   displayName: "Monitoreo",
   micDeviceId: "",
   autoAnswer: false,
+  ringVolume: 70,
+  ringTone: "ringtone-classic.wav",
   cameraProxyUrl: "camera_proxy.php",
   cameraRefreshMs: 500,
   videoAutoOnCall: true,
 };
+
+const RINGTONE_OPTIONS = [
+  { value: "ringtone-classic.wav", label: "Clasico" },
+  { value: "ringtone-phone.wav", label: "Telefono" },
+  { value: "ringtone-digital.wav", label: "Digital" },
+  { value: "ringtone-euro.wav", label: "Euro" },
+  { value: "ringtone.wav", label: "Simple" },
+];
 
 const STORAGE_KEY = "accesphone_config";
 
@@ -177,6 +190,7 @@ export default function AccesPhone({
   // Keep refs in sync to avoid stale closures in SIP event handlers
   useEffect(() => { dndRef.current = dndActive; }, [dndActive]);
   useEffect(() => { autoAnswerRef.current = autoAnswerActive; }, [autoAnswerActive]);
+  useEffect(() => { ringingRef.current = ringing; }, [ringing]);
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -196,6 +210,10 @@ export default function AccesPhone({
   const mountedRef = useRef(true);
   const answeringRef = useRef(false);
   const answerCallRef = useRef<() => void>(() => {});
+  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ringingRef = useRef(false);
+  const reconnectInProgressRef = useRef(false);
+  const connectingInProgressRef = useRef(false);
 
   // Stable refs for callbacks (avoid stale closures in SIP event handlers)
   const onIncomingCallRef = useRef(onIncomingCall);
@@ -223,6 +241,45 @@ export default function AccesPhone({
   useEffect(() => {
     setConfig(loadConfig());
   }, []);
+
+  // -----------------------------------------------------------
+  // Ringtone using <audio> element with real WAV files
+  // -----------------------------------------------------------
+  const startRingtone = useCallback(() => {
+    const volume = configRef.current.ringVolume;
+    if (volume <= 0) return; // muted
+
+    try {
+      const tone = configRef.current.ringTone || "ringtone-classic.wav";
+      const audio = new Audio(`/sounds/${tone}`);
+      audio.loop = true;
+      audio.volume = volume / 100;
+      ringtoneAudioRef.current = audio;
+      audio.play().catch((e) => {
+        console.warn("[AccesPhone] Ringtone play blocked by browser:", e);
+      });
+    } catch (e) {
+      console.error("[AccesPhone] Error starting ringtone:", e);
+    }
+  }, []);
+
+  const stopRingtone = useCallback(() => {
+    if (ringtoneAudioRef.current) {
+      ringtoneAudioRef.current.pause();
+      ringtoneAudioRef.current.currentTime = 0;
+      ringtoneAudioRef.current = null;
+    }
+  }, []);
+
+  // Start/stop ringtone when ringing state changes
+  useEffect(() => {
+    if (ringing) {
+      startRingtone();
+    } else {
+      stopRingtone();
+    }
+    return () => stopRingtone();
+  }, [ringing, startRingtone, stopRingtone]);
 
   // Call duration timer
   useEffect(() => {
@@ -278,6 +335,11 @@ export default function AccesPhone({
         console.log("[AccesPhone] Session accepted");
         setRinging(false);
         setInCall(true);
+        // Restore remote audio volume after ringing (was muted to suppress Asterisk early media)
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.volume = 1.0;
+          console.log("[AccesPhone] Remote audio volume restored after answer");
+        }
         onCallAnsweredRef.current?.(callerNumber);
       });
 
@@ -340,10 +402,13 @@ export default function AccesPhone({
           let sdp = e.sdp as string;
           // Change SAVPF to SAVP (Asterisk expects SAVP)
           sdp = sdp.replace(/UDP\/TLS\/RTP\/SAVPF/g, "UDP/TLS/RTP/SAVP");
-          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event(101)
+          // Detect the actual payload type Chrome assigned to telephone-event/8000
+          const dtmfMatch = sdp.match(/a=rtpmap:(\d+) telephone-event\/8000/);
+          const dtmfPT = dtmfMatch ? dtmfMatch[1] : "101";
+          // Parse m=audio line to keep only PCMU(0), G722(9), PCMA(8), telephone-event
           sdp = sdp.replace(
             /m=audio (\d+) UDP\/TLS\/RTP\/SAVP [^\r\n]+/,
-            "m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 101"
+            `m=audio $1 UDP/TLS/RTP/SAVP 0 9 8 ${dtmfPT}`
           );
           // Remove rtpmap/fmtp/rtcp-fb lines for codecs we stripped
           const lines = sdp.split("\r\n");
@@ -353,6 +418,7 @@ export default function AccesPhone({
             if (/^a=fmtp:\d+ (minptime|111)/.test(line)) return false;
             if (/^a=rtcp-fb:/.test(line)) return false;
             if (/^a=rtpmap:\d+ telephone-event\/48000/.test(line)) return false;
+            if (/^a=fmtp:\d+ 0-16/.test(line) && !line.startsWith(`a=fmtp:${dtmfPT}`)) return false;
             // Remove extmap-allow-mixed (not supported by all Asterisk versions)
             if (line === "a=extmap-allow-mixed") return false;
             // Remove rtcp-rsize (not supported by Asterisk SRTP)
@@ -361,11 +427,11 @@ export default function AccesPhone({
             if (/^a=extmap:/.test(line)) return false;
             return true;
           });
-          // Ensure telephone-event/8000 with payload 101 is present
+          // Ensure telephone-event/8000 rtpmap is present
           if (!filtered.some((l) => l.includes("telephone-event/8000"))) {
             const midIdx = filtered.findIndex((l) => l.startsWith("a=mid:"));
             if (midIdx !== -1) {
-              filtered.splice(midIdx, 0, "a=rtpmap:101 telephone-event/8000", "a=fmtp:101 0-16");
+              filtered.splice(midIdx, 0, `a=rtpmap:${dtmfPT} telephone-event/8000`, `a=fmtp:${dtmfPT} 0-16`);
             }
           }
           e.sdp = filtered.join("\r\n");
@@ -383,7 +449,14 @@ export default function AccesPhone({
             console.log("[AccesPhone] Remote track received:", ev.track.kind);
             if (remoteAudioRef.current && ev.streams?.[0]) {
               remoteAudioRef.current.srcObject = ev.streams[0];
-              remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              // Mute remote audio while ringing to prevent Asterisk's early media
+              // ringtone from playing on top of our local ringtone
+              if (ringingRef.current) {
+                remoteAudioRef.current.volume = 0;
+                console.log("[AccesPhone] Remote audio muted during ringing (early media suppressed)");
+              } else {
+                remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+              }
               remoteAudioRef.current.play().catch(() => {});
             }
           });
@@ -395,6 +468,12 @@ export default function AccesPhone({
             if (ev.stream && ev.stream.getAudioTracks().length > 0) {
               if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = ev.stream;
+                // Mute during ringing to suppress Asterisk early media
+                if (ringingRef.current) {
+                  remoteAudioRef.current.volume = 0;
+                } else {
+                  remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+                }
                 remoteAudioRef.current.play().catch(() => {});
               }
             }
@@ -466,6 +545,9 @@ export default function AccesPhone({
 
     reconnectTimerRef.current = setTimeout(() => {
       if (!mountedRef.current || manualDisconnectRef.current) return;
+      // Mark that we are intentionally reconnecting so the disconnected
+      // event from ua.stop() does not schedule yet another reconnect
+      reconnectInProgressRef.current = true;
       // Clean up old UA before reconnecting
       if (uaRef.current) {
         try {
@@ -476,6 +558,7 @@ export default function AccesPhone({
         uaRef.current = null;
       }
       setReconnecting(false);
+      reconnectInProgressRef.current = false;
       // Call via ref to always get the latest version (avoids stale closure)
       connectSIPInternalRef.current?.();
     }, delay);
@@ -501,6 +584,17 @@ export default function AccesPhone({
       console.log('[AccesPhone] Ya hay un UA activo, saliendo');
       return;
     }
+    // Prevent overlapping reconnect attempts
+    if (reconnectTimerRef.current) {
+      console.log('[AccesPhone] Reconnect timer pendiente, saliendo');
+      return;
+    }
+    // Prevent concurrent connection attempts
+    if (connectingInProgressRef.current) {
+      console.log('[AccesPhone] Conexion ya en progreso, saliendo');
+      return;
+    }
+    connectingInProgressRef.current = true;
 
     // Read config from ref, but fallback to localStorage if ref is stale
     // (React Strict Mode can cause configRef to be overwritten with defaults)
@@ -563,31 +657,37 @@ export default function AccesPhone({
       ua.on("disconnected", (e) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const evt = e as any;
-        const reason = evt?.error ? `error=${evt.error}` : "clean";
+        const isError = !!evt?.error;
+        const reason = isError ? `error=${evt.error}` : "clean";
         const code = evt?.code || "";
         const wsReason = evt?.reason || "";
         diag("WS_DISCONNECTED", `manual=${manualDisconnectRef.current} reason=${reason} code=${code} wsReason=${wsReason}`);
         console.log("[AccesPhone] WebSocket desconectado, manual:", manualDisconnectRef.current);
         setConnected(false);
         setConnecting(false);
+        connectingInProgressRef.current = false;
 
-        // Just clear the reference - do NOT call ua.stop() here as it can
-        // fire another 'disconnected' event recursively
-        uaRef.current = null;
-
-        if (manualDisconnectRef.current) {
-          setStatusText("Desconectado");
+        if (manualDisconnectRef.current || reconnectInProgressRef.current) {
+          // Manual disconnect or planned reconnect in progress - clean up
+          uaRef.current = null;
+          if (manualDisconnectRef.current) {
+            setStatusText("Desconectado");
+          } else {
+            console.log("[AccesPhone] Disconnected during planned reconnect, skipping scheduleReconnect");
+          }
         } else {
-          // Auto-reconnect - read attempt from ref to avoid stale closure
-          setStatusText("Conexion perdida");
-          diag("RECONNECT_TRIGGER", `attempt=${reconnectAttemptRef.current}`);
-          scheduleReconnect(reconnectAttemptRef.current);
+          // Unexpected disconnect - let JsSIP's built-in connection recovery
+          // handle the WebSocket reconnection (connection_recovery_min_interval=2s).
+          // Do NOT destroy the UA or create a new one; JsSIP will auto-reconnect.
+          setStatusText("Reconectando...");
+          console.log("[AccesPhone] Letting JsSIP handle WebSocket reconnection automatically");
         }
       });
 
       ua.on("registered", () => {
         diag("SIP_REGISTERED", `ext=${cfg.extension}`);
         console.log("[AccesPhone] SIP registrado exitosamente");
+        connectingInProgressRef.current = false;
         setConnected(true);
         setConnecting(false);
         setReconnecting(false);
@@ -606,12 +706,13 @@ export default function AccesPhone({
       ua.on("registrationFailed", (e) => {
         diag("SIP_REG_FAILED", `cause=${e.cause}`);
         console.error("[AccesPhone] Registro SIP fallido:", e.cause);
+        connectingInProgressRef.current = false;
         setConnected(false);
         setConnecting(false);
         setStatusText(`Error: ${e.cause || "registro fallido"}`);
 
         // If registration fails but WS is connected, schedule retry
-        if (!manualDisconnectRef.current) {
+        if (!manualDisconnectRef.current && !reconnectInProgressRef.current) {
           scheduleReconnect(reconnectAttemptRef.current);
         }
       });
@@ -624,7 +725,8 @@ export default function AccesPhone({
         if (data.originator === "remote") {
           // Incoming call
           const callerNumber = session.remote_identity?.uri?.user || "Desconocido";
-          console.log("[AccesPhone] Incoming call from:", callerNumber, "session status:", session.status);
+          const callerDisplayName = session.remote_identity?.display_name || "";
+          console.log("[AccesPhone] Incoming call from:", callerNumber, "displayName:", callerDisplayName, "session status:", session.status);
 
           // DND: reject immediately
           if (dndRef.current) {
@@ -663,8 +765,8 @@ export default function AccesPhone({
             })
             .catch(() => { /* silently ignore lookup failures */ });
 
-          // Notify parent about incoming call
-          onIncomingCallRef.current?.(callerNumber);
+          // Notify parent about incoming call (include display name from SIP)
+          onIncomingCallRef.current?.(callerNumber, callerDisplayName || undefined);
 
           // Setup session events
           setupSessionEvents(session, callerNumber);
@@ -695,6 +797,7 @@ export default function AccesPhone({
       const errMsg = err instanceof Error ? err.message : String(err);
       diag("CONNECT_ERROR", errMsg);
       console.error("[AccesPhone] Error al conectar SIP:", err);
+      connectingInProgressRef.current = false;
       setConnecting(false);
       setStatusText(`Error: ${errMsg}`);
 
@@ -1521,6 +1624,69 @@ export default function AccesPhone({
                 <p className="text-[10px] text-gray-700 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
                 </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Volumen de timbrado
+                </label>
+                <div className="flex items-center gap-3">
+                  {config.ringVolume > 0 ? (
+                    <Bell className="h-4 w-4 text-gray-600 flex-shrink-0" />
+                  ) : (
+                    <BellOff className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={config.ringVolume}
+                    onChange={(e) =>
+                      setConfig({ ...config, ringVolume: parseInt(e.target.value) })
+                    }
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-xs font-mono text-gray-600 w-8 text-right">
+                    {config.ringVolume}%
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-700 mt-1">
+                  Intensidad del sonido al recibir llamadas (0 = silencio)
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Tono de timbrado
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={config.ringTone}
+                    onChange={(e) =>
+                      setConfig({ ...config, ringTone: e.target.value })
+                    }
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    {RINGTONE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Preview ringtone
+                      const audio = new Audio(`/sounds/${config.ringTone}`);
+                      audio.volume = config.ringVolume / 100;
+                      audio.play().catch(() => {});
+                      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
+                    }}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                    title="Probar tono"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Separador - Configuracion de Video */}

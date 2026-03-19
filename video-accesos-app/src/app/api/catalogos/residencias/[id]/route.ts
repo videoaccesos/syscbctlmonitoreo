@@ -143,7 +143,7 @@ export async function DELETE(
 
     await prisma.residencia.update({
       where: { id: parseInt(id) },
-      data: { estatusId: 2 },
+      data: { estatusId: 5 },
     });
 
     return NextResponse.json({ message: "Residencia eliminada correctamente" });

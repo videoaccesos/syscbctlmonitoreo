@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const tipoGestionId = searchParams.get("tipoGestionId");
     const estatusId = searchParams.get("estatusId");
     const empleadoId = searchParams.get("empleadoId");
+    const nroCasa = searchParams.get("nroCasa");
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const skip = (page - 1) * limit;
@@ -39,6 +40,10 @@ export async function GET(request: NextRequest) {
 
     if (empleadoId) {
       where.empleadoId = parseInt(empleadoId, 10);
+    }
+
+    if (nroCasa) {
+      where.residencia = { nroCasa: nroCasa };
     }
 
     // Filtro de fechas (usando fechaModificacion en lugar de creadoEn)
@@ -89,8 +94,58 @@ export async function GET(request: NextRequest) {
       prisma.registroAcceso.count({ where }),
     ]);
 
+    // Resolver nombres de solicitantes buscando en 3 tablas: residentes, visitantes, registros generales
+    const solicitanteIds = [
+      ...new Set(registros.map((r) => r.solicitanteId).filter(Boolean)),
+    ];
+    const nombres: Record<string, string> = {};
+
+    if (solicitanteIds.length > 0) {
+      // 1. Buscar en residentes
+      const residentes = await prisma.residente.findMany({
+        where: { id: { in: solicitanteIds } },
+        select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
+      });
+      for (const r of residentes) {
+        nombres[r.id] = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim();
+      }
+
+      // 2. IDs no encontrados → buscar en visitantes
+      const remaining1 = solicitanteIds.filter((id) => !nombres[id]);
+      if (remaining1.length > 0) {
+        const visitantes = await prisma.visita.findMany({
+          where: { id: { in: remaining1 } },
+          select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
+        });
+        for (const v of visitantes) {
+          nombres[v.id] = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim();
+        }
+      }
+
+      // 3. IDs restantes → buscar en registros generales
+      const remaining2 = solicitanteIds.filter((id) => !nombres[id]);
+      if (remaining2.length > 0) {
+        try {
+          const generales = await prisma.registroGeneral.findMany({
+            where: { id: { in: remaining2 } },
+            select: { id: true, nombre: true, apePaterno: true, apeMaterno: true },
+          });
+          for (const g of generales) {
+            nombres[g.id] = `${g.nombre} ${g.apePaterno} ${g.apeMaterno}`.trim();
+          }
+        } catch {
+          // La tabla registros_generales puede no existir
+        }
+      }
+    }
+
+    const data = registros.map((r) => ({
+      ...r,
+      solicitanteNombre: nombres[r.solicitanteId] || r.solicitanteId,
+    }));
+
     return NextResponse.json({
-      data: registros,
+      data,
       total,
       page,
       limit,

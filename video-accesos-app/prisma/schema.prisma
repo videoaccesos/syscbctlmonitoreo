@@ -22,13 +22,13 @@ model Usuario {
   modificarFechas   String   @default("N") @map("modificar_fechas") @db.Char(1)
   ultimaSesion      DateTime @default(now()) @map("ultima_sesion") @db.DateTime(0)
   direccionIp       String   @default("") @map("direccion_ip") @db.VarChar(15)
-  cambioContrasena  DateTime? @map("cambio_contrasena") @db.Date
+  cambioContrasena  DateTime  @map("cambio_contrasena") @db.Date
   empleadoId        Int?     @map("empleado_id")
   privadaId         Int?     @map("privada_id")
   logueado          Int      @default(0) @db.TinyInt
   usuarioMovId      Int      @default(0) @map("usuario_mov_id")
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
-  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  fechaModificacion DateTime @map("fecha_modificacion") @db.Date
 
   // Relaciones
   empleado       Empleado?             @relation(fields: [empleadoId], references: [id])
@@ -134,7 +134,7 @@ model Puesto {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   empleados Empleado[]
 
@@ -185,7 +185,7 @@ model Turno {
   puestoId          Int      @default(0) @map("puesto_id")
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("turnos")
 }
@@ -207,7 +207,7 @@ model Falla {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   @@map("fallas")
 }
@@ -218,7 +218,7 @@ model CodigoServicio {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   ordenesServicio OrdenServicio[]
 
@@ -231,7 +231,7 @@ model Diagnostico {
   descripcion       String   @db.VarChar(50)
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId      Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId      Int      @default(0) @map("usuario_id")
 
   ordenesServicio OrdenServicio[]
 
@@ -303,6 +303,9 @@ model Privada {
   precioVehicular   Int      @default(0) @map("precio_vehicular")
   precioPeatonal    Int      @default(0) @map("precio_peatonal")
   precioMensualidad Int      @default(0) @map("precio_mensualidad")
+  pagoMensualidad   Int      @default(0) @map("pago_mensualidad")
+  renovacion        Int      @default(0) @db.TinyInt
+  monitoreo         Int      @default(0) @db.TinyInt
   venceContrato     DateTime? @map("vence_contrato") @db.Date
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
@@ -338,7 +341,7 @@ model PrivadaRelay {
 
 model Residencia {
   id                   Int      @id @default(autoincrement()) @map("residencia_id")
-  privadaId            Int      @map("privada_id")
+  privadaId            Int?     @map("privada_id")
   nroCasa              String   @default("") @map("nro_casa") @db.VarChar(10)
   calle                String   @default("") @db.VarChar(60)
   telefono1            String   @default("") @db.VarChar(14)
@@ -351,7 +354,7 @@ model Residencia {
   usuarioModId         Int      @default(0) @map("usuario_id")
 
   // Relaciones
-  privada          Privada           @relation(fields: [privadaId], references: [id])
+  privada          Privada?          @relation(fields: [privadaId], references: [id])
   residentes       Residente[]
   visitas          Visita[]
   registrosAccesos RegistroAcceso[]
@@ -472,7 +475,7 @@ model ResidenteTarjeta {
   utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
   utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
   concepto                String   @default("") @db.VarChar(100)
-  interfonExtra           Int      @default(0) @map("interfon_extra")
+  motivoDescuento         String   @default("") @map("motivo_descuento") @db.VarChar(50)
   estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
   tipoPago                Int      @default(0) @map("tipo_pago")
@@ -503,6 +506,7 @@ model ResidenteTarjetaNoRenovacion {
   compradorId             String   @default("") @map("comprador_id") @db.VarChar(100)
   mostrarNombreComprador  Int      @default(0) @map("mostrar_nombre_comprador") @db.TinyInt
   fecha                   DateTime? @db.Date
+  fechaVencimiento        DateTime? @map("fecha_vencimiento") @db.Date
   lecturaTipoId           Int      @default(0) @map("lectura_tipo_id") @db.SmallInt
   lecturaEpc              String   @default("") @map("lectura_epc") @db.VarChar(20)
   folioContrato           String   @default("") @map("folio_contrato") @db.VarChar(10)
@@ -515,7 +519,7 @@ model ResidenteTarjetaNoRenovacion {
   utilizoSeguro4          Int      @default(0) @map("utilizo_seguro4") @db.TinyInt
   utilizoSeguro5          Int      @default(0) @map("utilizo_seguro5") @db.TinyInt
   concepto                String   @default("") @db.VarChar(100)
-  interfonExtra           Int      @default(0) @map("interfon_extra")
+  motivoDescuento         String   @default("") @map("motivo_descuento") @db.VarChar(50)
   estatusId               Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion       DateTime? @map("fecha_modificacion") @db.Date
   tipoPago                Int      @default(0) @map("tipo_pago")
@@ -575,7 +579,7 @@ model SupervisionLlamada {
   tiempoGestion      DateTime @default(now()) @map("tiempo_gestion") @db.Time(0)
   observaciones      String   @default("") @db.Text
   fechaModificacion  DateTime @updatedAt @map("fecha_modificacion")
-  usuarioModId       Int      @default(0) @map("usuario_id") @db.TinyInt
+  usuarioModId       Int      @default(0) @map("usuario_id")
 
   registroAcceso RegistroAcceso @relation(fields: [registroAccesoId], references: [id])
 
@@ -604,7 +608,7 @@ model OrdenServicio {
   detalleDiagnostico  String    @default("") @map("detalle_diagnostico") @db.Text
   estatusId           Int       @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion   DateTime  @updatedAt @map("fecha_modificacion")
-  usuarioModId        Int       @default(0) @map("usuario_id") @db.SmallInt
+  usuarioModId        Int       @default(0) @map("usuario_id")
 
   empleado       Empleado       @relation("OrdenEmpleado", fields: [empleadoId], references: [id])
   privada        Privada        @relation(fields: [privadaId], references: [id])

@@ -125,6 +125,55 @@ export async function PUT(
   }
 }
 
+// PATCH /api/catalogos/empleados/[id] - Reactivar empleado (estatusId=1, fechaBaja=null)
+export async function PATCH(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    const empleadoId = parseInt(id, 10);
+
+    if (isNaN(empleadoId)) {
+      return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+    }
+
+    const existente = await prisma.empleado.findFirst({
+      where: { id: empleadoId, estatusId: { not: 1 } },
+    });
+
+    if (!existente) {
+      return NextResponse.json(
+        { error: "Empleado no encontrado o ya esta activo" },
+        { status: 404 }
+      );
+    }
+
+    const empleado = await prisma.empleado.update({
+      where: { id: empleadoId },
+      data: {
+        estatusId: 1,
+        fechaBaja: null,
+        usuarioModId: Number((session.user as Record<string, unknown>)?.usuarioId) || 0,
+      },
+      include: { puesto: true },
+    });
+
+    return NextResponse.json(empleado);
+  } catch (error) {
+    console.error("Error al reactivar empleado:", error);
+    return NextResponse.json(
+      { error: "Error al reactivar empleado" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE /api/catalogos/empleados/[id] - Baja logica (estatusId=2, fechaBaja=hoy)
 export async function DELETE(
   _request: NextRequest,

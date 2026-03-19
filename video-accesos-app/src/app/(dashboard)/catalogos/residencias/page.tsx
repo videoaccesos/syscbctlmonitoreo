@@ -107,13 +107,14 @@ export default function ResidenciasPage() {
   const [pagination, setPagination] = useState<Pagination>({
     total: 0,
     page: 1,
-    limit: 10,
+    limit: 100,
     totalPages: 0,
   });
 
   // Filtros
   const [search, setSearch] = useState("");
   const [filterPrivadaId, setFilterPrivadaId] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1,2"); // Default: Interfón Activo + Sin Interfón
   const [page, setPage] = useState(1);
 
   // Modal
@@ -127,6 +128,8 @@ export default function ResidenciasPage() {
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [sortBy, setSortBy] = useState("nroCasa");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // Residente CRUD
   const [residenteModalOpen, setResidenteModalOpen] = useState(false);
@@ -169,6 +172,18 @@ export default function ResidenciasPage() {
     }
   }, []);
 
+  // ── Sort handler ────────────────────────────────────────────────────────
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
   // ── Cargar residencias ───────────────────────────────────────────────────
 
   const fetchResidencias = useCallback(async () => {
@@ -176,24 +191,27 @@ export default function ResidenciasPage() {
     try {
       const params = new URLSearchParams({
         page: String(page),
-        limit: "10",
+        limit: "100",
       });
       if (search) params.set("search", search);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
+      if (filterEstatus) params.set("estatusId", filterEstatus);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/residencias?${params}`);
       if (!res.ok) throw new Error();
       const json = await res.json();
       setResidencias(json.data || []);
       setPagination(
-        json.pagination || { total: 0, page: 1, limit: 10, totalPages: 0 }
+        json.pagination || { total: 0, page: 1, limit: 100, totalPages: 0 }
       );
     } catch {
       setError("Error al cargar residencias");
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterPrivadaId]);
+  }, [page, search, filterPrivadaId, filterEstatus, sortBy, sortDir]);
 
   useEffect(() => {
     fetchPrivadas();
@@ -488,6 +506,25 @@ export default function ResidenciasPage() {
               ))}
             </select>
           </div>
+
+          {/* Filtro por estado */}
+          <div className="sm:w-64">
+            <select
+              value={filterEstatus}
+              onChange={(e) => {
+                setFilterEstatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            >
+              <option value="1,2">Interfon Activo + Sin Interfon</option>
+              <option value="">Todos los estados</option>
+              <option value="1">Interfon Activo</option>
+              <option value="2">Sin Interfon</option>
+              <option value="3">Moroso</option>
+              <option value="4">Sin Derechos</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -498,11 +535,23 @@ export default function ResidenciasPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="w-10 px-2 py-3"></th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  #Casa
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("nroCasa")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    #Casa
+                    {sortBy === "nroCasa" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  Calle
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("calle")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Calle
+                    {sortBy === "calle" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">
                   Privada
@@ -516,8 +565,14 @@ export default function ResidenciasPage() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">
                   Residentes
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">
-                  Estado
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-600 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">
                   Acciones
@@ -801,25 +856,66 @@ export default function ResidenciasPage() {
               de <span className="font-medium">{pagination.total}</span>{" "}
               resultados
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="p-1.5 rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-gray-600">
-                Página {pagination.page} de {pagination.totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setPage((p) => Math.min(pagination.totalPages, p + 1))
+              {(() => {
+                const tp = pagination.totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
                 }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400 text-sm">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+              <button
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                 disabled={page >= pagination.totalPages}
-                className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="p-1.5 rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(pagination.totalPages)}
+                disabled={page >= pagination.totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>

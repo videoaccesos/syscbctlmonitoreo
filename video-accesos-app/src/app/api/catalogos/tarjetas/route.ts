@@ -45,6 +45,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const skip = (page - 1) * limit;
 
+    const allowedSortFields = ["lectura", "numeroSerie", "tipoId", "estatusId", "fecha"];
+    const sortByParam = searchParams.get("sortBy") || "fecha";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "fecha";
+    const sortDir = (searchParams.get("sortDir") || "desc") as "asc" | "desc";
+
     // Si hay filtro por privada, obtener los IDs de tarjetas asignadas a esa privada
     // Busca en AMBAS tablas: folio H (con renovacion) y folio B (sin renovacion)
     let tarjetaIdsForPrivada: number[] | null = null;
@@ -91,7 +96,7 @@ export async function GET(request: NextRequest) {
     const [tarjetas, total] = await Promise.all([
       prisma.tarjeta.findMany({
         where,
-        orderBy: { fecha: "desc" },
+        orderBy: { [sortBy]: sortDir },
         skip,
         take: limit,
       }),

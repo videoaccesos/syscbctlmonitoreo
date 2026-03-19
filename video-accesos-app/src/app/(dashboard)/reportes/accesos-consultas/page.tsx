@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Search, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Search, FileSpreadsheet, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 /* ---------- tipos ---------- */
 interface Privada {
@@ -9,11 +9,18 @@ interface Privada {
   descripcion: string;
 }
 
+interface ResidenciaOption {
+  id: number;
+  nroCasa: string;
+  calle: string;
+}
+
 interface RegistroAcceso {
   id: number;
   tipoGestionId: number;
   estatusId: number;
   solicitanteId: string;
+  solicitanteNombre: string;
   observaciones: string | null;
   duracion: string | null;
   fechaModificacion: string;
@@ -26,11 +33,6 @@ interface RegistroAcceso {
     apeMaterno: string;
     nroOperador: string | null;
   };
-  usuario: {
-    id: number;
-    usuario: string;
-    empleado: { nombre: string; apePaterno: string } | null;
-  } | null;
 }
 
 interface ApiResponse {
@@ -88,20 +90,32 @@ function getDefaultFechaHasta(): string {
   return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
 }
 
+function formatDuracion(iso: string | null): string {
+  if (!iso) return "-";
+  // duracion is a Time field returned as ISO datetime (1970-01-01T...)
+  // Extract HH:MM:SS from the ISO string
+  const match = iso.match(/T(\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return "-";
+  const [, hh, mm, ss] = match;
+  if (hh === "00" && mm === "00" && ss === "00") return "-";
+  if (hh === "00") return `${mm}:${ss}`;
+  return `${hh}:${mm}:${ss}`;
+}
+
 function registroToCsvRow(r: RegistroAcceso): string {
-  const operador = r.usuario?.empleado
-    ? `${r.usuario.empleado.nombre} ${r.usuario.empleado.apePaterno}`
-    : r.usuario?.usuario || "";
+  const operador = r.empleado
+    ? `${r.empleado.nombre} ${r.empleado.apePaterno} ${r.empleado.apeMaterno}`.trim()
+    : "";
   const cols = [
     formatFecha(r.fechaModificacion),
     r.privada.descripcion,
     r.residencia.nroCasa,
     r.residencia.calle,
-    r.solicitanteId,
+    r.solicitanteNombre || r.solicitanteId,
     TIPOS_GESTION[r.tipoGestionId] || String(r.tipoGestionId),
     RESULTADOS[r.estatusId] || String(r.estatusId),
     operador,
-    r.duracion || "",
+    formatDuracion(r.duracion),
   ];
   return cols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",");
 }
@@ -111,6 +125,7 @@ function registroToCsvRow(r: RegistroAcceso): string {
 export default function AccesosConsultasPage() {
   /* ---------- state ---------- */
   const [privadas, setPrivadas] = useState<Privada[]>([]);
+  const [residencias, setResidencias] = useState<ResidenciaOption[]>([]);
   const [registros, setRegistros] = useState<RegistroAcceso[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -124,6 +139,7 @@ export default function AccesosConsultasPage() {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState(getDefaultFechaHasta);
   const [filtroTipoGestionId, setFiltroTipoGestionId] = useState("");
   const [filtroEstatusId, setFiltroEstatusId] = useState("");
+  const [filtroNroCasa, setFiltroNroCasa] = useState("");
 
   // filtros aplicados (se aplican al hacer click en Buscar)
   const [appliedFilters, setAppliedFilters] = useState({
@@ -132,6 +148,7 @@ export default function AccesosConsultasPage() {
     fechaHasta: getDefaultFechaHasta(),
     tipoGestionId: "",
     estatusId: "",
+    nroCasa: "",
   });
 
   /* ---------- cargar privadas ---------- */
@@ -149,6 +166,55 @@ export default function AccesosConsultasPage() {
     loadPrivadas();
   }, []);
 
+  /* ---------- busqueda inteligente de residencias ---------- */
+  const [searchCasa, setSearchCasa] = useState("");
+  const [showCasaDropdown, setShowCasaDropdown] = useState(false);
+  const [selectedCasaLabel, setSelectedCasaLabel] = useState("");
+  const casaRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Limpiar seleccion al cambiar privada
+  useEffect(() => {
+    setResidencias([]);
+    setFiltroNroCasa("");
+    setSearchCasa("");
+    setSelectedCasaLabel("");
+  }, [filtroPrivadaId]);
+
+  // Buscar residencias con debounce
+  useEffect(() => {
+    if (!filtroPrivadaId || searchCasa.length < 1) {
+      setResidencias([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/catalogos/residencias?privadaId=${filtroPrivadaId}&search=${encodeURIComponent(searchCasa)}&limit=20&includeTarjetas=false`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        setResidencias(json.data || []);
+        setShowCasaDropdown(true);
+      } catch {
+        console.error("Error al buscar residencias");
+      }
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [filtroPrivadaId, searchCasa]);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (casaRef.current && !casaRef.current.contains(e.target as Node)) {
+        setShowCasaDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   /* ---------- fetch registros ---------- */
   const fetchRegistros = useCallback(async () => {
     setLoading(true);
@@ -163,6 +229,7 @@ export default function AccesosConsultasPage() {
       if (appliedFilters.fechaHasta) params.set("fechaHasta", appliedFilters.fechaHasta);
       if (appliedFilters.tipoGestionId) params.set("tipoGestionId", appliedFilters.tipoGestionId);
       if (appliedFilters.estatusId) params.set("estatusId", appliedFilters.estatusId);
+      if (appliedFilters.nroCasa) params.set("nroCasa", appliedFilters.nroCasa);
 
       const res = await fetch(`/api/reportes/accesos-consultas?${params}`);
       if (!res.ok) throw new Error("Error al consultar");
@@ -190,6 +257,7 @@ export default function AccesosConsultasPage() {
       fechaHasta: filtroFechaHasta,
       tipoGestionId: filtroTipoGestionId,
       estatusId: filtroEstatusId,
+      nroCasa: filtroNroCasa,
     });
   };
 
@@ -224,7 +292,7 @@ export default function AccesosConsultasPage() {
 
       {/* Panel de Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
           {/* Privada */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Privada</label>
@@ -240,6 +308,53 @@ export default function AccesosConsultasPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Casa (busqueda inteligente por calle/#casa) */}
+          <div ref={casaRef} className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Casa</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={selectedCasaLabel || searchCasa}
+                onChange={(e) => {
+                  setSelectedCasaLabel("");
+                  setFiltroNroCasa("");
+                  setSearchCasa(e.target.value);
+                }}
+                onFocus={() => { if (residencias.length > 0) setShowCasaDropdown(true); }}
+                disabled={!filtroPrivadaId}
+                placeholder={filtroPrivadaId ? "Buscar por calle o #casa..." : "Seleccione privada"}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed pr-8"
+              />
+              {(selectedCasaLabel || searchCasa) && filtroPrivadaId && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchCasa(""); setSelectedCasaLabel(""); setFiltroNroCasa(""); setResidencias([]); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {showCasaDropdown && residencias.length > 0 && (
+              <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {residencias.map((r) => (
+                  <li
+                    key={r.id}
+                    onClick={() => {
+                      setFiltroNroCasa(r.nroCasa);
+                      setSelectedCasaLabel(`${r.calle} #${r.nroCasa}`);
+                      setSearchCasa("");
+                      setShowCasaDropdown(false);
+                    }}
+                    className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {r.calle} <span className="font-semibold">#{r.nroCasa}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Fecha Desde */}
@@ -372,7 +487,7 @@ export default function AccesosConsultasPage() {
                       {r.residencia.calle}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {r.solicitanteId}
+                      {r.solicitanteNombre || r.solicitanteId}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {TIPOS_GESTION[r.tipoGestionId] || r.tipoGestionId}
@@ -387,12 +502,12 @@ export default function AccesosConsultasPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {r.usuario?.empleado
-                        ? `${r.usuario.empleado.nombre} ${r.usuario.empleado.apePaterno}`
-                        : r.usuario?.usuario || "-"}
+                      {r.empleado
+                        ? `${r.empleado.nombre} ${r.empleado.apePaterno} ${r.empleado.apeMaterno}`.trim()
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">
-                      {r.duracion || "-"}
+                      {formatDuracion(r.duracion)}
                     </td>
                   </tr>
                 ))
@@ -407,7 +522,14 @@ export default function AccesosConsultasPage() {
             <span className="text-gray-600">
               Mostrando {registros.length} de {total.toLocaleString()} registros
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
               <button
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -415,15 +537,51 @@ export default function AccesosConsultasPage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-gray-700">
-                Pagina {page} de {totalPages}
-              </span>
+              {(() => {
+                const tp = totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
+                }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="p-1.5 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>

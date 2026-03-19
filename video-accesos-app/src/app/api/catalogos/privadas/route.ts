@@ -21,6 +21,11 @@ export async function GET(request: NextRequest) {
     );
     const skip = (page - 1) * pageSize;
 
+    const allowedSortFields = ["descripcion", "estatusId"];
+    const sortByParam = searchParams.get("sortBy") || "descripcion";
+    const sortBy = allowedSortFields.includes(sortByParam) ? sortByParam : "descripcion";
+    const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
+
     // estatusId: si se pasa, filtrar por ese estatus exacto (dropdowns: estatusId=1).
     // Si no se pasa, mostrar todos excepto eliminados (4),
     // replicando el comportamiento del sistema legacy (estatus_id <> 4).
@@ -43,7 +48,7 @@ export async function GET(request: NextRequest) {
     const [privadas, total] = await Promise.all([
       prisma.privada.findMany({
         where,
-        orderBy: { descripcion: "asc" },
+        orderBy: { [sortBy]: sortDir },
         skip,
         take: pageSize,
       }),
@@ -136,6 +141,7 @@ export async function POST(request: NextRequest) {
         precioVehicular: parseInt(body.precioVehicular, 10) || 0,
         precioPeatonal: parseInt(body.precioPeatonal, 10) || 0,
         precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
+        renovacion: body.renovacion !== undefined ? parseInt(body.renovacion, 10) : 0,
         venceContrato: body.venceContrato ? new Date(body.venceContrato) : null,
         observaciones: body.observaciones?.trim() || "",
         estatusId: 1,

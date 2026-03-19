@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const privadaId = searchParams.get("privadaId");
     const estatusId = searchParams.get("estatusId");
+    const folioTipo = searchParams.get("folioTipo");
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
@@ -35,18 +36,18 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       conditions.push(
-        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ?)"
+        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ? OR res.nro_casa LIKE ? OR res.calle LIKE ?)"
       );
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
     }
 
     const whereClause =
       conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // UNION ALL de ambas tablas de asignaciones
+    // UNION ALL de ambas tablas de asignaciones (o solo una si hay filtro de folioTipo)
     // Usamos CAST(NULLIF(...)) para convertir fechas 0000-00-00 a NULL y evitar P2020
-    const unionSql = `
+    const sqlH = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
              a.tarjeta_id4, a.tarjeta_id5, a.residente_id,
              CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
@@ -54,8 +55,9 @@ export async function GET(request: NextRequest) {
              a.lectura_tipo_id, a.lectura_epc, a.folio_contrato,
              a.precio, a.estatus_id,
              a.observaciones, 'H' AS folio_tipo
-      FROM residencias_residentes_tarjetas a
-      UNION ALL
+      FROM residencias_residentes_tarjetas a`;
+
+    const sqlB = `
       SELECT a.asignacion_id, a.tarjeta_id, a.tarjeta_id2, a.tarjeta_id3,
              a.tarjeta_id4, a.tarjeta_id5, a.residente_id,
              CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
@@ -63,8 +65,16 @@ export async function GET(request: NextRequest) {
              a.lectura_tipo_id, a.lectura_epc, a.folio_contrato,
              a.precio, a.estatus_id,
              a.observaciones, 'B' AS folio_tipo
-      FROM residencias_residentes_tarjetas_no_renovacion a
-    `;
+      FROM residencias_residentes_tarjetas_no_renovacion a`;
+
+    let unionSql: string;
+    if (folioTipo === "H") {
+      unionSql = sqlH;
+    } else if (folioTipo === "B") {
+      unionSql = sqlB;
+    } else {
+      unionSql = `${sqlH} UNION ALL ${sqlB}`;
+    }
 
     // Base FROM con JOINs a residente -> residencia -> privada
     const baseSql = `
@@ -107,37 +117,47 @@ export async function GET(request: NextRequest) {
 
     const total = Number(totalResult[0]?.total || 0);
 
+    // Helper para convertir BigInt a Number (MySQL puede devolver BigInt en raw queries)
+    const toNum = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      return Number(v);
+    };
+    const toStr = (v: unknown): string | null => {
+      if (v === null || v === undefined) return null;
+      return String(v);
+    };
+
     // Transformar filas planas a estructura anidada esperada por el frontend
     const data = rows.map((row) => ({
-      id: row.asignacion_id,
-      tarjetaId: row.tarjeta_id || null,
-      tarjetaId2: row.tarjeta_id2 || null,
-      tarjetaId3: row.tarjeta_id3 || null,
-      tarjetaId4: row.tarjeta_id4 || null,
-      tarjetaId5: row.tarjeta_id5 || null,
-      residenteId: row.residente_id,
-      fecha: row.fecha || null,
-      fechaVencimiento: row.fecha_vencimiento || null,
-      lecturaTipoId: row.lectura_tipo_id,
-      lecturaEpc: row.lectura_epc,
-      folioContrato: row.folio_contrato,
-      precio: row.precio,
-      estatusId: row.estatus_id,
-      observaciones: row.observaciones,
-      folioTipo: row.folio_tipo,
+      id: toNum(row.asignacion_id),
+      tarjetaId: toStr(row.tarjeta_id),
+      tarjetaId2: toStr(row.tarjeta_id2),
+      tarjetaId3: toStr(row.tarjeta_id3),
+      tarjetaId4: toStr(row.tarjeta_id4),
+      tarjetaId5: toStr(row.tarjeta_id5),
+      residenteId: toStr(row.residente_id),
+      fecha: toStr(row.fecha),
+      fechaVencimiento: toStr(row.fecha_vencimiento),
+      lecturaTipoId: toNum(row.lectura_tipo_id),
+      lecturaEpc: toStr(row.lectura_epc),
+      folioContrato: toStr(row.folio_contrato),
+      precio: toNum(row.precio),
+      estatusId: toNum(row.estatus_id),
+      observaciones: toStr(row.observaciones),
+      folioTipo: toStr(row.folio_tipo),
       tarjeta: null,
       residente: {
-        id: row.res_id,
-        nombre: row.res_nombre,
-        apePaterno: row.res_ape_paterno,
-        apeMaterno: row.res_ape_materno,
+        id: toStr(row.res_id),
+        nombre: toStr(row.res_nombre),
+        apePaterno: toStr(row.res_ape_paterno),
+        apeMaterno: toStr(row.res_ape_materno),
         residencia: {
-          id: row.residencia_id,
-          nroCasa: row.nro_casa,
-          calle: row.calle,
+          id: toNum(row.residencia_id),
+          nroCasa: toStr(row.nro_casa),
+          calle: toStr(row.calle),
           privada: {
-            id: row.priv_id,
-            descripcion: row.priv_descripcion,
+            id: toNum(row.priv_id),
+            descripcion: toStr(row.priv_descripcion),
           },
         },
       },
@@ -183,7 +203,21 @@ export async function POST(request: NextRequest) {
       lecturaEpc,
       folioContrato,
       precio,
+      descuento,
+      IVA,
+      tipoPago,
+      compradorId,
+      mostrarNombreComprador,
+      concepto,
+      observaciones,
+      motivoDescuento,
+      utilizoSeguro,
+      utilizoSeguro2,
+      utilizoSeguro3,
+      utilizoSeguro4,
+      utilizoSeguro5,
       privada,
+      folioTipo,
     } = body;
 
     // Validacion de campos requeridos
@@ -206,54 +240,135 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear asignacion
-    const asignacion = await prisma.residenteTarjeta.create({
-      data: {
-        tarjetaId: String(tarjetaId) || "",
-        tarjetaId2: tarjetaId2 ? String(tarjetaId2) : "",
-        tarjetaId3: tarjetaId3 ? String(tarjetaId3) : "",
-        tarjetaId4: tarjetaId4 ? String(tarjetaId4) : "",
-        tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
-        residenteId: String(residenteId),
-        privada: privada ? parseInt(privada, 10) : 0,
-        fechaVencimiento: fechaVencimiento
-          ? new Date(fechaVencimiento)
-          : new Date(),
-        lecturaTipoId: lecturaTipoId ? parseInt(lecturaTipoId, 10) : 0,
-        lecturaEpc: lecturaEpc?.trim() || "",
-        folioContrato: folioContrato?.trim() || "",
-        precio: precio ? parseFloat(precio) : 0,
-      },
-      include: {
-        residente: {
-          select: {
-            id: true,
-            nombre: true,
-            apePaterno: true,
-            apeMaterno: true,
-            residencia: {
-              select: {
-                id: true,
-                nroCasa: true,
-                calle: true,
-                privada: {
-                  select: {
-                    id: true,
-                    descripcion: true,
-                  },
+    // Validar que la tarjeta principal esta disponible (estatusId=1)
+    const tarjetaPrincipal = await prisma.tarjeta.findUnique({
+      where: { id: parseInt(String(tarjetaId), 10) },
+    });
+
+    if (!tarjetaPrincipal) {
+      return NextResponse.json(
+        { error: "Tarjeta no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    if (tarjetaPrincipal.estatusId !== 1) {
+      return NextResponse.json(
+        { error: "La tarjeta no esta disponible (ya esta asignada o inactiva)" },
+        { status: 400 }
+      );
+    }
+
+    // Validar tarjetas adicionales si se proporcionan
+    const tarjetaIdsAdicionales = [tarjetaId2, tarjetaId3, tarjetaId4, tarjetaId5].filter(Boolean);
+    for (const tid of tarjetaIdsAdicionales) {
+      const t = await prisma.tarjeta.findUnique({
+        where: { id: parseInt(String(tid), 10) },
+      });
+      if (t && t.estatusId !== 1) {
+        return NextResponse.json(
+          { error: `La tarjeta ${tid} no esta disponible` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Datos comunes para ambos tipos de folio
+    const dataComun = {
+      tarjetaId: String(tarjetaId) || "",
+      tarjetaId2: tarjetaId2 ? String(tarjetaId2) : "",
+      tarjetaId3: tarjetaId3 ? String(tarjetaId3) : "",
+      tarjetaId4: tarjetaId4 ? String(tarjetaId4) : "",
+      tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
+      residenteId: String(residenteId),
+      privada: privada ? parseInt(String(privada), 10) : 0,
+      fecha: new Date(),
+      fechaModificacion: new Date(),
+      lecturaTipoId: lecturaTipoId ? parseInt(String(lecturaTipoId), 10) : 0,
+      lecturaEpc: lecturaEpc?.trim() || "",
+      folioContrato: folioContrato?.trim() || "",
+      precio: precio ? parseFloat(String(precio)) : 0,
+      descuento: descuento ? parseFloat(String(descuento)) : 0,
+      IVA: IVA ? parseFloat(String(IVA)) : 0,
+      tipoPago: tipoPago ? parseInt(String(tipoPago), 10) : 0,
+      compradorId: compradorId ? String(compradorId).trim() : "",
+      mostrarNombreComprador: mostrarNombreComprador ? 1 : 0,
+      concepto: concepto?.trim() || "",
+      motivoDescuento: motivoDescuento?.trim() || "",
+      observaciones: observaciones?.trim() || "",
+      utilizoSeguro: utilizoSeguro ? 1 : 0,
+      utilizoSeguro2: utilizoSeguro2 ? 1 : 0,
+      utilizoSeguro3: utilizoSeguro3 ? 1 : 0,
+      utilizoSeguro4: utilizoSeguro4 ? 1 : 0,
+      utilizoSeguro5: utilizoSeguro5 ? 1 : 0,
+    };
+
+    const includeResidente = {
+      residente: {
+        select: {
+          id: true,
+          nombre: true,
+          apePaterno: true,
+          apeMaterno: true,
+          residencia: {
+            select: {
+              id: true,
+              nroCasa: true,
+              calle: true,
+              privada: {
+                select: {
+                  id: true,
+                  descripcion: true,
                 },
               },
             },
           },
         },
       },
+    };
+
+    let asignacion;
+
+    if (folioTipo === "B") {
+      // Folio B: Sin renovacion (fecha_vencimiento requerida por BD, se usa fecha actual)
+      asignacion = await prisma.residenteTarjetaNoRenovacion.create({
+        data: {
+          ...dataComun,
+          fechaVencimiento: new Date(),
+        },
+        include: includeResidente,
+      });
+    } else {
+      // Folio H: Con renovacion (con fecha_vencimiento)
+      asignacion = await prisma.residenteTarjeta.create({
+        data: {
+          ...dataComun,
+          fechaVencimiento: fechaVencimiento
+            ? new Date(fechaVencimiento)
+            : new Date(),
+        },
+        include: includeResidente,
+      });
+    }
+
+    // Marcar tarjeta(s) como Asignada (estatusId=2)
+    const allTarjetaIds = [tarjetaId, ...tarjetaIdsAdicionales].map((tid) =>
+      parseInt(String(tid), 10)
+    );
+    await prisma.tarjeta.updateMany({
+      where: { id: { in: allTarjetaIds } },
+      data: { estatusId: 2 },
     });
 
-    return NextResponse.json(asignacion, { status: 201 });
-  } catch (error) {
-    console.error("Error al crear asignacion de tarjeta:", error);
     return NextResponse.json(
-      { error: "Error al crear asignacion de tarjeta" },
+      { ...asignacion, folioTipo: folioTipo === "B" ? "B" : "H" },
+      { status: 201 }
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Error al crear asignacion de tarjeta:", msg, error);
+    return NextResponse.json(
+      { error: `Error al crear asignacion de tarjeta: ${msg}` },
       { status: 500 }
     );
   }

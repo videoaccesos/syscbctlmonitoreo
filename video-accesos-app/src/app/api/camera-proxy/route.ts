@@ -506,7 +506,7 @@ export async function GET(request: NextRequest) {
           select: { privadaId: true },
         });
 
-        if (residencia) {
+        if (residencia && residencia.privadaId) {
           privada = await prisma.privada.findFirst({
             where: { id: residencia.privadaId, estatusId: { in: [1, 2] } },
             select: privadaSelect,

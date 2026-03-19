@@ -6,6 +6,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  RotateCcw,
   X,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,13 @@ interface EmpleadoForm {
   permisoEncargadoAdministracion: number;
 }
 
+interface OperadorEnUso {
+  id: number;
+  nroOperador: string;
+  nombre: string;
+  apePaterno: string;
+}
+
 const emptyForm: EmpleadoForm = {
   nombre: "",
   apePaterno: "",
@@ -112,7 +120,23 @@ export default function EmpleadosPage() {
     null
   );
   const [form, setForm] = useState<EmpleadoForm>(emptyForm);
+  const [usedOperadores, setUsedOperadores] = useState<OperadorEnUso[]>([]);
   const [error, setError] = useState("");
+  const [sortBy, setSortBy] = useState("apePaterno");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // -----------------------------------------------------------
+  // Sort handler
+  // -----------------------------------------------------------
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
 
   // -----------------------------------------------------------
   // Fetch empleados
@@ -126,6 +150,8 @@ export default function EmpleadosPage() {
         estatus: statusFilter,
       });
       if (search) params.set("search", search);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
 
       const res = await fetch(`/api/catalogos/empleados?${params}`);
       if (!res.ok) throw new Error("Error al obtener empleados");
@@ -138,7 +164,7 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, sortBy, sortDir]);
 
   // -----------------------------------------------------------
   // Fetch puestos (for dropdown)
@@ -154,13 +180,25 @@ export default function EmpleadosPage() {
     }
   }, []);
 
+  const fetchOperadores = useCallback(async () => {
+    try {
+      const res = await fetch("/api/catalogos/empleados/nro-operadores");
+      if (!res.ok) return;
+      const json = await res.json();
+      setUsedOperadores(json);
+    } catch {
+      console.error("Error al cargar nros operador");
+    }
+  }, []);
+
   useEffect(() => {
     fetchEmpleados();
   }, [fetchEmpleados]);
 
   useEffect(() => {
     fetchPuestos();
-  }, [fetchPuestos]);
+    fetchOperadores();
+  }, [fetchPuestos, fetchOperadores]);
 
   // -----------------------------------------------------------
   // Handlers
@@ -238,6 +276,16 @@ export default function EmpleadosPage() {
       return;
     }
 
+    if (form.nroOperador.trim()) {
+      const conflict = usedOperadores.find(
+        (o) => o.nroOperador === form.nroOperador.trim() && o.id !== editingId
+      );
+      if (conflict) {
+        setError(`El nro. operador "${form.nroOperador}" ya esta asignado a ${conflict.nombre} ${conflict.apePaterno}.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -279,6 +327,7 @@ export default function EmpleadosPage() {
 
       setModalOpen(false);
       fetchEmpleados();
+      fetchOperadores();
     } catch {
       setError("Error de conexion al guardar");
     } finally {
@@ -305,10 +354,28 @@ export default function EmpleadosPage() {
       setDeleteModalOpen(false);
       setDeletingEmpleado(null);
       fetchEmpleados();
+      fetchOperadores();
     } catch {
       setError("Error de conexion al eliminar");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (emp: Empleado) => {
+    if (!confirm(`¿Reactivar a ${emp.nombre} ${emp.apePaterno} ${emp.apeMaterno}?`)) return;
+
+    try {
+      const res = await fetch(`/api/catalogos/empleados/${emp.id}`, { method: "PATCH" });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Error al reactivar empleado");
+        return;
+      }
+      fetchEmpleados();
+      fetchOperadores();
+    } catch {
+      alert("Error de conexion al reactivar");
     }
   };
 
@@ -380,11 +447,23 @@ export default function EmpleadosPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Nro Operador
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("nroOperador")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nro Operador
+                    {sortBy === "nroOperador" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Nombre Completo
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("apePaterno")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Nombre Completo
+                    {sortBy === "apePaterno" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Puesto
@@ -395,8 +474,14 @@ export default function EmpleadosPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Estado
+                <th
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Acciones
@@ -467,6 +552,15 @@ export default function EmpleadosPage() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                         )}
+                        {emp.estatusId !== 1 && (
+                          <button
+                            onClick={() => handleReactivate(emp)}
+                            className="p-1.5 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50 transition"
+                            title="Reactivar"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -492,21 +586,64 @@ export default function EmpleadosPage() {
             </p>
             <div className="flex items-center gap-1">
               <button
+                onClick={() => setPage(1)}
+                disabled={page <= 1}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Primera
+              </button>
+              <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className="p-1.5 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-3 text-sm text-gray-700">
-                {page} / {totalPages}
-              </span>
+              {(() => {
+                const tp = totalPages;
+                const pages: (number | string)[] = [];
+                if (tp <= 7) {
+                  for (let i = 1; i <= tp; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (page > 3) pages.push("...");
+                  for (let i = Math.max(2, page - 1); i <= Math.min(tp - 1, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < tp - 2) pages.push("...");
+                  pages.push(tp);
+                }
+                return pages.map((p, idx) =>
+                  typeof p === "string" ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                        p === page
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 text-gray-700 hover:bg-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="p-1.5 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages}
+                className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Ultima
               </button>
             </div>
           </div>
@@ -622,6 +759,15 @@ export default function EmpleadosPage() {
                     maxLength={4}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   />
+                  {usedOperadores.length > 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      En uso:{" "}
+                      {usedOperadores
+                        .filter((o) => o.id !== editingId)
+                        .map((o) => o.nroOperador)
+                        .join(", ") || "ninguno"}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
