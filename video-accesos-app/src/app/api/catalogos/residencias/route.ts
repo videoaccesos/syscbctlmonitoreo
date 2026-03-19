@@ -27,8 +27,10 @@ export async function GET(request: NextRequest) {
     const sortDir = (searchParams.get("sortDir") || "asc") as "asc" | "desc";
 
     // Excluir eliminados (estatus 5) replicando el comportamiento legacy
+    // Solo mostrar residencias que tengan una privada asignada
     const where: Record<string, unknown> = {
       estatusId: { not: 5 },
+      privadaId: { gt: 0 },
     };
 
     if (residenciaId) {

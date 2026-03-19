@@ -59,7 +59,7 @@ export default function TarjetasPage() {
   const [privadas, setPrivadas] = useState<Privada[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize] = useState(100);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");

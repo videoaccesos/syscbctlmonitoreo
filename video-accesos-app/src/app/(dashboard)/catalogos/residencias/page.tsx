@@ -107,7 +107,7 @@ export default function ResidenciasPage() {
   const [pagination, setPagination] = useState<Pagination>({
     total: 0,
     page: 1,
-    limit: 10,
+    limit: 100,
     totalPages: 0,
   });
 
@@ -190,7 +190,7 @@ export default function ResidenciasPage() {
     try {
       const params = new URLSearchParams({
         page: String(page),
-        limit: "10",
+        limit: "100",
       });
       if (search) params.set("search", search);
       if (filterPrivadaId) params.set("privadaId", filterPrivadaId);
@@ -202,7 +202,7 @@ export default function ResidenciasPage() {
       const json = await res.json();
       setResidencias(json.data || []);
       setPagination(
-        json.pagination || { total: 0, page: 1, limit: 10, totalPages: 0 }
+        json.pagination || { total: 0, page: 1, limit: 100, totalPages: 0 }
       );
     } catch {
       setError("Error al cargar residencias");
