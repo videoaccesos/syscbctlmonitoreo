@@ -242,8 +242,24 @@ export default function TurnosPage() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Descripcion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Estado</th>
+                <th
+                  className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("descripcion")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Descripcion
+                    {sortBy === "descripcion" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
+                <th
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
+                  onClick={() => handleSort("estatusId")}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    {sortBy === "estatusId" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
+                  </span>
+                </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
               </tr>
             </thead>
