@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     if (residencia) {
       console.log("[buscar-por-telefono] MATCH RESIDENCIA encontrado!");
-      console.log("[buscar-por-telefono]   Privada:", residencia.privada.descripcion, "(ID:", residencia.privada.id, ")");
+      console.log("[buscar-por-telefono]   Privada:", residencia.privada?.descripcion, "(ID:", residencia.privada?.id, ")");
       console.log("[buscar-por-telefono]   Casa:", residencia.nroCasa, residencia.calle);
       console.log("[buscar-por-telefono]   telefonoInterfon:", residencia.telefonoInterfon);
       console.log("[buscar-por-telefono]   Residentes:", residencia.residentes.length);

@@ -338,7 +338,7 @@ model PrivadaRelay {
 
 model Residencia {
   id                   Int      @id @default(autoincrement()) @map("residencia_id")
-  privadaId            Int      @map("privada_id")
+  privadaId            Int?     @map("privada_id")
   nroCasa              String   @default("") @map("nro_casa") @db.VarChar(10)
   calle                String   @default("") @db.VarChar(60)
   telefono1            String   @default("") @db.VarChar(14)
@@ -351,7 +351,7 @@ model Residencia {
   usuarioModId         Int      @default(0) @map("usuario_id")
 
   // Relaciones
-  privada          Privada           @relation(fields: [privadaId], references: [id])
+  privada          Privada?          @relation(fields: [privadaId], references: [id])
   residentes       Residente[]
   visitas          Visita[]
   registrosAccesos RegistroAcceso[]
