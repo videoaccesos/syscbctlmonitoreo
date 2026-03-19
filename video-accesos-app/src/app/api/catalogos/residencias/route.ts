@@ -122,9 +122,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error al listar residencias:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Error al listar residencias:", msg, error);
     return NextResponse.json(
-      { error: "Error al listar residencias" },
+      { error: "Error al listar residencias", detail: msg },
       { status: 500 }
     );
   }
