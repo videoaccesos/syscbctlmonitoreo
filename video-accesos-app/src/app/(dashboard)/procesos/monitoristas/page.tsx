@@ -1520,7 +1520,7 @@ export default function MonitoristasPage() {
               }`}
             >
               <Users className="h-3.5 w-3.5 inline mr-1.5" />
-              Residentes ({selectedResidencia.residentes.length})
+              Residentes ({(selectedResidencia.residentes || []).length})
             </button>
             <button
               onClick={() => setActiveTab("visitantes")}
@@ -1531,7 +1531,7 @@ export default function MonitoristasPage() {
               }`}
             >
               <Users className="h-3.5 w-3.5 inline mr-1.5" />
-              Visitantes ({selectedResidencia.visitas.length})
+              Visitantes ({(selectedResidencia.visitas || []).length})
             </button>
           </div>
 
@@ -1539,12 +1539,12 @@ export default function MonitoristasPage() {
           <div className="max-h-[280px] overflow-y-auto">
             {activeTab === "residentes" ? (
               <div className="divide-y divide-gray-50">
-                {selectedResidencia.residentes.length === 0 ? (
+                {(selectedResidencia.residentes || []).length === 0 ? (
                   <div className="p-6 text-center text-xs text-gray-600">
                     No hay residentes registrados
                   </div>
                 ) : (
-                  selectedResidencia.residentes.map((r) => {
+                  (selectedResidencia.residentes || []).map((r) => {
                     const nombre = `${r.nombre} ${r.apePaterno} ${r.apeMaterno}`.trim();
                     const isSelected = formSolicitanteId === r.id;
                     return (
@@ -1579,12 +1579,12 @@ export default function MonitoristasPage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
-                {selectedResidencia.visitas.length === 0 ? (
+                {(selectedResidencia.visitas || []).length === 0 ? (
                   <div className="p-6 text-center text-xs text-gray-600">
                     No hay visitantes registrados
                   </div>
                 ) : (
-                  selectedResidencia.visitas.map((v) => {
+                  (selectedResidencia.visitas || []).map((v) => {
                     const nombre = `${v.nombre} ${v.apePaterno} ${v.apeMaterno}`.trim();
                     const isSelected = formSolicitanteId === v.id;
                     return (
