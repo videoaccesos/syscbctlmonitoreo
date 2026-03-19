@@ -282,8 +282,8 @@ export async function POST(request: NextRequest) {
       tarjetaId5: tarjetaId5 ? String(tarjetaId5) : "",
       residenteId: String(residenteId),
       privada: privada ? parseInt(String(privada), 10) : 0,
-      fecha: new Date(),
-      fechaModificacion: new Date(),
+      fecha: new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z"),
+      fechaModificacion: new Date(new Date().toISOString().split("T")[0] + "T00:00:00.000Z"),
       lecturaTipoId: lecturaTipoId ? parseInt(String(lecturaTipoId), 10) : 0,
       lecturaEpc: lecturaEpc?.trim() || "",
       folioContrato: folioContrato?.trim() || "",
@@ -329,23 +329,30 @@ export async function POST(request: NextRequest) {
 
     let asignacion;
 
+    // Helper: create a date-only value (YYYY-MM-DD) compatible with @db.Date columns
+    const toDateOnly = (d?: string) => {
+      if (d) return new Date(d + "T00:00:00.000Z");
+      // Default: 1 año después de la fecha de compra
+      const hoy = new Date();
+      hoy.setFullYear(hoy.getFullYear() + 1);
+      return new Date(hoy.toISOString().split("T")[0] + "T00:00:00.000Z");
+    };
+
     if (folioTipo === "B") {
-      // Folio B: Sin renovacion (fecha_vencimiento requerida por BD, se usa fecha actual)
+      // Folio B: Sin renovacion (vencimiento default = hoy + 1 año)
       asignacion = await prisma.residenteTarjetaNoRenovacion.create({
         data: {
           ...dataComun,
-          fechaVencimiento: new Date(),
+          fechaVencimiento: toDateOnly(fechaVencimiento),
         },
         include: includeResidente,
       });
     } else {
-      // Folio H: Con renovacion (con fecha_vencimiento)
+      // Folio H: Con renovacion (con fecha_vencimiento del frontend o default +1 año)
       asignacion = await prisma.residenteTarjeta.create({
         data: {
           ...dataComun,
-          fechaVencimiento: fechaVencimiento
-            ? new Date(fechaVencimiento)
-            : new Date(),
+          fechaVencimiento: toDateOnly(fechaVencimiento),
         },
         include: includeResidente,
       });

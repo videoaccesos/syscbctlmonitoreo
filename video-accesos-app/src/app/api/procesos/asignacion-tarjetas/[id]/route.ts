@@ -115,9 +115,8 @@ export async function PUT(
       data.tarjetaId5 = String(body.tarjetaId5) || "";
     }
     if (body.fechaVencimiento !== undefined) {
-      data.fechaVencimiento = body.fechaVencimiento
-        ? new Date(body.fechaVencimiento)
-        : new Date();
+      const dateStr = body.fechaVencimiento || new Date().toISOString().split("T")[0];
+      data.fechaVencimiento = new Date(dateStr + "T00:00:00.000Z");
     }
     if (body.lecturaTipoId !== undefined) {
       data.lecturaTipoId = body.lecturaTipoId
