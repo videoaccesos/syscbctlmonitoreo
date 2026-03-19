@@ -136,6 +136,7 @@ export async function PUT(
         precioVehicular: parseInt(body.precioVehicular, 10) || 0,
         precioPeatonal: parseInt(body.precioPeatonal, 10) || 0,
         precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
+        renovacion: body.renovacion !== undefined ? parseInt(body.renovacion, 10) : 0,
         venceContrato: body.venceContrato ? new Date(body.venceContrato) : null,
         observaciones: body.observaciones?.trim() || "",
         ...(body.estatusId ? { estatusId: parseInt(body.estatusId, 10) } : {}),

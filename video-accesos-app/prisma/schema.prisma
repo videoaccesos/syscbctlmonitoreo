@@ -303,6 +303,9 @@ model Privada {
   precioVehicular   Int      @default(0) @map("precio_vehicular")
   precioPeatonal    Int      @default(0) @map("precio_peatonal")
   precioMensualidad Int      @default(0) @map("precio_mensualidad")
+  pagoMensualidad   Int      @default(0) @map("pago_mensualidad")
+  renovacion        Int      @default(0) @db.TinyInt
+  monitoreo         Int      @default(0) @db.TinyInt
   venceContrato     DateTime? @map("vence_contrato") @db.Date
   observaciones     String   @default("") @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt

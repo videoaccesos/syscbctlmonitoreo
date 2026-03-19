@@ -21,6 +21,7 @@ interface Privada {
   precioVehicular?: number;
   precioPeatonal?: number;
   precioMensualidad?: number;
+  renovacion?: number;
 }
 
 interface Residencia {
@@ -531,17 +532,32 @@ export default function AsignacionTarjetasPage() {
       `${residente.apePaterno} ${residente.apeMaterno} ${residente.nombre}`
     );
 
-    // Cargar precios de la privada del residente
+    // Cargar precios de la privada del residente y auto-definir tipo de folio
     const priv = residente.residencia?.privada;
     if (priv) {
       setPrecioInfo({
         vehicular: priv.precioVehicular || 0,
         peatonal: priv.precioPeatonal || 0,
       });
+
+      // Auto-definir folioTipo segun renovacion de la privada (1=H, 0=B)
+      const autoFolio = priv.renovacion === 1 ? "H" : "B";
+      setForm((prev) => ({
+        ...prev,
+        residenteId: String(residente.id),
+        folioTipo: autoFolio,
+        fechaVencimiento: autoFolio === "H" ? calcularFechaVencimiento() : "",
+      }));
+    } else {
+      // Sin privada, mantener comportamiento anterior
+      setForm((prev) => ({
+        ...prev,
+        residenteId: String(residente.id),
+      }));
     }
 
-    // Auto-calcular fecha vencimiento si es folio H
-    if (form.folioTipo === "H" && !form.fechaVencimiento) {
+    // Auto-calcular fecha vencimiento si es folio H (fallback si ya se seteo arriba)
+    if (!priv && form.folioTipo === "H" && !form.fechaVencimiento) {
       setForm((prev) => ({
         ...prev,
         residenteId: String(residente.id),

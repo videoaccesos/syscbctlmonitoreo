@@ -39,6 +39,7 @@ interface Privada {
   precioVehicular: number | null;
   precioPeatonal: number | null;
   precioMensualidad: number | null;
+  renovacion: number;
   venceContrato: string | null;
   observaciones: string | null;
   estatusId: number;
@@ -86,6 +87,7 @@ const emptyForm = {
   precioVehicular: "",
   precioPeatonal: "",
   precioMensualidad: "",
+  renovacion: "0",
   venceContrato: "",
   observaciones: "",
   estatusId: "1",
@@ -222,6 +224,7 @@ export default function PrivadasPage() {
       precioVehicular: p.precioVehicular != null ? String(p.precioVehicular) : "",
       precioPeatonal: p.precioPeatonal != null ? String(p.precioPeatonal) : "",
       precioMensualidad: p.precioMensualidad != null ? String(p.precioMensualidad) : "",
+      renovacion: String(p.renovacion ?? 0),
       venceContrato: p.venceContrato ? p.venceContrato.substring(0, 10) : "",
       observaciones: p.observaciones || "",
       estatusId: String(p.estatusId),
@@ -402,6 +405,7 @@ export default function PrivadasPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Telefono</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Mensualidad</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700">Folio</th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("estatusId")}
@@ -417,13 +421,13 @@ export default function PrivadasPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-600">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : privadas.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-600">
+                  <td colSpan={8} className="text-center py-12 text-gray-600">
                     No se encontraron privadas
                   </td>
                 </tr>
@@ -435,6 +439,17 @@ export default function PrivadasPage() {
                     <td className="px-4 py-3 text-gray-600">{p.telefono || p.celular || "-"}</td>
                     <td className="px-4 py-3 text-gray-600">{p.email || "-"}</td>
                     <td className="px-4 py-3 text-gray-600 text-right">{fmtCurrency(p.precioMensualidad)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                          p.renovacion === 1
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {p.renovacion === 1 ? "Folio H" : "Folio B"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -712,6 +727,17 @@ export default function PrivadasPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="0"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Folio</label>
+                  <select
+                    value={form.renovacion}
+                    onChange={(e) => setField("renovacion", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="0">Folio B - Sin Renovacion</option>
+                    <option value="1">Folio H - Con Renovacion</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Vence Contrato</label>
