@@ -207,7 +207,7 @@ export async function GET(
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Recibo #${row.asignacion_id}</title>
+  <title>Recibo Folio ${row.folio_tipo}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -369,8 +369,8 @@ export async function GET(
           <p>Sistema de Control de Accesos &mdash; Video Accesos</p>
         </div>
         <div class="header-id">
-          <div class="folio-label">No. Asignacion</div>
-          <div class="folio-num">#${row.asignacion_id}</div>
+          <div class="folio-label">FOLIO</div>
+          <div class="folio-num">${row.folio_tipo}</div>
         </div>
       </div>
       <div class="header-badges">
