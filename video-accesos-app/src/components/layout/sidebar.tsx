@@ -149,7 +149,27 @@ export function Sidebar() {
   })();
 
   const toggleMenu = (label: string) => {
-    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+    setOpenMenus((prev) => {
+      const willOpen = !prev[label];
+      if (!willOpen) {
+        // Closing this menu – just toggle it off
+        return { ...prev, [label]: false };
+      }
+      // Opening this menu – close all others (except those with an active child)
+      const next: Record<string, boolean> = {};
+      for (const item of navigation) {
+        if (!item.children) continue;
+        if (item.label === label) {
+          next[item.label] = true;
+        } else if (isParentActive(item.children)) {
+          // Keep open if it contains the current page
+          next[item.label] = prev[item.label] ?? false;
+        } else {
+          next[item.label] = false;
+        }
+      }
+      return next;
+    });
   };
 
   const isActive = (href: string) => pathname === href;
