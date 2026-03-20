@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /* ---------- tipos ---------- */
 interface Privada {
@@ -15,8 +15,11 @@ interface Tarjeta {
   numeroSerie: string | null;
   tipoId: number;
   estatusId: number;
+  observaciones: string | null;
   fecha: string | null;
   privadaAsignada: { id: number; descripcion: string } | null;
+  residenciaAsignada: { id: number; nroCasa: string; calle: string } | null;
+  residenteAsignado: { id: string; nombre: string } | null;
 }
 
 interface ApiResponse {
@@ -48,7 +51,16 @@ const ESTATUS_BADGE: Record<number, string> = {
   5: "bg-gray-100 text-gray-700",
 };
 
-const emptyForm = { lectura: "", numeroSerie: "", tipoId: "1" };
+// Estados a los que se puede cambiar manualmente (nunca a "Asignada")
+const ESTATUS_EDITABLES: Record<number, number[]> = {
+  1: [3, 4, 5],       // Activa -> Danada, Consignacion, Baja
+  2: [3, 4, 5],       // Asignada -> Danada, Consignacion, Baja (cancela asignacion automaticamente)
+  3: [1],             // Danada -> Activa
+  4: [1],             // Consignacion -> Activa
+  5: [1],             // Baja -> Activa
+};
+
+const emptyForm = { lectura: "", numeroSerie: "", tipoId: "1", estatusId: "", observaciones: "" };
 type FormData = typeof emptyForm;
 
 /* ================================================================ */
@@ -76,10 +88,13 @@ export default function TarjetasPage() {
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   // confirmacion eliminar
   const [deleteTarget, setDeleteTarget] = useState<Tarjeta | null>(null);
+  const [deleteObservaciones, setDeleteObservaciones] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   // sorting
   const [sortBy, setSortBy] = useState("fecha");
@@ -172,6 +187,7 @@ export default function TarjetasPage() {
     setEditing(null);
     setForm({ ...emptyForm });
     setError("");
+    setSuccessMsg("");
     setShowModal(true);
   };
 
@@ -181,8 +197,11 @@ export default function TarjetasPage() {
       lectura: item.lectura || "",
       numeroSerie: item.numeroSerie || "",
       tipoId: String(item.tipoId),
+      estatusId: String(item.estatusId),
+      observaciones: item.observaciones || "",
     });
     setError("");
+    setSuccessMsg("");
     setShowModal(true);
   };
 
@@ -190,6 +209,7 @@ export default function TarjetasPage() {
     setShowModal(false);
     setEditing(null);
     setError("");
+    setSuccessMsg("");
   };
 
   /* ---------- guardar (crear / editar) ---------- */
@@ -205,25 +225,44 @@ export default function TarjetasPage() {
 
     setSaving(true);
     setError("");
+    setSuccessMsg("");
 
     try {
       const url = editing
         ? `/api/catalogos/tarjetas/${editing.id}`
         : "/api/catalogos/tarjetas";
 
+      const payload: Record<string, unknown> = {
+        lectura: form.lectura.trim(),
+        numeroSerie: form.numeroSerie.trim() || null,
+        tipoId: parseInt(form.tipoId, 10),
+      };
+
+      if (editing) {
+        payload.estatusId = parseInt(form.estatusId, 10);
+        payload.observaciones = form.observaciones.trim();
+      }
+
       const res = await fetch(url, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lectura: form.lectura.trim(),
-          numeroSerie: form.numeroSerie.trim() || null,
-          tipoId: parseInt(form.tipoId, 10),
-        }),
+        body: JSON.stringify(payload),
       });
 
+      const json = await res.json();
+
       if (!res.ok) {
-        const json = await res.json();
         setError(json.error || "Error al guardar");
+        return;
+      }
+
+      // Mostrar mensaje si se cancelaron asignaciones
+      if (json.asignacionesCanceladas > 0) {
+        setSuccessMsg(
+          `Tarjeta actualizada. Se cancelaron ${json.asignacionesCanceladas} asignacion(es) automaticamente.`
+        );
+        // No cerrar modal inmediatamente para que vea el mensaje
+        fetchData();
         return;
       }
 
@@ -236,26 +275,38 @@ export default function TarjetasPage() {
     }
   };
 
-  /* ---------- eliminar ---------- */
+  /* ---------- eliminar (dar de baja) ---------- */
   const handleDelete = async () => {
     if (!deleteTarget) return;
+
+    if (!deleteObservaciones.trim()) {
+      setDeleteError("Debe indicar el motivo para dar de baja la tarjeta");
+      return;
+    }
+
     setDeleting(true);
+    setDeleteError("");
 
     try {
       const res = await fetch(`/api/catalogos/tarjetas/${deleteTarget.id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ observaciones: deleteObservaciones.trim() }),
       });
 
+      const json = await res.json();
+
       if (!res.ok) {
-        const json = await res.json();
-        alert(json.error || "Error al eliminar");
+        setDeleteError(json.error || "Error al eliminar");
         return;
       }
 
       setDeleteTarget(null);
+      setDeleteObservaciones("");
+      setDeleteError("");
       fetchData();
     } catch {
-      alert("Error de conexion al eliminar");
+      setDeleteError("Error de conexion al eliminar");
     } finally {
       setDeleting(false);
     }
@@ -276,6 +327,19 @@ export default function TarjetasPage() {
   };
 
   const hasFilters = search || filterEstatus || filterTipo || filterPrivadaId;
+
+  // Opciones de estado disponibles al editar
+  const estatusDisponibles = editing
+    ? ESTATUS_EDITABLES[editing.estatusId] || []
+    : [];
+
+  // Si el estado cambio respecto al original
+  const estadoCambio = editing
+    ? parseInt(form.estatusId, 10) !== editing.estatusId
+    : false;
+
+  // Requiere observaciones si cambia a 3/4/5
+  const requiereObservaciones = estadoCambio && [3, 4, 5].includes(parseInt(form.estatusId, 10));
 
   /* ================================================================ */
   /* RENDER                                                           */
@@ -390,7 +454,7 @@ export default function TarjetasPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-semibold text-gray-700 w-16">#</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700 w-12">#</th>
                 <th
                   className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("lectura")}
@@ -410,7 +474,7 @@ export default function TarjetasPage() {
                   </span>
                 </th>
                 <th
-                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-24 cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("tipoId")}
                 >
                   <span className="inline-flex items-center gap-1">
@@ -419,8 +483,10 @@ export default function TarjetasPage() {
                   </span>
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Privada</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Residencia</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Residente</th>
                 <th
-                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("estatusId")}
                 >
                   <span className="inline-flex items-center gap-1">
@@ -429,7 +495,7 @@ export default function TarjetasPage() {
                   </span>
                 </th>
                 <th
-                  className="text-center px-4 py-3 font-semibold text-gray-700 w-32 cursor-pointer select-none hover:bg-gray-100"
+                  className="text-center px-4 py-3 font-semibold text-gray-700 w-28 cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("fecha")}
                 >
                   <span className="inline-flex items-center gap-1">
@@ -437,19 +503,19 @@ export default function TarjetasPage() {
                     {sortBy === "fecha" ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
                   </span>
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-28">Acciones</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 w-24">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-600">
+                  <td colSpan={10} className="text-center py-12 text-gray-600">
                     Cargando...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-600">
+                  <td colSpan={10} className="text-center py-12 text-gray-600">
                     No se encontraron tarjetas
                   </td>
                 </tr>
@@ -470,6 +536,14 @@ export default function TarjetasPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {item.privadaAsignada ? item.privadaAsignada.descripcion : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {item.residenciaAsignada
+                        ? `#${item.residenciaAsignada.nroCasa} ${item.residenciaAsignada.calle}`
+                        : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {item.residenteAsignado ? item.residenteAsignado.nombre : "-"}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
@@ -493,8 +567,12 @@ export default function TarjetasPage() {
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => setDeleteTarget(item)}
-                          title="Eliminar"
+                          onClick={() => {
+                            setDeleteTarget(item);
+                            setDeleteObservaciones("");
+                            setDeleteError("");
+                          }}
+                          title="Dar de baja"
                           className="p-1.5 rounded hover:bg-red-50 text-red-600 transition"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -602,6 +680,11 @@ export default function TarjetasPage() {
                   {error}
                 </div>
               )}
+              {successMsg && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg text-sm">
+                  {successMsg}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -645,6 +728,58 @@ export default function TarjetasPage() {
                   <option value="2">Vehicular</option>
                 </select>
               </div>
+
+              {/* Estado - solo visible al editar */}
+              {editing && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={form.estatusId}
+                    onChange={(e) => setField("estatusId", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {/* Estado actual siempre visible */}
+                    <option value={String(editing.estatusId)}>
+                      {ESTATUS[editing.estatusId]} (actual)
+                    </option>
+                    {/* Estados disponibles para transicion */}
+                    {estatusDisponibles.map((est) => (
+                      <option key={est} value={String(est)}>
+                        {ESTATUS[est]}
+                      </option>
+                    ))}
+                  </select>
+                  {editing.estatusId === 2 && estadoCambio && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Al cambiar el estado se cancelaran automaticamente las asignaciones activas de esta tarjeta.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Observaciones - visible al editar, requerido si cambia estado a 3/4/5 */}
+              {editing && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observaciones {requiereObservaciones && <span className="text-red-500">*</span>}
+                  </label>
+                  <textarea
+                    maxLength={200}
+                    rows={3}
+                    value={form.observaciones}
+                    onChange={(e) => setField("observaciones", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    placeholder={
+                      requiereObservaciones
+                        ? "Indique el motivo del cambio de estado (requerido)"
+                        : "Observaciones adicionales (opcional)"
+                    }
+                  />
+                  <p className="mt-0.5 text-xs text-gray-400">{form.observaciones.length}/200</p>
+                </div>
+              )}
             </div>
 
             {/* footer */}
@@ -653,34 +788,66 @@ export default function TarjetasPage() {
                 onClick={closeModal}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
               >
-                Cancelar
+                {successMsg ? "Cerrar" : "Cancelar"}
               </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Guardando..." : editing ? "Actualizar" : "Guardar"}
-              </button>
+              {!successMsg && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Guardando..." : editing ? "Actualizar" : "Guardar"}
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ==================== CONFIRMAR ELIMINAR ==================== */}
+      {/* ==================== CONFIRMAR ELIMINAR (BAJA) ==================== */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteTarget(null)} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirmar eliminacion</h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Dar de baja tarjeta</h3>
+            <p className="text-sm text-gray-600 mb-4">
               Se dara de baja la tarjeta{" "}
               <span className="font-semibold">&quot;{deleteTarget.lectura}&quot;</span>.
-              Esta accion se puede revertir desde la base de datos.
+              {deleteTarget.estatusId === 2 && (
+                <span className="block mt-1 text-amber-600 font-medium">
+                  Esta tarjeta esta asignada. Se cancelaran automaticamente las asignaciones activas.
+                </span>
+              )}
             </p>
+
+            {deleteError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm mb-4">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Motivo <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                maxLength={200}
+                rows={3}
+                value={deleteObservaciones}
+                onChange={(e) => setDeleteObservaciones(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                placeholder="Indique el motivo para dar de baja esta tarjeta"
+                autoFocus
+              />
+            </div>
+
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteObservaciones("");
+                  setDeleteError("");
+                }}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
               >
                 Cancelar
@@ -690,7 +857,7 @@ export default function TarjetasPage() {
                 disabled={deleting}
                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {deleting ? "Eliminando..." : "Eliminar"}
+                {deleting ? "Procesando..." : "Dar de Baja"}
               </button>
             </div>
           </div>

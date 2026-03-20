@@ -103,10 +103,16 @@ export async function GET(request: NextRequest) {
       prisma.tarjeta.count({ where }),
     ]);
 
-    // Buscar asignaciones de privada para las tarjetas devueltas
+    // Buscar asignaciones para las tarjetas devueltas
+    // Incluye: privada, residencia (nro_casa, calle), residente (nombre completo)
     // Busca en AMBAS tablas de asignacion via residente -> residencia -> privada
+    // Solo asignaciones activas (estatus_id = 1)
     const tarjetaIds = tarjetas.map((t) => String(t.id));
-    const privadaMap: Record<string, { id: number; descripcion: string }> = {};
+    const asignacionMap: Record<string, {
+      privada: { id: number; descripcion: string };
+      residencia: { id: number; nroCasa: string; calle: string };
+      residente: { id: string; nombre: string };
+    }> = {};
 
     if (tarjetaIds.length > 0) {
       const ph = placeholders(tarjetaIds.length);
@@ -114,21 +120,36 @@ export async function GET(request: NextRequest) {
       // Tabla H: residencias_residentes_tarjetas
       const slotsH = ["tarjeta_id", "tarjeta_id2", "tarjeta_id3", "tarjeta_id4", "tarjeta_id5"];
       const unionsH = slotsH.map(
-        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.${s} IN (${ph}) AND rrt.${s} != ''`
+        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas rrt WHERE rrt.estatus_id = 1 AND rrt.${s} IN (${ph}) AND rrt.${s} != ''`
       ).join("\nUNION ALL\n");
 
       // Tabla B: residencias_residentes_tarjetas_no_renovacion
       const unionsB = slotsH.map(
-        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas_no_renovacion rrt WHERE rrt.${s} IN (${ph}) AND rrt.${s} != ''`
+        (s) => `SELECT rrt.${s} AS tid, rrt.residente_id FROM residencias_residentes_tarjetas_no_renovacion rrt WHERE rrt.estatus_id = 1 AND rrt.${s} IN (${ph}) AND rrt.${s} != ''`
       ).join("\nUNION ALL\n");
 
       // 10 juegos de parametros: 5 para H + 5 para B
       const params = Array(10).fill(tarjetaIds).flat();
 
       const assignments = await prisma.$queryRawUnsafe<
-        Array<{ tid: string; privada_id: number; descripcion: string }>
+        Array<{
+          tid: string;
+          privada_id: number;
+          descripcion: string;
+          residencia_id: number;
+          nro_casa: string;
+          calle: string;
+          residente_id: string;
+          res_nombre: string;
+          res_ape_paterno: string;
+          res_ape_materno: string;
+        }>
       >(
-        `SELECT DISTINCT sub.tid, p.privada_id, p.descripcion
+        `SELECT DISTINCT sub.tid,
+                p.privada_id, p.descripcion,
+                r.residencia_id, r.nro_casa, r.calle,
+                res.residente_id, res.nombre AS res_nombre,
+                res.ape_paterno AS res_ape_paterno, res.ape_materno AS res_ape_materno
          FROM (${unionsH} UNION ALL ${unionsB}) sub
          INNER JOIN residencias_residentes res ON sub.residente_id = res.residente_id
          INNER JOIN residencias r ON res.residencia_id = r.residencia_id
@@ -137,19 +158,27 @@ export async function GET(request: NextRequest) {
       );
 
       for (const row of assignments) {
-        if (!privadaMap[row.tid]) {
-          privadaMap[row.tid] = {
-            id: row.privada_id,
-            descripcion: row.descripcion,
+        if (!asignacionMap[row.tid]) {
+          const nombreCompleto = [row.res_nombre, row.res_ape_paterno, row.res_ape_materno]
+            .filter(Boolean).join(" ");
+          asignacionMap[row.tid] = {
+            privada: { id: row.privada_id, descripcion: row.descripcion },
+            residencia: { id: row.residencia_id, nroCasa: row.nro_casa, calle: row.calle },
+            residente: { id: row.residente_id, nombre: nombreCompleto },
           };
         }
       }
     }
 
-    const data = tarjetas.map((t) => ({
-      ...t,
-      privadaAsignada: privadaMap[String(t.id)] || null,
-    }));
+    const data = tarjetas.map((t) => {
+      const asig = asignacionMap[String(t.id)] || null;
+      return {
+        ...t,
+        privadaAsignada: asig ? asig.privada : null,
+        residenciaAsignada: asig ? asig.residencia : null,
+        residenteAsignado: asig ? asig.residente : null,
+      };
+    });
 
     return NextResponse.json({
       data,

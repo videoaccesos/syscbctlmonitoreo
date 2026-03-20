@@ -441,6 +441,7 @@ model Tarjeta {
   numeroSerie       String   @default("") @map("numero_serie") @db.VarChar(20)
   tipoId            Int      @default(0) @map("tipo_id") @db.SmallInt
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt
+  observaciones     String   @default("") @db.VarChar(200)
   fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
   usuarioModId      Int      @default(0) @map("usuario_id")
 
