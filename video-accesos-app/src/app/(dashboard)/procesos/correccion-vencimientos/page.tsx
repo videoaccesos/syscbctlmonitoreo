@@ -17,6 +17,9 @@ type Correccion = {
   fecha_vencimiento_actual: string | null;
   fecha_vencimiento_correcta: string;
   baja_tarjeta: string | null;
+  baja_tarjeta_estatus: string | null;
+  baja_tarjeta_asignacion_id: number | null;
+  motivo_baja: string;
   residente: string;
   privada: string;
   nro_casa: string;
@@ -60,7 +63,16 @@ export default function CorreccionVencimientosPage() {
 
   const handleAplicar = async () => {
     if (!data || seleccionadas.size === 0) return;
-    if (!confirm(`Se actualizará la fecha de vencimiento de ${seleccionadas.size} tarjeta(s). ¿Continuar?`)) return;
+
+    const tarjetasViejasActivas = data.correcciones.filter(
+      (c) => seleccionadas.has(c.asignacion_id) && c.baja_tarjeta && c.baja_tarjeta_estatus === "ACTIVA"
+    ).length;
+
+    const msgConfirm = tarjetasViejasActivas > 0
+      ? `Se corregirán ${seleccionadas.size} vencimiento(s) y se cancelarán ${tarjetasViejasActivas} tarjeta(s) vieja(s). ¿Continuar?`
+      : `Se corregirá el vencimiento de ${seleccionadas.size} tarjeta(s). ¿Continuar?`;
+
+    if (!confirm(msgConfirm)) return;
 
     setAplicando(true);
     setResultado(null);
@@ -103,6 +115,17 @@ export default function CorreccionVencimientosPage() {
     }
   };
 
+  const estatusBadge = (estatus: string | null) => {
+    if (!estatus) return null;
+    if (estatus === "ACTIVA") {
+      return <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700">ACTIVA (se cancelará)</span>;
+    }
+    if (estatus === "CANCELADA") {
+      return <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">YA CANCELADA</span>;
+    }
+    return <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">NO ENCONTRADA</span>;
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -111,7 +134,7 @@ export default function CorreccionVencimientosPage() {
           Corrección de Vencimientos (Reposiciones)
         </h1>
         <p className="text-sm text-gray-700 mt-1">
-          Detecta tarjetas de reposición/garantía cuyo vencimiento no coincide con la fecha indicada en observaciones y permite corregirlas
+          Detecta tarjetas de reposición/garantía cuyo vencimiento no coincide con la fecha indicada en observaciones, cancela la tarjeta vieja y permite corregir
         </p>
       </div>
 
@@ -169,7 +192,7 @@ export default function CorreccionVencimientosPage() {
         <div className="bg-white rounded-lg border border-gray-200">
           <div className="p-3 border-b border-gray-200 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <span className="font-medium text-gray-900">Tarjetas que necesitan corrección de vencimiento</span>
+            <span className="font-medium text-gray-900">Tarjetas que necesitan corrección</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -184,15 +207,15 @@ export default function CorreccionVencimientosPage() {
                     />
                   </th>
                   <th className="px-3 py-2 text-left font-medium">ID</th>
-                  <th className="px-3 py-2 text-left font-medium">Tarjeta</th>
+                  <th className="px-3 py-2 text-left font-medium">Tarjeta Nueva</th>
                   <th className="px-3 py-2 text-left font-medium">Residente</th>
                   <th className="px-3 py-2 text-left font-medium">Privada</th>
                   <th className="px-3 py-2 text-left font-medium">Casa</th>
-                  <th className="px-3 py-2 text-left font-medium">F. Asignación</th>
                   <th className="px-3 py-2 text-left font-medium">Venc. Actual</th>
                   <th className="px-3 py-2 text-left font-medium">Venc. Correcto</th>
-                  <th className="px-3 py-2 text-left font-medium">Baja Tarjeta</th>
-                  <th className="px-3 py-2 text-left font-medium">Observaciones</th>
+                  <th className="px-3 py-2 text-left font-medium">Motivo</th>
+                  <th className="px-3 py-2 text-left font-medium">Tarjeta Baja</th>
+                  <th className="px-3 py-2 text-left font-medium">Estatus Tarjeta Baja</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,17 +237,19 @@ export default function CorreccionVencimientosPage() {
                     <td className="px-3 py-1.5 text-gray-900 font-medium">{c.residente}</td>
                     <td className="px-3 py-1.5 text-gray-700">{c.privada}</td>
                     <td className="px-3 py-1.5 text-gray-700">{c.nro_casa}</td>
-                    <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{c.fecha || "-"}</td>
                     <td className="px-3 py-1.5">
-                      <span className="text-red-600 font-medium">{c.fecha_vencimiento_actual || "NULL"}</span>
+                      {c.necesita_correccion ? (
+                        <span className="text-red-600 font-medium">{c.fecha_vencimiento_actual || "NULL"}</span>
+                      ) : (
+                        <span className="text-green-600">{c.fecha_vencimiento_actual || "NULL"}</span>
+                      )}
                     </td>
                     <td className="px-3 py-1.5">
                       <span className="text-green-700 font-bold">{c.fecha_vencimiento_correcta}</span>
                     </td>
+                    <td className="px-3 py-1.5 text-xs font-medium text-gray-700">{c.motivo_baja}</td>
                     <td className="px-3 py-1.5 font-mono text-xs text-gray-500">{c.baja_tarjeta || "-"}</td>
-                    <td className="px-3 py-1.5 text-xs text-gray-600 max-w-xs truncate" title={c.observaciones}>
-                      {c.observaciones}
-                    </td>
+                    <td className="px-3 py-1.5">{c.baja_tarjeta ? estatusBadge(c.baja_tarjeta_estatus) : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -236,7 +261,7 @@ export default function CorreccionVencimientosPage() {
       {data && data.correcciones.length === 0 && (
         <div className="bg-green-50 rounded-lg border border-green-200 p-8 text-center">
           <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-green-500" />
-          <p className="text-green-800 font-medium">Todas las tarjetas con indicación de vencimiento en observaciones ya tienen la fecha correcta</p>
+          <p className="text-green-800 font-medium">Todas las tarjetas están correctas y las bajas ya están canceladas</p>
         </div>
       )}
 

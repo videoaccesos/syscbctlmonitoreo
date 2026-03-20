@@ -5,11 +5,9 @@ import { prisma } from "@/lib/prisma";
 
 // Parsea "VENCE DD/MM/YYYY" o "VENCE EN DD/MM/YYYY" de las observaciones
 function parseVenceDate(obs: string): string | null {
-  // Patrones: "VENCE DD/MM/YYYY", "VENCE EN DD/MM/YYYY"
   const match = obs.match(/VENCE\s*(?:EN\s+)?(\d{2})\/(\d{2})\/(\d{4})/i);
   if (!match) return null;
   const [, dd, mm, yyyy] = match;
-  // Validar fecha
   const d = new Date(`${yyyy}-${mm}-${dd}`);
   if (isNaN(d.getTime())) return null;
   return `${yyyy}-${mm}-${dd}`;
@@ -21,6 +19,17 @@ function parseBajaTarjeta(obs: string): string | null {
   return match ? match[1] : null;
 }
 
+// Parsea el motivo de la baja (texto antes de "BAJA")
+// Ej: "CAMBIO DE TARJETA- BAJA 13406925" → "CAMBIO DE TARJETA"
+//     "REPOSICION- BAJA 167136" → "REPOSICION"
+//     "BAJA- 16189323" → "BAJA"
+function parseMotivoBaja(obs: string): string {
+  const match = obs.match(/^(.+?)[-\s]*BAJA/i);
+  if (!match) return "BAJA";
+  const motivo = match[1].replace(/[-\s]+$/, "").trim();
+  return motivo || "BAJA";
+}
+
 type Correccion = {
   asignacion_id: number;
   tarjeta_id: string;
@@ -29,6 +38,9 @@ type Correccion = {
   fecha_vencimiento_actual: string | null;
   fecha_vencimiento_correcta: string;
   baja_tarjeta: string | null;
+  baja_tarjeta_estatus: string | null; // "ACTIVA" | "CANCELADA" | "NO ENCONTRADA"
+  baja_tarjeta_asignacion_id: number | null;
+  motivo_baja: string;
   residente: string;
   privada: string;
   nro_casa: string;
@@ -73,7 +85,29 @@ export async function GET() {
       const fechaVencActual = row.fecha_vencimiento ? String(row.fecha_vencimiento) : null;
       const necesita = fechaVencActual !== venceDate;
 
-      if (!necesita) {
+      const bajaTarjeta = parseBajaTarjeta(obs);
+      let bajaTarjetaEstatus: string | null = null;
+      let bajaTarjetaAsignacionId: number | null = null;
+
+      // Buscar la tarjeta vieja para ver su estatus actual
+      if (bajaTarjeta) {
+        const [bajaRow] = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT asignacion_id, estatus_id
+           FROM residencias_residentes_tarjetas
+           WHERE tarjeta_id = ?
+           ORDER BY asignacion_id DESC
+           LIMIT 1`,
+          bajaTarjeta
+        );
+        if (bajaRow) {
+          bajaTarjetaAsignacionId = Number(bajaRow.asignacion_id);
+          bajaTarjetaEstatus = Number(bajaRow.estatus_id) === 1 ? "ACTIVA" : "CANCELADA";
+        } else {
+          bajaTarjetaEstatus = "NO ENCONTRADA";
+        }
+      }
+
+      if (!necesita && (!bajaTarjeta || bajaTarjetaEstatus !== "ACTIVA")) {
         yaCorrectas++;
         continue;
       }
@@ -85,11 +119,14 @@ export async function GET() {
         fecha: row.fecha ? String(row.fecha) : null,
         fecha_vencimiento_actual: fechaVencActual,
         fecha_vencimiento_correcta: venceDate,
-        baja_tarjeta: parseBajaTarjeta(obs),
+        baja_tarjeta: bajaTarjeta,
+        baja_tarjeta_estatus: bajaTarjetaEstatus,
+        baja_tarjeta_asignacion_id: bajaTarjetaAsignacionId,
+        motivo_baja: parseMotivoBaja(obs),
         residente: String(row.residente || ""),
         privada: String(row.privada || ""),
         nro_casa: String(row.nro_casa || ""),
-        necesita_correccion: true,
+        necesita_correccion: necesita,
       });
     }
 
@@ -144,17 +181,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (targetIds.length === 0) {
-      return NextResponse.json({ message: "No hay correcciones pendientes", actualizadas: 0 });
+      return NextResponse.json({ message: "No hay correcciones pendientes", actualizadas: 0, bajasCanceladas: 0 });
     }
 
     // Para cada ID, parsear la fecha de la observación y actualizar
     let actualizadas = 0;
+    let bajasCanceladas = 0;
     const errores: Array<{ asignacion_id: number; error: string }> = [];
 
     for (const id of targetIds) {
       try {
         const [row] = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-          `SELECT observaciones FROM residencias_residentes_tarjetas WHERE asignacion_id = ?`,
+          `SELECT observaciones,
+                  CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento
+           FROM residencias_residentes_tarjetas WHERE asignacion_id = ?`,
           id
         );
         if (!row) {
@@ -162,20 +202,56 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const venceDate = parseVenceDate(String(row.observaciones || ""));
+        const obs = String(row.observaciones || "");
+        const venceDate = parseVenceDate(obs);
         if (!venceDate) {
           errores.push({ asignacion_id: id, error: "No se pudo parsear fecha VENCE" });
           continue;
         }
 
-        await prisma.$executeRawUnsafe(
-          `UPDATE residencias_residentes_tarjetas
-           SET fecha_vencimiento = ?
-           WHERE asignacion_id = ?`,
-          venceDate,
-          id
-        );
-        actualizadas++;
+        // 1. Corregir fecha de vencimiento de la tarjeta nueva (si difiere)
+        const fechaVencActual = row.fecha_vencimiento ? String(row.fecha_vencimiento) : null;
+        if (fechaVencActual !== venceDate) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE residencias_residentes_tarjetas
+             SET fecha_vencimiento = ?
+             WHERE asignacion_id = ?`,
+            venceDate,
+            id
+          );
+          actualizadas++;
+        }
+
+        // 2. Buscar y cancelar la tarjeta vieja (la de BAJA)
+        const bajaTarjeta = parseBajaTarjeta(obs);
+        if (bajaTarjeta) {
+          const [bajaRow] = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+            `SELECT asignacion_id, estatus_id, observaciones
+             FROM residencias_residentes_tarjetas
+             WHERE tarjeta_id = ? AND estatus_id = 1
+             ORDER BY asignacion_id DESC
+             LIMIT 1`,
+            bajaTarjeta
+          );
+
+          if (bajaRow) {
+            const motivo = parseMotivoBaja(obs);
+            const obsAnterior = String(bajaRow.observaciones || "").trim();
+            const fechaHoy = new Date().toISOString().split("T")[0];
+            const obsNueva = obsAnterior
+              ? `${obsAnterior} | CANCELADA POR ${motivo} (${fechaHoy})`
+              : `CANCELADA POR ${motivo} (${fechaHoy})`;
+
+            await prisma.$executeRawUnsafe(
+              `UPDATE residencias_residentes_tarjetas
+               SET estatus_id = 2, observaciones = ?
+               WHERE asignacion_id = ?`,
+              obsNueva,
+              Number(bajaRow.asignacion_id)
+            );
+            bajasCanceladas++;
+          }
+        }
       } catch (err) {
         errores.push({
           asignacion_id: id,
@@ -184,9 +260,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const partes: string[] = [];
+    if (actualizadas > 0) partes.push(`${actualizadas} vencimiento(s) corregido(s)`);
+    if (bajasCanceladas > 0) partes.push(`${bajasCanceladas} tarjeta(s) vieja(s) cancelada(s)`);
+    const message = partes.length > 0 ? partes.join(", ") : "No hubo cambios";
+
     return NextResponse.json({
-      message: `Se actualizaron ${actualizadas} de ${targetIds.length} tarjetas`,
+      message,
       actualizadas,
+      bajasCanceladas,
       errores: errores.length > 0 ? errores : undefined,
     });
   } catch (error) {
