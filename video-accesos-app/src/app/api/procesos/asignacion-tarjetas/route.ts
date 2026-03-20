@@ -317,6 +317,10 @@ export async function POST(request: NextRequest) {
       ? "residencias_residentes_tarjetas_no_renovacion"
       : "residencias_residentes_tarjetas";
 
+    // Folio H tiene columna interfon_extra que no existe en Folio B
+    const extraColsH = folioTipo === "H" ? ", interfon_extra" : "";
+    const extraValsH = folioTipo === "H" ? ", ''" : "";
+
     // INSERT con raw SQL para evitar el bug P2023 de Prisma con columnas @db.Date
     await prisma.$executeRawUnsafe(
       `INSERT INTO \`${tableName}\` (
@@ -327,10 +331,9 @@ export async function POST(request: NextRequest) {
         precio, descuento, IVA, tipo_pago,
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
-        utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        interfon_extra,
+        utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5${extraColsH},
         estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, 0)`,
+      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${extraValsH}, 1, 0)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
