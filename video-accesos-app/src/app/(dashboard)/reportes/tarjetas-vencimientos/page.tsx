@@ -97,10 +97,10 @@ export default function TarjetasVencimientosPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Clock className="h-7 w-7 text-orange-600" />
-            Tarjetas por Vencer / Vencidas
+            Tarjetas por Vencer / Vencidas sin Renovar
           </h1>
           <p className="text-sm text-gray-700 mt-1">
-            Consulta tarjetas que vencen o ya vencieron en un periodo para gestionar renovaciones
+            Consulta tarjetas que vencen o ya vencieron en un periodo y que aún no han sido renovadas
           </p>
         </div>
       </div>
@@ -168,7 +168,7 @@ export default function TarjetasVencimientosPage() {
             <p className="text-2xl font-bold text-gray-900">{data.totalRegistros}</p>
           </div>
           <div className="bg-red-50 rounded-lg border border-red-200 p-4">
-            <p className="text-sm text-red-600">Ya vencidas</p>
+            <p className="text-sm text-red-600">Vencidas sin renovar</p>
             <p className="text-2xl font-bold text-red-700">{data.vencidas.length}</p>
           </div>
           <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
@@ -182,7 +182,7 @@ export default function TarjetasVencimientosPage() {
       {data && (
         <>
           <div className="hidden print:block text-center mb-4">
-            <h2 className="text-xl font-bold">REPORTE DE TARJETAS POR VENCER / VENCIDAS</h2>
+            <h2 className="text-xl font-bold">REPORTE DE TARJETAS POR VENCER / VENCIDAS SIN RENOVAR</h2>
             <p className="text-sm">Del {data.fechaIni} al {data.fechaFin}</p>
           </div>
 

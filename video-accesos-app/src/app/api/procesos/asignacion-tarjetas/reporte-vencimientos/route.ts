@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Solo Folio H tiene fecha_vencimiento
+    // Solo Folio H tiene fecha_vencimiento.
+    // Excluir tarjetas que ya fueron renovadas: existe otra asignación
+    // más reciente para la misma tarjeta (en cualquiera de las dos tablas).
     const sql = `
       SELECT
         a.asignacion_id,
@@ -52,6 +54,21 @@ export async function GET(request: NextRequest) {
         AND a.fecha_vencimiento >= ?
         AND a.fecha_vencimiento <= ?
         AND a.fecha_vencimiento != '0000-00-00'
+        -- Excluir si ya se renovó en Folio H (misma tarjeta, asignación posterior)
+        AND NOT EXISTS (
+          SELECT 1 FROM residencias_residentes_tarjetas r2
+          WHERE r2.tarjeta_id = a.tarjeta_id
+            AND r2.asignacion_id != a.asignacion_id
+            AND r2.estatus_id = 1
+            AND r2.fecha > a.fecha_vencimiento
+        )
+        -- Excluir si ya se renovó en Folio B (misma tarjeta, asignación posterior)
+        AND NOT EXISTS (
+          SELECT 1 FROM residencias_residentes_tarjetas_no_renovacion r3
+          WHERE r3.tarjeta_id = a.tarjeta_id
+            AND r3.estatus_id = 1
+            AND r3.fecha > a.fecha_vencimiento
+        )
       ORDER BY a.fecha_vencimiento ASC
     `;
 
