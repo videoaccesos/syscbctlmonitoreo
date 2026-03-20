@@ -58,6 +58,7 @@ const fullNavigation: NavItem[] = [
       { label: "Órdenes de Servicio", href: "/procesos/ordenes-servicio" },
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
       { label: "Gastos", href: "/procesos/gastos" },
+      { label: "Corrección Vencimientos", href: "/procesos/correccion-vencimientos" },
     ],
   },
   {
