@@ -348,6 +348,7 @@ model Residencia {
   telefono2            String   @default("") @db.VarChar(14)
   interfon             String   @default("") @db.VarChar(20)
   telefonoInterfon     String   @default("") @map("telefono_interfon") @db.VarChar(14)
+  extraTelefonoInterfon String  @default("") @map("extra_telefono_interfon") @db.VarChar(14)
   observaciones        String   @default("") @db.Text
   estatusId            Int      @default(1) @map("estatus_id") @db.TinyInt
   fechaModificacion    DateTime @updatedAt @map("fecha_modificacion")

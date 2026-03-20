@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
         telefono2: telefono2 || "",
         interfon: interfon || "",
         telefonoInterfon: telefonoInterfon || "",
+        extraTelefonoInterfon: "",
         observaciones: observaciones || "",
         estatusId: estatusId ? parseInt(estatusId) : 1,
         usuarioModId: 0,
