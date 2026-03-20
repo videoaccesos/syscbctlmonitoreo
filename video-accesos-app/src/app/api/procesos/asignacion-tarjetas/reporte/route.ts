@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Columnas comunes (sin fecha_vencimiento que solo existe en tabla H)
-    const commonCols = `asignacion_id, privada, tarjeta_id, tarjeta_id2, tarjeta_id3,
+    // Columnas comunes (fecha_vencimiento solo existe en tabla H, se usa NULL para B)
+    const baseCols = `asignacion_id, privada, tarjeta_id, tarjeta_id2, tarjeta_id3,
              tarjeta_id4, tarjeta_id5, numero_serie, numero_serie2, numero_serie3,
              numero_serie4, numero_serie5, residente_id, comprador_id,
              mostrar_nombre_comprador, fecha, lectura_tipo_id, lectura_epc,
@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
              usuario_id, observaciones`;
 
     const buildUnion = (whereH: string, whereB: string) => `
-      SELECT ${commonCols}, 'H' AS folio_tipo FROM residencias_residentes_tarjetas WHERE ${whereH}
+      SELECT ${baseCols}, CAST(NULLIF(fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento, 'H' AS folio_tipo FROM residencias_residentes_tarjetas WHERE ${whereH}
       UNION ALL
-      SELECT ${commonCols}, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion WHERE ${whereB}
+      SELECT ${baseCols}, NULL AS fecha_vencimiento, 'B' AS folio_tipo FROM residencias_residentes_tarjetas_no_renovacion WHERE ${whereB}
     `;
 
     const joinsSql = `
@@ -47,14 +47,18 @@ export async function GET(request: NextRequest) {
       INNER JOIN privadas p ON res.privada_id = p.privada_id
     `;
 
-    const outerCols = `CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
-             a.folio_contrato, t.lectura, a.lectura_epc, t.tipo_id,
+    const outerCols = `a.asignacion_id,
+             CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
+             a.folio_contrato, t.lectura, a.lectura_epc, a.numero_serie,
+             t.tipo_id,
              (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
              a.precio, a.descuento,
              (a.precio - a.descuento) AS neto,
              CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
              p.descripcion AS privada, res.nro_casa, res.calle,
-             a.folio_tipo`;
+             a.folio_tipo, a.fecha_vencimiento,
+             a.estatus_id,
+             (CASE a.estatus_id WHEN 1 THEN 'ACTIVA' WHEN 2 THEN 'CANCELADA' END) AS estatus`;
 
     const sqlVendidas = `
       SELECT ${outerCols}
@@ -146,12 +150,12 @@ export async function GET(request: NextRequest) {
       top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" },
     };
 
-    const excelHeaders = ["Fecha","Folio","Privada","Casa","Residente","Tipo","Lectura","Precio","Descuento","Neto"];
+    const excelHeaders = ["No.","Fecha","Folio","Folio Tipo","Privada","Casa","Residente","Tipo","Lectura","No. Serie","Lectura EPC","Vencimiento","Estatus","Precio","Descuento","Neto"];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const addDetailSheet = (name: string, title: string, rows: Array<Record<string, unknown>>) => {
       const ws = workbook.addWorksheet(name);
-      ws.mergeCells("A1:J1");
+      ws.mergeCells("A1:P1");
       const tc = ws.getCell("A1");
       tc.value = `${title} - Del ${fechaIni} al ${fechaFin}`;
       tc.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
@@ -166,24 +170,27 @@ export async function GET(request: NextRequest) {
         const descuento = Number(row.descuento) || 0;
         const neto = precio - descuento;
         const dr = ws.addRow([
-          row.fecha||"",row.folio_contrato||"",row.privada||"",
+          row.asignacion_id||"",row.fecha||"",row.folio_contrato||"",
+          row.folio_tipo||"",row.privada||"",
           row.nro_casa||"",row.residente||"",row.tipo||"",
-          row.lectura||"",precio,descuento,neto
+          row.lectura||"",row.numero_serie||"",row.lectura_epc||"",
+          row.fecha_vencimiento||"N/A",row.estatus||"",
+          precio,descuento,neto
         ]);
         dr.eachCell((c: any) => { c.border = cellBorder; });
-        dr.getCell(8).numFmt = "$#,##0.00";
-        dr.getCell(9).numFmt = "$#,##0.00";
-        dr.getCell(10).numFmt = "$#,##0.00";
+        dr.getCell(14).numFmt = "$#,##0.00";
+        dr.getCell(15).numFmt = "$#,##0.00";
+        dr.getCell(16).numFmt = "$#,##0.00";
         if (Number(row.tipo_id) === 1) { numP++; totalP += neto; } else { numV++; totalV += neto; }
       }
       ws.addRow([]);
-      const rP = ws.addRow(["","","","","","","PEA",`${numP} tarjeta(s)`,"",totalP]);
-      rP.getCell(10).numFmt = "$#,##0.00"; rP.getCell(7).font = { bold: true }; rP.getCell(8).font = { bold: true }; rP.getCell(10).font = { bold: true };
-      const rV = ws.addRow(["","","","","","","VEH",`${numV} tarjeta(s)`,"",totalV]);
-      rV.getCell(10).numFmt = "$#,##0.00"; rV.getCell(7).font = { bold: true }; rV.getCell(8).font = { bold: true }; rV.getCell(10).font = { bold: true };
-      const rT = ws.addRow(["","","","","","","TOTAL",`${numP+numV} tarjeta(s)`,"",totalP+totalV]);
-      rT.getCell(10).numFmt = "$#,##0.00"; rT.getCell(7).font = { bold: true, size: 12 }; rT.getCell(8).font = { bold: true, size: 12 }; rT.getCell(10).font = { bold: true, size: 12 };
-      ws.columns = [{width:12},{width:12},{width:20},{width:8},{width:30},{width:12},{width:18},{width:14},{width:14},{width:14}];
+      const rP = ws.addRow(["","","","","","","","","","","","","PEA",`${numP} tarjeta(s)`,"",totalP]);
+      rP.getCell(16).numFmt = "$#,##0.00"; rP.getCell(13).font = { bold: true }; rP.getCell(14).font = { bold: true }; rP.getCell(16).font = { bold: true };
+      const rV = ws.addRow(["","","","","","","","","","","","","VEH",`${numV} tarjeta(s)`,"",totalV]);
+      rV.getCell(16).numFmt = "$#,##0.00"; rV.getCell(13).font = { bold: true }; rV.getCell(14).font = { bold: true }; rV.getCell(16).font = { bold: true };
+      const rT = ws.addRow(["","","","","","","","","","","","","TOTAL",`${numP+numV} tarjeta(s)`,"",totalP+totalV]);
+      rT.getCell(16).numFmt = "$#,##0.00"; rT.getCell(13).font = { bold: true, size: 12 }; rT.getCell(14).font = { bold: true, size: 12 }; rT.getCell(16).font = { bold: true, size: 12 };
+      ws.columns = [{width:8},{width:12},{width:12},{width:8},{width:20},{width:8},{width:30},{width:12},{width:18},{width:10},{width:18},{width:12},{width:12},{width:14},{width:14},{width:14}];
       return ws;
     };
 

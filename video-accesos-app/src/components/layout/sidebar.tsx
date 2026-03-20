@@ -68,6 +68,7 @@ const fullNavigation: NavItem[] = [
       { label: "Accesos Gráficas", href: "/reportes/accesos-graficas" },
       { label: "Supervisión Llamadas", href: "/reportes/supervision-llamadas" },
       { label: "Reporte de Ventas", href: "/reportes/reporte-ventas" },
+      { label: "Tarjetas por Vencer", href: "/reportes/tarjetas-vencimientos" },
     ],
   },
   {

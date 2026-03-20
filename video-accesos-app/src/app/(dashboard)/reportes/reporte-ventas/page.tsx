@@ -270,14 +270,19 @@ function TablaTarjetas({
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-slate-700 text-white print:bg-gray-800">
-              <th className="text-center px-3 py-2 font-medium w-8">#</th>
+              <th className="text-center px-3 py-2 font-medium w-8">No.</th>
               <th className="text-left px-3 py-2 font-medium">Fecha</th>
               <th className="text-left px-3 py-2 font-medium">Folio</th>
+              <th className="text-center px-3 py-2 font-medium">Tipo Folio</th>
               <th className="text-left px-3 py-2 font-medium">Privada</th>
               <th className="text-left px-3 py-2 font-medium">Casa</th>
               <th className="text-left px-3 py-2 font-medium">Residente</th>
               <th className="text-center px-3 py-2 font-medium">Tipo</th>
               <th className="text-left px-3 py-2 font-medium">Lectura</th>
+              <th className="text-left px-3 py-2 font-medium">No. Serie</th>
+              <th className="text-left px-3 py-2 font-medium">Lectura EPC</th>
+              <th className="text-left px-3 py-2 font-medium">Vencimiento</th>
+              <th className="text-center px-3 py-2 font-medium">Estatus</th>
               <th className="text-right px-3 py-2 font-medium">Precio</th>
               <th className="text-right px-3 py-2 font-medium">Desc.</th>
               <th className="text-right px-3 py-2 font-medium">Neto</th>
@@ -289,9 +294,16 @@ function TablaTarjetas({
                 key={i}
                 className={`border-b border-gray-200 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 print:hover:bg-transparent`}
               >
-                <td className="text-center px-3 py-1.5 text-gray-400 text-xs">{i + 1}</td>
+                <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">{String(row.asignacion_id || i + 1)}</td>
                 <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(row.fecha || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.folio_contrato || "-")}</td>
+                <td className="px-3 py-1.5 text-center">
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                    row.folio_tipo === "H" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {String(row.folio_tipo || "-")}
+                  </span>
+                </td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
@@ -303,6 +315,16 @@ function TablaTarjetas({
                   </span>
                 </td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || "-")}</td>
+                <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.numero_serie || "-")}</td>
+                <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura_epc || "-")}</td>
+                <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(row.fecha_vencimiento || "N/A")}</td>
+                <td className="px-3 py-1.5 text-center">
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                    Number(row.estatus_id) === 1 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  }`}>
+                    {String(row.estatus || "-")}
+                  </span>
+                </td>
                 <td className="px-3 py-1.5 text-right text-gray-600">{fmtMoney(row.precio)}</td>
                 <td className="px-3 py-1.5 text-right text-red-600">{Number(row.descuento) ? fmtMoney(row.descuento) : "-"}</td>
                 <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmtMoney(row.neto)}</td>
@@ -312,19 +334,19 @@ function TablaTarjetas({
           {/* Totales al final de la tabla */}
           <tfoot>
             <tr className="border-t-2 border-gray-400 bg-gray-100 print:bg-gray-200">
-              <td colSpan={8} className="px-3 py-2"></td>
+              <td colSpan={13} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">PEA</td>
               <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numPeatonal} tarjeta(s)</td>
               <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalPeatonal)}</td>
             </tr>
             <tr className="bg-gray-100 print:bg-gray-200">
-              <td colSpan={8} className="px-3 py-2"></td>
+              <td colSpan={13} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">VEH</td>
               <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numVehicular} tarjeta(s)</td>
               <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalVehicular)}</td>
             </tr>
             <tr className="bg-slate-700 text-white print:bg-gray-800">
-              <td colSpan={8} className="px-3 py-2"></td>
+              <td colSpan={13} className="px-3 py-2"></td>
               <td className="px-3 py-2 text-center text-sm font-bold">TOTAL</td>
               <td className="px-3 py-2 text-right text-sm font-bold">{totalTarjetas} tarjeta(s)</td>
               <td className="px-3 py-2 text-right text-lg font-bold">{fmtMoney(totalGeneral)}</td>
