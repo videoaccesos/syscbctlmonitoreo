@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         a.precio, a.descuento,
         (a.precio - a.descuento) AS neto,
         CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
-        r.telefono,
+        r.celular AS telefono,
         p.descripcion AS privada, res.nro_casa, res.calle,
         a.estatus_id,
         (CASE a.estatus_id WHEN 1 THEN 'ACTIVA' WHEN 2 THEN 'CANCELADA' END) AS estatus,
