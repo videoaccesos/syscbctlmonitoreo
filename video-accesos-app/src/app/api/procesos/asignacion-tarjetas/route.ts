@@ -330,12 +330,17 @@ export async function POST(request: NextRequest) {
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
         interfon_extra,
         estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, 0)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
       dataComun.tarjetaId4,
       dataComun.tarjetaId5,
+      "",  // numero_serie
+      "",  // numero_serie2
+      "",  // numero_serie3
+      "",  // numero_serie4
+      "",  // numero_serie5
       dataComun.residenteId,
       dataComun.privada,
       fechaStr,
@@ -358,6 +363,9 @@ export async function POST(request: NextRequest) {
       dataComun.utilizoSeguro3,
       dataComun.utilizoSeguro4,
       dataComun.utilizoSeguro5,
+      0,   // interfon_extra
+      1,   // estatus_id
+      0,   // usuario_id
     );
 
     // Obtener el ID del registro recién creado
