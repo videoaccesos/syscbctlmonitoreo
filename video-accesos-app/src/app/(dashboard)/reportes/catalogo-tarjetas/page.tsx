@@ -9,6 +9,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Wrench,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -44,6 +45,7 @@ export default function CatalogoTarjetasReportePage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReporteData | null>(null);
   const [descargando, setDescargando] = useState(false);
+  const [corrigiendo, setCorrigiendo] = useState(false);
   const [consulted, setConsulted] = useState(false);
 
   const fetchData = useCallback(async (searchVal: string, estatusVal: string, tipoVal: string, pageNum: number) => {
@@ -113,7 +115,7 @@ export default function CatalogoTarjetasReportePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "Catalogo_Tarjetas.xlsx";
+      a.download = "Listado_Tarjetas.xlsx";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -122,6 +124,27 @@ export default function CatalogoTarjetasReportePage() {
       alert("Error de conexion al descargar Excel");
     } finally {
       setDescargando(false);
+    }
+  };
+
+  const handleCorregirEstatus = async () => {
+    if (!confirm("Esto cambiara las tarjetas con estatus 'Activa' que tienen asignacion activa a estatus 'Asignada'. ¿Continuar?")) return;
+    setCorrigiendo(true);
+    try {
+      const res = await fetch("/api/catalogos/tarjetas/corregir-estatus", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || "Error al corregir");
+        return;
+      }
+      alert(json.message);
+      if (json.actualizadas > 0 && consulted) {
+        fetchData(appliedSearch, filterEstatus, filterTipo, page);
+      }
+    } catch {
+      alert("Error de conexion");
+    } finally {
+      setCorrigiendo(false);
     }
   };
 
@@ -135,12 +158,21 @@ export default function CatalogoTarjetasReportePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <CreditCard className="h-7 w-7 text-blue-600" />
-            Catalogo de Tarjetas
+            Listado de Tarjetas
           </h1>
           <p className="text-sm text-gray-700 mt-1">
-            Consulta y busqueda de tarjetas del catalogo con su estatus e informacion de asignacion
+            Consulta y busqueda de tarjetas con su estatus e informacion de asignacion
           </p>
         </div>
+        <button
+          onClick={handleCorregirEstatus}
+          disabled={corrigiendo}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition disabled:opacity-50"
+          title="Cambia tarjetas Activas que tienen asignacion activa a estatus Asignada"
+        >
+          {corrigiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+          {corrigiendo ? "Corrigiendo..." : "Corregir Estatus"}
+        </button>
       </div>
 
       {/* Filtros */}
@@ -404,7 +436,7 @@ export default function CatalogoTarjetasReportePage() {
       {!consulted && !loading && (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-400">
           <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Da click en Consultar para ver el catalogo de tarjetas. Puedes usar filtros o dejar todo en blanco para ver todas.</p>
+          <p>Da click en Consultar para ver el listado de tarjetas. Puedes usar filtros o dejar todo en blanco para ver todas.</p>
         </div>
       )}
     </div>

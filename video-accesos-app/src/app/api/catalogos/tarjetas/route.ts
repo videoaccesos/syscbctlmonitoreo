@@ -70,7 +70,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      estatusId: { not: 0 },
+      tipoId: { not: 0 },
+    };
 
     if (tipoId) {
       const tipo = parseInt(tipoId, 10);

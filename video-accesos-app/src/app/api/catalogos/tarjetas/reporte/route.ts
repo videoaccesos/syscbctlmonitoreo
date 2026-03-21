@@ -21,9 +21,13 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(500, Math.max(1, parseInt(searchParams.get("limit") || "100", 10)));
     const skip = (page - 1) * limit;
 
-    // Filtros Prisma
+    // Excluir estatus_id = 0 (registros invalidos)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: Record<string, any> = {};
+    const where: Record<string, any> = {
+      estatusId: { not: 0 },
+      tipoId: { not: 0 },
+    };
+
     if (search) {
       where.OR = [
         { lectura: { contains: search } },
@@ -39,25 +43,40 @@ export async function GET(request: NextRequest) {
       if (!isNaN(tip)) where.tipoId = tip;
     }
 
-    // Para Excel: sin paginacion pero con limite de seguridad
     const isExcel = format === "excel";
 
-    const [tarjetas, total] = await Promise.all([
-      prisma.tarjeta.findMany({
-        where,
-        orderBy: { lectura: "asc" },
-        ...(isExcel ? { take: 10000 } : { skip, take: limit }),
-      }),
-      prisma.tarjeta.count({ where }),
-    ]);
+    // Paso 1: Obtener tarjetas y total
+    const tarjetas = await prisma.tarjeta.findMany({
+      where,
+      orderBy: { lectura: "asc" },
+      ...(isExcel ? { take: 10000 } : { skip, take: limit }),
+    });
 
-    if (tarjetas.length === 0) {
-      if (!isExcel) {
-        return NextResponse.json({ data: [], total: 0, page, limit, totalPages: 0, conteos: {} });
-      }
+    const total = await prisma.tarjeta.count({ where });
+
+    if (tarjetas.length === 0 && !isExcel) {
+      return NextResponse.json({ data: [], total: 0, page, limit, totalPages: 0, conteos: {} });
     }
 
-    // Buscar asignaciones activas solo para las tarjetas de esta pagina
+    // Paso 2: Conteos por estatus usando Prisma groupBy
+    const conteosRaw = await prisma.tarjeta.groupBy({
+      by: ["estatusId"],
+      where,
+      _count: { estatusId: true },
+    });
+
+    const ESTATUS_LABELS: Record<number, string> = {
+      1: "ACTIVA", 2: "ASIGNADA", 3: "DANADA", 4: "CONSIGNACION", 5: "BAJA",
+    };
+    const TIPO_LABELS: Record<number, string> = { 1: "PEATONAL", 2: "VEHICULAR" };
+
+    const conteos: Record<string, number> = {};
+    for (const r of conteosRaw) {
+      const label = ESTATUS_LABELS[r.estatusId] || `ESTATUS ${r.estatusId}`;
+      conteos[label] = r._count.estatusId;
+    }
+
+    // Paso 3: Buscar asignaciones activas para las tarjetas de esta pagina
     const tarjetaIds = tarjetas.map((t) => String(t.id));
     const asignacionMap: Record<string, {
       folio_contrato: string;
@@ -82,8 +101,8 @@ export async function GET(request: NextRequest) {
         for (const slot of slots) {
           unions.push(
             `SELECT a.${slot} AS tid, a.folio_contrato,
-                    a.estatus_id AS asig_estatus_id,
-                    CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
+                    a.estatus_id AS asig_est,
+                    CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fv,
                     a.residente_id
              FROM ${table} a
              WHERE a.estatus_id = 1
@@ -93,15 +112,14 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 10 unions (5 slots x 2 tablas)
       const allParams = Array(10).fill(tarjetaIds).flat();
 
       const asigRows = await prisma.$queryRawUnsafe<
         Array<{
           tid: string;
           folio_contrato: string;
-          asig_estatus_id: number;
-          fecha_vencimiento: string | null;
+          asig_est: number;
+          fv: string | null;
           privada: string;
           calle: string;
           nro_casa: string;
@@ -109,8 +127,7 @@ export async function GET(request: NextRequest) {
           telefono_interfon: string | null;
         }>
       >(
-        `SELECT sub.tid, sub.folio_contrato, sub.asig_estatus_id,
-                sub.fecha_vencimiento,
+        `SELECT sub.tid, sub.folio_contrato, sub.asig_est, sub.fv,
                 p.descripcion AS privada,
                 res.calle, res.nro_casa,
                 CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
@@ -131,19 +148,14 @@ export async function GET(request: NextRequest) {
             nro_casa: row.nro_casa || "",
             residente: row.residente || "",
             telefono_interfon: row.telefono_interfon || "",
-            asig_estatus: row.asig_estatus_id === 1 ? "ACTIVA" : "CANCELADA",
-            fecha_vencimiento: row.fecha_vencimiento || "",
+            asig_estatus: row.asig_est === 1 ? "ACTIVA" : "CANCELADA",
+            fecha_vencimiento: row.fv || "",
           };
         }
       }
     }
 
-    // Combinar datos
-    const ESTATUS_LABELS: Record<number, string> = {
-      1: "ACTIVA", 2: "ASIGNADA", 3: "DANADA", 4: "CONSIGNACION", 5: "BAJA",
-    };
-    const TIPO_LABELS: Record<number, string> = { 1: "PEATONAL", 2: "VEHICULAR" };
-
+    // Paso 4: Combinar datos
     const serialized = tarjetas.map((t) => {
       const asig = asignacionMap[String(t.id)] || null;
       let fechaReg = "";
@@ -177,25 +189,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Conteos por estatus (del total, no solo de la pagina)
     if (!isExcel) {
-      // Obtener conteos del total filtrado
-      const conteosRaw = await prisma.$queryRawUnsafe<Array<{ estatus_id: number; cnt: bigint }>>(
-        `SELECT estatus_id, COUNT(*) AS cnt FROM tarjetas ${
-          Object.keys(where).length > 0
-            ? "WHERE 1=1" +
-              (search ? ` AND (lectura LIKE '%${search.replace(/'/g, "''")}%' OR numero_serie LIKE '%${search.replace(/'/g, "''")}%')` : "") +
-              (estatusId ? ` AND estatus_id = ${parseInt(estatusId, 10)}` : "") +
-              (tipoId ? ` AND tipo_id = ${parseInt(tipoId, 10)}` : "")
-            : ""
-        } GROUP BY estatus_id`
-      );
-      const conteos: Record<string, number> = {};
-      for (const r of conteosRaw) {
-        const label = ESTATUS_LABELS[Number(r.estatus_id)] || String(r.estatus_id);
-        conteos[label] = Number(r.cnt);
-      }
-
       return NextResponse.json({
         data: serialized,
         total,
@@ -225,7 +219,7 @@ export async function GET(request: NextRequest) {
       top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" },
     };
 
-    const ws = workbook.addWorksheet("Catalogo Tarjetas");
+    const ws = workbook.addWorksheet("Listado Tarjetas");
     const excelHeaders = [
       "No.", "Lectura", "No. Serie", "Tipo", "Estatus Tarjeta",
       "Folio Contrato", "Privada", "Calle", "Casa", "Residente",
@@ -235,7 +229,7 @@ export async function GET(request: NextRequest) {
 
     ws.mergeCells("A1:O1");
     const tc = ws.getCell("A1");
-    tc.value = "CATALOGO DE TARJETAS";
+    tc.value = "LISTADO DE TARJETAS";
     tc.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
     tc.alignment = { horizontal: "center" };
     ws.addRow([]);
@@ -278,14 +272,14 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="Catalogo_Tarjetas.xlsx"`,
+        "Content-Disposition": `attachment; filename="Listado_Tarjetas.xlsx"`,
       },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error("Error al generar reporte de catalogo de tarjetas:", msg, error);
+    console.error("Error al generar listado de tarjetas:", msg, error);
     return NextResponse.json(
-      { error: `Error al generar reporte: ${msg}` },
+      { error: `Error al generar listado: ${msg}` },
       { status: 500 }
     );
   }

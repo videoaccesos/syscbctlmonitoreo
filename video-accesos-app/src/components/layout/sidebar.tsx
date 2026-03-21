@@ -70,7 +70,7 @@ const fullNavigation: NavItem[] = [
       { label: "Supervisión Llamadas", href: "/reportes/supervision-llamadas" },
       { label: "Reporte de Ventas", href: "/reportes/reporte-ventas" },
       { label: "Tarjetas por Vencer", href: "/reportes/tarjetas-vencimientos" },
-      { label: "Catálogo Tarjetas", href: "/reportes/catalogo-tarjetas" },
+      { label: "Listado de Tarjetas", href: "/reportes/catalogo-tarjetas" },
     ],
   },
   {
