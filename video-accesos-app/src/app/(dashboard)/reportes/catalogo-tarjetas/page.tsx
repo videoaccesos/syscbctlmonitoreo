@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Search,
   Loader2,
   Download,
   CreditCard,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -15,6 +17,9 @@ type TarjetaRow = Record<string, unknown>;
 type ReporteData = {
   data: TarjetaRow[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
   conteos: Record<string, number>;
 };
 
@@ -30,27 +35,25 @@ const ESTATUS_BADGE: Record<string, string> = {
 /* ================================================================ */
 
 export default function CatalogoTarjetasReportePage() {
-  const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [filterEstatus, setFilterEstatus] = useState("");
   const [filterTipo, setFilterTipo] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(100);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReporteData | null>(null);
   const [descargando, setDescargando] = useState(false);
+  const [consulted, setConsulted] = useState(false);
 
-  const buildParams = (format: string, searchOverride?: string) => {
-    const params = new URLSearchParams({ format });
-    const s = searchOverride !== undefined ? searchOverride : search;
-    if (s) params.set("search", s);
-    if (filterEstatus) params.set("estatusId", filterEstatus);
-    if (filterTipo) params.set("tipoId", filterTipo);
-    return params;
-  };
-
-  const handleConsultar = async (searchOverride?: string) => {
+  const fetchData = useCallback(async (searchVal: string, estatusVal: string, tipoVal: string, pageNum: number) => {
     setLoading(true);
     try {
-      const params = buildParams("json", searchOverride);
+      const params = new URLSearchParams({ format: "json", page: String(pageNum), limit: String(pageSize) });
+      if (searchVal) params.set("search", searchVal);
+      if (estatusVal) params.set("estatusId", estatusVal);
+      if (tipoVal) params.set("tipoId", tipoVal);
+
       const res = await fetch(`/api/catalogos/tarjetas/reporte?${params}`);
       if (!res.ok) {
         const json = await res.json();
@@ -59,34 +62,47 @@ export default function CatalogoTarjetasReportePage() {
       }
       const json: ReporteData = await res.json();
       setData(json);
+      setConsulted(true);
     } catch {
       alert("Error de conexion al consultar reporte");
     } finally {
       setLoading(false);
     }
-  };
+  }, [pageSize]);
 
-  const handleSearch = () => {
-    setSearch(searchInput);
-    handleConsultar(searchInput);
+  const handleConsultar = () => {
+    setAppliedSearch(searchInput);
+    setPage(1);
+    fetchData(searchInput, filterEstatus, filterTipo, 1);
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
+    if (e.key === "Enter") handleConsultar();
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    fetchData(appliedSearch, filterEstatus, filterTipo, newPage);
   };
 
   const clearFilters = () => {
     setSearchInput("");
-    setSearch("");
+    setAppliedSearch("");
     setFilterEstatus("");
     setFilterTipo("");
+    setPage(1);
     setData(null);
+    setConsulted(false);
   };
 
   const handleDescargarExcel = async () => {
     setDescargando(true);
     try {
-      const params = buildParams("excel");
+      const params = new URLSearchParams({ format: "excel" });
+      if (appliedSearch) params.set("search", appliedSearch);
+      if (filterEstatus) params.set("estatusId", filterEstatus);
+      if (filterTipo) params.set("tipoId", filterTipo);
+
       const res = await fetch(`/api/catalogos/tarjetas/reporte?${params}`);
       if (!res.ok) {
         const json = await res.json();
@@ -109,7 +125,8 @@ export default function CatalogoTarjetasReportePage() {
     }
   };
 
-  const hasFilters = search || filterEstatus || filterTipo;
+  const hasFilters = searchInput || filterEstatus || filterTipo;
+  const totalPages = data?.totalPages || 0;
 
   return (
     <div className="space-y-4">
@@ -173,7 +190,7 @@ export default function CatalogoTarjetasReportePage() {
             </select>
           </div>
           <button
-            onClick={handleSearch}
+            onClick={handleConsultar}
             disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50"
           >
@@ -189,7 +206,7 @@ export default function CatalogoTarjetasReportePage() {
               Limpiar
             </button>
           )}
-          {data && data.data.length > 0 && (
+          {data && data.total > 0 && (
             <button
               onClick={handleDescargarExcel}
               disabled={descargando}
@@ -253,6 +270,7 @@ export default function CatalogoTarjetasReportePage() {
                 ) : (
                   data.data.map((row, i) => {
                     const estatus = String(row.estatus || "");
+                    const rowNum = (page - 1) * pageSize + i + 1;
                     return (
                       <tr
                         key={i}
@@ -260,7 +278,7 @@ export default function CatalogoTarjetasReportePage() {
                           i % 2 === 0 ? "bg-white" : "bg-gray-50"
                         } hover:bg-blue-50`}
                       >
-                        <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">{i + 1}</td>
+                        <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">{rowNum}</td>
                         <td className="px-3 py-1.5 font-mono font-medium text-gray-900">{String(row.lectura || "-")}</td>
                         <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.numero_serie || "-")}</td>
                         <td className="px-3 py-1.5 text-center">
@@ -310,13 +328,83 @@ export default function CatalogoTarjetasReportePage() {
               )}
             </table>
           </div>
+
+          {/* Paginacion */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm">
+              <span className="text-gray-600">
+                Mostrando {data.data.length} de {data.total} registros (pagina {page} de {totalPages})
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(1)}
+                  disabled={page <= 1}
+                  className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Primera
+                </button>
+                <button
+                  disabled={page <= 1}
+                  onClick={() => handlePageChange(Math.max(1, page - 1))}
+                  className="p-1.5 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {(() => {
+                  const pages: (number | string)[] = [];
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                  } else {
+                    pages.push(1);
+                    if (page > 3) pages.push("...");
+                    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) {
+                      pages.push(i);
+                    }
+                    if (page < totalPages - 2) pages.push("...");
+                    pages.push(totalPages);
+                  }
+                  return pages.map((p, idx) =>
+                    typeof p === "string" ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => handlePageChange(p)}
+                        className={`px-2.5 py-1.5 rounded border text-sm font-medium transition ${
+                          p === page
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "border-gray-300 text-gray-700 hover:bg-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  );
+                })()}
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
+                  className="p-1.5 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={page >= totalPages}
+                  className="px-2 py-1.5 rounded border border-gray-300 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Ultima
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {!data && !loading && (
+      {!consulted && !loading && (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-400">
           <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Selecciona los filtros deseados y da click en Consultar para ver el catalogo de tarjetas</p>
+          <p>Da click en Consultar para ver el catalogo de tarjetas. Puedes usar filtros o dejar todo en blanco para ver todas.</p>
         </div>
       )}
     </div>
