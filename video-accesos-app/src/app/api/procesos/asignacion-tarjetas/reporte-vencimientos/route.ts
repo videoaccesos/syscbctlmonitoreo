@@ -34,17 +34,18 @@ export async function GET(request: NextRequest) {
         CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha_asignacion,
         a.folio_contrato,
         CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
-        t.lectura, a.lectura_epc, a.numero_serie,
+        t.lectura, a.numero_serie,
         t.tipo_id,
         (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
         a.precio, a.descuento,
         (a.precio - a.descuento) AS neto,
         CONCAT_WS(' ', r.nombre, r.ape_paterno, r.ape_materno) AS residente,
-        r.celular AS telefono,
+        res.interfon AS telefono,
         p.descripcion AS privada, res.nro_casa, res.calle,
         a.estatus_id,
         (CASE a.estatus_id WHEN 1 THEN 'ACTIVA' WHEN 2 THEN 'CANCELADA' END) AS estatus,
-        DATEDIFF(a.fecha_vencimiento, CURDATE()) AS dias_restantes
+        DATEDIFF(a.fecha_vencimiento, CURDATE()) AS dias_restantes,
+        a.observaciones
       FROM residencias_residentes_tarjetas a
       INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
@@ -141,14 +142,14 @@ export async function GET(request: NextRequest) {
 
     const excelHeaders = [
       "No.", "Folio Contrato", "Fecha Asignación", "Vencimiento", "Días Rest.",
-      "Privada", "Casa", "Residente", "Teléfono", "Tipo", "Lectura",
-      "No. Serie", "Lectura EPC", "Estatus"
+      "Privada", "Calle", "Casa", "Residente", "Teléfono", "Tipo", "Lectura",
+      "No. Serie", "Estatus", "Observaciones"
     ];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const addSheet = (name: string, title: string, data: Array<Record<string, unknown>>) => {
       const ws = workbook.addWorksheet(name);
-      ws.mergeCells("A1:N1");
+      ws.mergeCells("A1:O1");
       const tc = ws.getCell("A1");
       tc.value = `${title} - Del ${fechaIni} al ${fechaFin}`;
       tc.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
@@ -163,10 +164,11 @@ export async function GET(request: NextRequest) {
           row.asignacion_id || "", row.folio_contrato || "",
           row.fecha_asignacion || "", row.fecha_vencimiento || "",
           row.dias_restantes ?? "", row.privada || "",
-          row.nro_casa || "", row.residente || "", row.telefono || "",
+          row.calle || "", row.nro_casa || "",
+          row.residente || "", row.telefono || "",
           row.tipo || "", row.lectura || "",
-          row.numero_serie || "", row.lectura_epc || "",
-          row.estatus || ""
+          row.numero_serie || "", row.estatus || "",
+          row.observaciones || ""
         ]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         dr.eachCell((c: any) => { c.border = cellBorder; });
@@ -185,8 +187,8 @@ export async function GET(request: NextRequest) {
 
       ws.columns = [
         { width: 8 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 },
-        { width: 20 }, { width: 8 }, { width: 30 }, { width: 14 }, { width: 12 },
-        { width: 18 }, { width: 10 }, { width: 18 }, { width: 12 }
+        { width: 20 }, { width: 20 }, { width: 8 }, { width: 30 }, { width: 14 },
+        { width: 12 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 25 }
       ];
       return ws;
     };

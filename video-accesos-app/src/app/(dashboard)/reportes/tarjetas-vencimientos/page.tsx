@@ -31,8 +31,9 @@ const TAB_LABELS: Record<TabKey, string> = {
 /* ================================================================ */
 
 export default function TarjetasVencimientosPage() {
-  const [fechaIni, setFechaIni] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [fechaIni, setFechaIni] = useState(hoy);
+  const [fechaFin, setFechaFin] = useState(hoy);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReporteData | null>(null);
   const [tab, setTab] = useState<TabKey>("porVencer");
@@ -268,13 +269,14 @@ function TablaVencimientos({
             <th className="text-left px-3 py-2 font-medium">Vencimiento</th>
             <th className="text-center px-3 py-2 font-medium">Días</th>
             <th className="text-left px-3 py-2 font-medium">Privada</th>
+            <th className="text-left px-3 py-2 font-medium">Calle</th>
             <th className="text-left px-3 py-2 font-medium">Casa</th>
             <th className="text-left px-3 py-2 font-medium">Residente</th>
             <th className="text-left px-3 py-2 font-medium">Teléfono</th>
             <th className="text-center px-3 py-2 font-medium">Tipo</th>
             <th className="text-left px-3 py-2 font-medium">Lectura</th>
             <th className="text-left px-3 py-2 font-medium">No. Serie</th>
-            <th className="text-left px-3 py-2 font-medium">Lectura EPC</th>
+            <th className="text-left px-3 py-2 font-medium">Observaciones</th>
           </tr>
         </thead>
         <tbody>
@@ -306,6 +308,7 @@ function TablaVencimientos({
                   {dias < 0 ? `${Math.abs(dias)}d atrás` : `${dias}d`}
                 </td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
+                <td className="px-3 py-1.5 text-gray-700">{String(row.calle || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-600">{String(row.telefono || "-")}</td>
@@ -318,14 +321,14 @@ function TablaVencimientos({
                 </td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || "-")}</td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.numero_serie || "-")}</td>
-                <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura_epc || "-")}</td>
+                <td className="px-3 py-1.5 text-gray-600 text-xs">{String(row.observaciones || "-")}</td>
               </tr>
             );
           })}
         </tbody>
         <tfoot>
           <tr className="bg-slate-700 text-white print:bg-gray-800">
-            <td colSpan={13} className="px-3 py-2 text-center font-bold">
+            <td colSpan={14} className="px-3 py-2 text-center font-bold">
               Total: {rows.length} tarjeta(s)
             </td>
           </tr>
