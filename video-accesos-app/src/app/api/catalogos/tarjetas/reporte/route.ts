@@ -46,11 +46,13 @@ export async function GET(request: NextRequest) {
     const isExcel = format === "excel";
 
     // Paso 1: Obtener tarjetas y total
-    const tarjetas = await prisma.tarjeta.findMany({
+    const findArgs = {
       where,
-      orderBy: { lectura: "asc" },
-      ...(isExcel ? { take: 10000 } : { skip, take: limit }),
-    });
+      orderBy: { lectura: "asc" as const },
+      skip: isExcel ? 0 : skip,
+      take: isExcel ? 10000 : limit,
+    };
+    const tarjetas = await prisma.tarjeta.findMany(findArgs);
 
     const total = await prisma.tarjeta.count({ where });
 
