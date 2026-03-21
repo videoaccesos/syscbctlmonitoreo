@@ -55,24 +55,25 @@ export async function GET(request: NextRequest) {
         AND a.fecha_vencimiento >= ?
         AND a.fecha_vencimiento <= ?
         AND a.fecha_vencimiento != '0000-00-00'
-        -- Excluir si ya se renovó en Folio H (misma tarjeta + misma residencia, asignación posterior)
+        -- Excluir si ya se renovó en Folio H (misma tarjeta + misma residencia,
+        -- cualquier asignación posterior hasta HOY, no solo dentro del periodo)
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas r2
           INNER JOIN residencias_residentes rr2 ON r2.residente_id = rr2.residente_id
           WHERE r2.tarjeta_id = a.tarjeta_id
-            AND rr2.residencia_id = r.residencia_id
-            AND r2.asignacion_id != a.asignacion_id
+            AND rr2.residencia_id = res.residencia_id
+            AND r2.asignacion_id > a.asignacion_id
             AND r2.estatus_id = 1
-            AND r2.fecha > a.fecha_vencimiento
         )
-        -- Excluir si ya se renovó en Folio B (misma tarjeta + misma residencia, asignación posterior)
+        -- Excluir si ya se renovó en Folio B (misma tarjeta + misma residencia,
+        -- cualquier asignación posterior hasta HOY)
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas_no_renovacion r3
           INNER JOIN residencias_residentes rr3 ON r3.residente_id = rr3.residente_id
           WHERE r3.tarjeta_id = a.tarjeta_id
-            AND rr3.residencia_id = r.residencia_id
+            AND rr3.residencia_id = res.residencia_id
+            AND r3.asignacion_id > a.asignacion_id
             AND r3.estatus_id = 1
-            AND r3.fecha > a.fecha_vencimiento
         )
       ORDER BY a.fecha_vencimiento ASC
     `;
