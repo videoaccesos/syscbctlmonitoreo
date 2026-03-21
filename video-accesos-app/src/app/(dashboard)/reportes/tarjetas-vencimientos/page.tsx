@@ -18,6 +18,7 @@ type ReporteData = {
   porVencer: Array<Record<string, unknown>>;
   concentrado: Array<Record<string, unknown>>;
   totalRegistros: number;
+  ingresoEstimadoTotal: number;
 };
 
 type TabKey = "porVencer" | "vencidas" | "concentrado";
@@ -163,7 +164,7 @@ export default function TarjetasVencimientosPage() {
 
       {/* Resumen */}
       {data && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:hidden">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <p className="text-sm text-gray-500">Total en periodo</p>
             <p className="text-2xl font-bold text-gray-900">{data.totalRegistros}</p>
@@ -175,6 +176,12 @@ export default function TarjetasVencimientosPage() {
           <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
             <p className="text-sm text-amber-600">Por vencer</p>
             <p className="text-2xl font-bold text-amber-700">{data.porVencer.length}</p>
+          </div>
+          <div className="bg-green-50 rounded-lg border border-green-200 p-4">
+            <p className="text-sm text-green-600">Ingreso estimado por renovación</p>
+            <p className="text-2xl font-bold text-green-700">
+              ${(data.ingresoEstimadoTotal || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
       )}
@@ -276,6 +283,7 @@ function TablaVencimientos({
             <th className="text-center px-3 py-2 font-medium">Tipo</th>
             <th className="text-left px-3 py-2 font-medium">Lectura</th>
             <th className="text-left px-3 py-2 font-medium">No. Serie</th>
+            <th className="text-right px-3 py-2 font-medium">Precio Renov.</th>
             <th className="text-left px-3 py-2 font-medium">Observaciones</th>
           </tr>
         </thead>
@@ -321,6 +329,9 @@ function TablaVencimientos({
                 </td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || "-")}</td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.numero_serie || "-")}</td>
+                <td className="px-3 py-1.5 text-right text-green-700 font-medium">
+                  ${(Number(row.precio_renovacion) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </td>
                 <td className="px-3 py-1.5 text-gray-600 text-xs">{String(row.observaciones || "-")}</td>
               </tr>
             );
@@ -328,9 +339,13 @@ function TablaVencimientos({
         </tbody>
         <tfoot>
           <tr className="bg-slate-700 text-white print:bg-gray-800">
-            <td colSpan={14} className="px-3 py-2 text-center font-bold">
+            <td colSpan={14} className="px-3 py-2 text-right font-bold">
               Total: {rows.length} tarjeta(s)
             </td>
+            <td className="px-3 py-2 text-right font-bold">
+              ${rows.reduce((acc, r) => acc + (Number(r.precio_renovacion) || 0), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            </td>
+            <td></td>
           </tr>
         </tfoot>
       </table>
@@ -356,11 +371,19 @@ function TablaConcentrado({
   let totalVencidas = 0;
   let totalPorVencer = 0;
   let totalGeneral = 0;
+  let totalIngVencidas = 0;
+  let totalIngPorVencer = 0;
+  let totalIngGeneral = 0;
   for (const row of rows) {
     totalVencidas += Number(row.vencidas) || 0;
     totalPorVencer += Number(row.porVencer) || 0;
     totalGeneral += Number(row.total) || 0;
+    totalIngVencidas += Number(row.ingresoVencidas) || 0;
+    totalIngPorVencer += Number(row.ingresoPorVencer) || 0;
+    totalIngGeneral += Number(row.ingresoTotal) || 0;
   }
+
+  const fmtMoney = (n: number) => `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="overflow-x-auto">
@@ -371,6 +394,9 @@ function TablaConcentrado({
             <th className="text-right px-3 py-2 font-medium">Vencidas</th>
             <th className="text-right px-3 py-2 font-medium">Por Vencer</th>
             <th className="text-right px-3 py-2 font-medium">Total</th>
+            <th className="text-right px-3 py-2 font-medium">Ing. Vencidas</th>
+            <th className="text-right px-3 py-2 font-medium">Ing. Por Vencer</th>
+            <th className="text-right px-3 py-2 font-medium">Ing. Total</th>
           </tr>
         </thead>
         <tbody>
@@ -383,6 +409,9 @@ function TablaConcentrado({
               <td className="px-3 py-2 text-right text-red-600 font-medium">{Number(row.vencidas) || 0}</td>
               <td className="px-3 py-2 text-right text-amber-600 font-medium">{Number(row.porVencer) || 0}</td>
               <td className="px-3 py-2 text-right font-bold text-blue-700">{Number(row.total) || 0}</td>
+              <td className="px-3 py-2 text-right text-red-600">{fmtMoney(Number(row.ingresoVencidas) || 0)}</td>
+              <td className="px-3 py-2 text-right text-amber-600">{fmtMoney(Number(row.ingresoPorVencer) || 0)}</td>
+              <td className="px-3 py-2 text-right font-bold text-green-700">{fmtMoney(Number(row.ingresoTotal) || 0)}</td>
             </tr>
           ))}
         </tbody>
@@ -392,6 +421,9 @@ function TablaConcentrado({
             <td className="px-3 py-2 text-right font-bold">{totalVencidas}</td>
             <td className="px-3 py-2 text-right font-bold">{totalPorVencer}</td>
             <td className="px-3 py-2 text-right text-lg font-bold">{totalGeneral}</td>
+            <td className="px-3 py-2 text-right font-bold">{fmtMoney(totalIngVencidas)}</td>
+            <td className="px-3 py-2 text-right font-bold">{fmtMoney(totalIngPorVencer)}</td>
+            <td className="px-3 py-2 text-right text-lg font-bold">{fmtMoney(totalIngGeneral)}</td>
           </tr>
         </tfoot>
       </table>

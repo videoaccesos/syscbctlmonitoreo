@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
         a.estatus_id,
         (CASE a.estatus_id WHEN 1 THEN 'ACTIVA' WHEN 2 THEN 'CANCELADA' END) AS estatus,
         DATEDIFF(a.fecha_vencimiento, CURDATE()) AS dias_restantes,
-        a.observaciones
+        a.observaciones,
+        p.precio_vehicular, p.precio_peatonal,
+        (CASE t.tipo_id WHEN 2 THEN p.precio_vehicular WHEN 1 THEN p.precio_peatonal ELSE 0 END) AS precio_renovacion
       FROM residencias_residentes_tarjetas a
       INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
@@ -99,16 +101,27 @@ export async function GET(request: NextRequest) {
     const vencidas = serialized.filter((r) => String(r.fecha_vencimiento) < hoy);
     const porVencer = serialized.filter((r) => String(r.fecha_vencimiento) >= hoy);
 
-    // Concentrado por privada
-    const concentrado: Record<string, { privada: string; vencidas: number; porVencer: number; total: number }> = {};
+    // Concentrado por privada (con ingreso estimado por renovación)
+    const concentrado: Record<string, {
+      privada: string; vencidas: number; porVencer: number; total: number;
+      ingresoVencidas: number; ingresoPorVencer: number; ingresoTotal: number;
+    }> = {};
+    let ingresoEstimadoTotal = 0;
     for (const row of serialized) {
       const priv = String(row.privada);
-      if (!concentrado[priv]) concentrado[priv] = { privada: priv, vencidas: 0, porVencer: 0, total: 0 };
+      const precioRen = Number(row.precio_renovacion) || 0;
+      if (!concentrado[priv]) {
+        concentrado[priv] = { privada: priv, vencidas: 0, porVencer: 0, total: 0, ingresoVencidas: 0, ingresoPorVencer: 0, ingresoTotal: 0 };
+      }
       concentrado[priv].total++;
+      concentrado[priv].ingresoTotal += precioRen;
+      ingresoEstimadoTotal += precioRen;
       if (String(row.fecha_vencimiento) < hoy) {
         concentrado[priv].vencidas++;
+        concentrado[priv].ingresoVencidas += precioRen;
       } else {
         concentrado[priv].porVencer++;
+        concentrado[priv].ingresoPorVencer += precioRen;
       }
     }
 
@@ -120,6 +133,7 @@ export async function GET(request: NextRequest) {
         porVencer,
         concentrado: Object.values(concentrado),
         totalRegistros: serialized.length,
+        ingresoEstimadoTotal,
       });
     }
 
@@ -145,13 +159,13 @@ export async function GET(request: NextRequest) {
     const excelHeaders = [
       "No.", "Folio Contrato", "Fecha Asignación", "Vencimiento", "Días Rest.",
       "Privada", "Calle", "Casa", "Residente", "Teléfono", "Tipo", "Lectura",
-      "No. Serie", "Estatus", "Observaciones"
+      "No. Serie", "Estatus", "Precio Renovación", "Observaciones"
     ];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const addSheet = (name: string, title: string, data: Array<Record<string, unknown>>) => {
       const ws = workbook.addWorksheet(name);
-      ws.mergeCells("A1:O1");
+      ws.mergeCells("A1:P1");
       const tc = ws.getCell("A1");
       tc.value = `${title} - Del ${fechaIni} al ${fechaFin}`;
       tc.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
@@ -170,10 +184,13 @@ export async function GET(request: NextRequest) {
           row.residente || "", row.telefono || "",
           row.tipo || "", row.lectura || "",
           row.numero_serie || "", row.estatus || "",
+          Number(row.precio_renovacion) || 0,
           row.observaciones || ""
         ]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         dr.eachCell((c: any) => { c.border = cellBorder; });
+        // Formato moneda para precio renovación
+        dr.getCell(15).numFmt = '$#,##0.00';
         // Colorear días restantes
         const dias = Number(row.dias_restantes);
         if (dias < 0) {
@@ -184,13 +201,16 @@ export async function GET(request: NextRequest) {
       }
 
       ws.addRow([]);
-      const totalRow = ws.addRow([`Total: ${data.length} tarjeta(s)`]);
+      const sumaRenovacion = data.reduce((acc, r) => acc + (Number(r.precio_renovacion) || 0), 0);
+      const totalRow = ws.addRow([`Total: ${data.length} tarjeta(s)`, "", "", "", "", "", "", "", "", "", "", "", "", "", sumaRenovacion]);
       totalRow.getCell(1).font = { bold: true, size: 12 };
+      totalRow.getCell(15).font = { bold: true, size: 12 };
+      totalRow.getCell(15).numFmt = '$#,##0.00';
 
       ws.columns = [
         { width: 8 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 },
         { width: 20 }, { width: 20 }, { width: 8 }, { width: 30 }, { width: 14 },
-        { width: 12 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 25 }
+        { width: 12 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 16 }, { width: 25 }
       ];
       return ws;
     };
@@ -200,28 +220,39 @@ export async function GET(request: NextRequest) {
 
     // Hoja concentrado
     const ws3 = workbook.addWorksheet("Concentrado");
-    ws3.mergeCells("A1:D1");
+    ws3.mergeCells("A1:G1");
     const t3 = ws3.getCell("A1");
     t3.value = `CONCENTRADO POR PRIVADA - Del ${fechaIni} al ${fechaFin}`;
     t3.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
     t3.alignment = { horizontal: "center" };
     ws3.addRow([]);
-    const hRow3 = ws3.addRow(["Privada", "Vencidas", "Por Vencer", "Total"]);
+    const hRow3 = ws3.addRow(["Privada", "Vencidas", "Por Vencer", "Total", "Ingreso Vencidas", "Ingreso Por Vencer", "Ingreso Total"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     hRow3.eachCell((c: any) => { c.style = headerStyle; });
     let gtVencidas = 0, gtPorVencer = 0, gtTotal = 0;
+    let gtIngVencidas = 0, gtIngPorVencer = 0, gtIngTotal = 0;
     for (const c of Object.values(concentrado)) {
-      const dr = ws3.addRow([c.privada, c.vencidas, c.porVencer, c.total]);
+      const dr = ws3.addRow([c.privada, c.vencidas, c.porVencer, c.total, c.ingresoVencidas, c.ingresoPorVencer, c.ingresoTotal]);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       dr.eachCell((cell: any) => { cell.border = cellBorder; });
+      dr.getCell(5).numFmt = '$#,##0.00';
+      dr.getCell(6).numFmt = '$#,##0.00';
+      dr.getCell(7).numFmt = '$#,##0.00';
       gtVencidas += c.vencidas;
       gtPorVencer += c.porVencer;
       gtTotal += c.total;
+      gtIngVencidas += c.ingresoVencidas;
+      gtIngPorVencer += c.ingresoPorVencer;
+      gtIngTotal += c.ingresoTotal;
     }
-    const gr = ws3.addRow(["TOTAL", gtVencidas, gtPorVencer, gtTotal]);
+    const gr = ws3.addRow(["TOTAL", gtVencidas, gtPorVencer, gtTotal, gtIngVencidas, gtIngPorVencer, gtIngTotal]);
     gr.getCell(1).font = { bold: true, size: 12 };
     gr.getCell(4).font = { bold: true, size: 12 };
-    ws3.columns = [{ width: 25 }, { width: 12 }, { width: 12 }, { width: 12 }];
+    gr.getCell(5).numFmt = '$#,##0.00';
+    gr.getCell(6).numFmt = '$#,##0.00';
+    gr.getCell(7).numFmt = '$#,##0.00';
+    gr.getCell(7).font = { bold: true, size: 12 };
+    ws3.columns = [{ width: 25 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 18 }, { width: 18 }, { width: 18 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new NextResponse(buffer, {
