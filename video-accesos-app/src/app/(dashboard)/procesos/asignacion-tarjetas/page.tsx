@@ -119,7 +119,7 @@ const emptyForm: AsignacionForm = {
   tipoPago: "",
   compradorId: "",
   mostrarNombreComprador: false,
-  concepto: "",
+  concepto: "VENTA NUEVA",
   observaciones: "",
 };
 
@@ -1485,14 +1485,15 @@ export default function AsignacionTarjetasPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Concepto
                   </label>
-                  <input
-                    type="text"
-                    maxLength={100}
+                  <select
                     value={form.concepto}
                     onChange={(e) => setField("concepto", e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Concepto de la venta"
-                  />
+                  >
+                    <option value="VENTA NUEVA">Venta Nueva</option>
+                    <option value="RENOVACION">Renovación</option>
+                    <option value="REPOSICION">Reposición</option>
+                  </select>
                 </div>
               </div>
 
