@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
       INNER JOIN residencias res ON r.residencia_id = res.residencia_id
       INNER JOIN privadas p ON res.privada_id = p.privada_id
       WHERE a.estatus_id = 1
+        AND p.estatus_id = 1
         AND a.fecha_vencimiento >= ?
         AND a.fecha_vencimiento <= ?
         AND a.fecha_vencimiento != '0000-00-00'
