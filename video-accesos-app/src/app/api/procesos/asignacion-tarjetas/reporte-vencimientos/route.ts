@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha_asignacion,
         a.folio_contrato,
         CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
-        t.lectura, a.numero_serie,
+        t.lectura, a.concepto,
         t.tipo_id,
         (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
         a.precio, a.descuento,
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
     const excelHeaders = [
       "No.", "Folio Contrato", "Fecha Asignación", "Vencimiento", "Días Rest.",
       "Privada", "Calle", "Casa", "Residente", "Teléfono", "Tipo", "Lectura",
-      "No. Serie", "Estatus", "Precio Renovación", "Observaciones"
+      "Concepto", "Estatus", "Precio Renovación", "Observaciones"
     ];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
           row.calle || "", row.nro_casa || "",
           row.residente || "", row.telefono || "",
           row.tipo || "", row.lectura || "",
-          row.numero_serie || "", row.estatus || "",
+          row.concepto || "", row.estatus || "",
           Number(row.precio_renovacion) || 0,
           row.observaciones || ""
         ]);

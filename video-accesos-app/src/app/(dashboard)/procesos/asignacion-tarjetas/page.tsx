@@ -1086,7 +1086,7 @@ export default function AsignacionTarjetasPage() {
       {/* ==================== MODAL CREAR ASIGNACION ==================== */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+          <div className="absolute inset-0 bg-black/50" />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
             {/* header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">

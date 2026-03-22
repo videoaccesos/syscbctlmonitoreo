@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Search,
   Loader2,
@@ -8,6 +8,7 @@ import {
   Download,
   Clock,
   AlertTriangle,
+  Filter,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -40,9 +41,15 @@ export default function TarjetasVencimientosPage() {
   const [tab, setTab] = useState<TabKey>("porVencer");
   const [descargando, setDescargando] = useState(false);
 
+  // Filtros por privada y residencia (solo para tabs de detalle)
+  const [filtroPrivada, setFiltroPrivada] = useState("");
+  const [filtroResidencia, setFiltroResidencia] = useState("");
+
   const handleConsultar = async () => {
     if (!fechaIni || !fechaFin) return;
     setLoading(true);
+    setFiltroPrivada("");
+    setFiltroResidencia("");
     try {
       const params = new URLSearchParams({ fechaIni, fechaFin, format: "json" });
       const res = await fetch(`/api/procesos/asignacion-tarjetas/reporte-vencimientos?${params}`);
@@ -90,6 +97,31 @@ export default function TarjetasVencimientosPage() {
     } finally {
       setDescargando(false);
     }
+  };
+
+  // Lista única de privadas para el filtro
+  const privadasDisponibles = useMemo(() => {
+    if (!data) return [];
+    const all = [...data.vencidas, ...data.porVencer];
+    const set = new Set(all.map((r) => String(r.privada || "")));
+    return Array.from(set).filter(Boolean).sort();
+  }, [data]);
+
+  // Filtrar rows según privada y residencia
+  const filtrarRows = (rows: Array<Record<string, unknown>>) => {
+    let filtered = rows;
+    if (filtroPrivada) {
+      filtered = filtered.filter((r) => String(r.privada) === filtroPrivada);
+    }
+    if (filtroResidencia) {
+      const q = filtroResidencia.toLowerCase();
+      filtered = filtered.filter((r) =>
+        String(r.nro_casa || "").toLowerCase().includes(q) ||
+        String(r.calle || "").toLowerCase().includes(q) ||
+        String(r.residente || "").toLowerCase().includes(q)
+      );
+    }
+    return filtered;
   };
 
   return (
@@ -221,13 +253,45 @@ export default function TarjetasVencimientosPage() {
               </div>
             </div>
 
+            {/* Filtros por privada y residencia (solo en tabs de detalle) */}
+            {tab !== "concentrado" && (
+              <div className="px-3 py-2 border-b border-gray-100 flex flex-wrap items-center gap-3 print:hidden">
+                <Filter className="h-4 w-4 text-gray-400" />
+                <select
+                  value={filtroPrivada}
+                  onChange={(e) => setFiltroPrivada(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Todas las privadas</option>
+                  {privadasDisponibles.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder="Buscar casa, calle o residente..."
+                  value={filtroResidencia}
+                  onChange={(e) => setFiltroResidencia(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 w-64"
+                />
+                {(filtroPrivada || filtroResidencia) && (
+                  <button
+                    onClick={() => { setFiltroPrivada(""); setFiltroResidencia(""); }}
+                    className="text-xs text-orange-600 hover:text-orange-800 font-medium"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="hidden print:block px-4 pt-3 pb-1">
               <h3 className="text-lg font-bold">{TAB_LABELS[tab]}</h3>
             </div>
 
             <div className="p-2">
               {tab !== "concentrado" ? (
-                <TablaVencimientos rows={data[tab]} titulo={TAB_LABELS[tab]} esVencidas={tab === "vencidas"} />
+                <TablaVencimientos rows={filtrarRows(data[tab])} titulo={TAB_LABELS[tab]} esVencidas={tab === "vencidas"} />
               ) : (
                 <TablaConcentrado rows={data.concentrado} />
               )}
@@ -282,7 +346,7 @@ function TablaVencimientos({
             <th className="text-left px-3 py-2 font-medium">Teléfono</th>
             <th className="text-center px-3 py-2 font-medium">Tipo</th>
             <th className="text-left px-3 py-2 font-medium">Lectura</th>
-            <th className="text-left px-3 py-2 font-medium">No. Serie</th>
+            <th className="text-left px-3 py-2 font-medium">Concepto</th>
             <th className="text-right px-3 py-2 font-medium">Precio Renov.</th>
             <th className="text-left px-3 py-2 font-medium">Observaciones</th>
           </tr>
@@ -328,7 +392,7 @@ function TablaVencimientos({
                   </span>
                 </td>
                 <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || "-")}</td>
-                <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.numero_serie || "-")}</td>
+                <td className="px-3 py-1.5 text-gray-700">{String(row.concepto || "-")}</td>
                 <td className="px-3 py-1.5 text-right text-green-700 font-medium">
                   ${(Number(row.precio_renovacion) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                 </td>
@@ -339,7 +403,7 @@ function TablaVencimientos({
         </tbody>
         <tfoot>
           <tr className="bg-slate-700 text-white print:bg-gray-800">
-            <td colSpan={14} className="px-3 py-2 text-right font-bold">
+            <td colSpan={13} className="px-3 py-2 text-right font-bold">
               Total: {rows.length} tarjeta(s)
             </td>
             <td className="px-3 py-2 text-right font-bold">
