@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Incluir ambas tablas (Folio H y Folio B) con UNION ALL.
+    // Solo tabla Folio H (residencias_residentes_tarjetas) tiene vencimientos reales.
     // Excluir tarjetas que ya fueron renovadas (asignación posterior en cualquier tabla).
-    const sqlBase = (tabla: string, folio: string) => `
+    const sql = `
       SELECT
         a.asignacion_id,
-        '${folio}' AS folio_tipo,
+        'H' AS folio_tipo,
         CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha_asignacion,
         a.folio_contrato,
         CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         a.observaciones,
         p.precio_vehicular, p.precio_peatonal,
         (CASE t.tipo_id WHEN 2 THEN p.precio_vehicular WHEN 1 THEN p.precio_peatonal ELSE 0 END) AS precio_renovacion
-      FROM \`${tabla}\` a
+      FROM residencias_residentes_tarjetas a
       INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
       INNER JOIN residencias res ON r.residencia_id = res.residencia_id
@@ -73,17 +73,12 @@ export async function GET(request: NextRequest) {
             AND rr3.residencia_id = res.residencia_id
             AND r3.asignacion_id > a.asignacion_id
             AND r3.estatus_id = 1
-        )`;
-
-    const sql = `
-      (${sqlBase("residencias_residentes_tarjetas", "H")})
-      UNION ALL
-      (${sqlBase("residencias_residentes_tarjetas_no_renovacion", "B")})
-      ORDER BY fecha_vencimiento ASC
+        )
+      ORDER BY a.fecha_vencimiento ASC
     `;
 
     const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      sql, fechaIni, fechaFin, fechaIni, fechaFin
+      sql, fechaIni, fechaFin
     );
 
     // Serializar BigInt a Number
