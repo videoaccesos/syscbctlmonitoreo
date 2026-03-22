@@ -735,6 +735,7 @@ function TabPendientes({ pendientes }: { pendientes: Array<Record<string, unknow
               <th className="text-left px-3 py-2 font-medium">Privada</th>
               <th className="text-left px-3 py-2 font-medium">Casa</th>
               <th className="text-left px-3 py-2 font-medium">Residente</th>
+              <th className="text-left px-3 py-2 font-medium">Teléfono</th>
               <th className="text-center px-3 py-2 font-medium">Tipo</th>
               <th className="text-left px-3 py-2 font-medium">Lectura</th>
               <th className="text-right px-3 py-2 font-medium">Precio Renov.</th>
@@ -751,6 +752,7 @@ function TabPendientes({ pendientes }: { pendientes: Array<Record<string, unknow
                 <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
+                <td className="px-3 py-1.5 text-gray-600">{String(row.telefono || "-")}</td>
                 <td className="px-3 py-1.5 text-center">
                   <span className={`text-xs font-medium ${Number(row.tipo_id) === 2 ? "text-purple-700" : "text-teal-700"}`}>
                     {Number(row.tipo_id) === 2 ? "VEH" : "PEA"}
@@ -763,7 +765,7 @@ function TabPendientes({ pendientes }: { pendientes: Array<Record<string, unknow
           </tbody>
           <tfoot>
             <tr className="bg-slate-700 text-white">
-              <td colSpan={7} className="px-3 py-2 font-bold">TOTAL PENDIENTE</td>
+              <td colSpan={8} className="px-3 py-2 font-bold">TOTAL PENDIENTE</td>
               <td className="px-3 py-2 text-right font-bold text-lg">
                 {fmtMoney(pendientes.reduce((s, r) => s + (Number(r.precio_renovacion) || 0), 0))}
               </td>

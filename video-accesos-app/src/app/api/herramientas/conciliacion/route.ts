@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
         p.descripcion AS privada,
         p.renovacion AS privada_renovacion,
         res.nro_casa, res.calle,
+        res.telefono_interfon AS telefono,
         t.lectura,
         (CASE t.tipo_id WHEN 2 THEN p.precio_vehicular WHEN 1 THEN p.precio_peatonal ELSE 0 END) AS precio_renovacion,
         -- Verificar si fue renovada: existe asignacion posterior para mismo residente+residencia
