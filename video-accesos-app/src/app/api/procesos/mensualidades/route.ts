@@ -246,8 +246,8 @@ export async function POST(request: NextRequest) {
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO folios_mensualidades
-        (privada_id, periodo, total, tipo_pago, fecha, observaciones, estatus_id, fecha_modificacion, usuario_mod_id)
-       VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)`,
+        (privada_id, periodo, total, tipo_pago, fecha, observaciones, estatus_id, fecha_modificacion, usuario_mod_id, concepto)
+       VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?, 'MENSUALIDAD')`,
       Number(privadaId),
       periodo,
       total,
