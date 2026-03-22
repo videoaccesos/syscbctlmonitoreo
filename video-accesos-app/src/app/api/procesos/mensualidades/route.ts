@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     // Obtener registros
     const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT
-        fm.folio_mensualidad_id,
+        fm.asignacion_id,
         fm.privada_id,
         p.descripcion AS privada,
         fm.periodo,
@@ -246,8 +246,8 @@ export async function POST(request: NextRequest) {
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO folios_mensualidades
-        (privada_id, periodo, total, tipo_pago, fecha, observaciones, estatus_id, fecha_modificacion, usuario_mod_id, concepto)
-       VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?, 'MENSUALIDAD')`,
+        (privada_id, periodo, total, tipo_pago, fecha, concepto, responsable, estatus, estatus_id, observaciones, fecha_modificacion, usuario_mod_id)
+       VALUES (?, ?, ?, ?, ?, 'MENSUALIDAD', '', 1, 1, ?, NOW(), ?)`,
       Number(privadaId),
       periodo,
       total,
@@ -259,10 +259,10 @@ export async function POST(request: NextRequest) {
 
     // Obtener el registro insertado
     const inserted = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT folio_mensualidad_id, privada_id, periodo, total, tipo_pago, fecha, estatus_id
+      `SELECT asignacion_id, privada_id, periodo, total, tipo_pago, fecha, estatus_id
        FROM folios_mensualidades
        WHERE privada_id = ? AND periodo = ? AND estatus_id = 1
-       ORDER BY folio_mensualidad_id DESC LIMIT 1`,
+       ORDER BY asignacion_id DESC LIMIT 1`,
       Number(privadaId), periodo
     );
 

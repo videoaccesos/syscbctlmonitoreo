@@ -401,11 +401,11 @@ export default function MensualidadesPage() {
                   ) : (
                     pagos.data.map((row, i) => (
                       <tr
-                        key={String(row.folio_mensualidad_id)}
+                        key={String(row.asignacion_id)}
                         className={`border-b border-gray-200 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50`}
                       >
                         <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">
-                          {String(row.folio_mensualidad_id)}
+                          {String(row.asignacion_id)}
                         </td>
                         <td className="px-3 py-1.5 font-medium text-gray-900">{String(row.privada)}</td>
                         <td className="px-3 py-1.5 text-center font-medium text-blue-700">
@@ -439,7 +439,7 @@ export default function MensualidadesPage() {
                         <td className="px-3 py-1.5 text-center">
                           {Number(row.estatus_id) === 1 && (
                             <button
-                              onClick={() => handleCancelar(Number(row.folio_mensualidad_id), String(row.periodo))}
+                              onClick={() => handleCancelar(Number(row.asignacion_id), String(row.periodo))}
                               className="p-1 rounded hover:bg-red-100 text-red-500 hover:text-red-700 transition"
                               title="Cancelar pago"
                             >

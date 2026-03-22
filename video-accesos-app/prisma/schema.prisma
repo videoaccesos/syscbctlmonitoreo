@@ -326,24 +326,25 @@ model Privada {
 
 // folios_mensualidades: Pagos mensuales por privada
 model FolioMensualidad {
-  id                Int      @id @default(autoincrement()) @map("folio_mensualidad_id")
+  id                Int      @id @default(autoincrement()) @map("asignacion_id")
   privadaId         Int      @map("privada_id")
+  concepto          String   @default("MENSUALIDAD") @db.VarChar(100)
+  responsable       String   @default("") @db.VarChar(100)
   periodo           String   @db.VarChar(7) // "YYYY-MM"
   total             Float    @default(0)
-  tipoPago          Int      @default(1) @map("tipo_pago") @db.TinyInt // 1=Efectivo, 2=Bancos
-  fecha             DateTime @db.Date
-  observaciones     String   @default("") @db.Text
+  tipoPago          Int      @default(1) @map("tipo_pago")
+  fecha             String   @default("") @db.VarChar(100)
+  estatus           Int      @default(1) // campo legacy
+  observaciones     String?  @db.Text
   estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt // 1=Activo, 2=Cancelado
-  fechaModificacion DateTime @updatedAt @map("fecha_modificacion")
+  fechaModificacion DateTime? @map("fecha_modificacion")
   usuarioModId      Int      @default(0) @map("usuario_mod_id")
 
   // Relaciones
   privada Privada @relation(fields: [privadaId], references: [id])
 
-  @@unique([privadaId, periodo, estatusId], name: "uq_privada_periodo_activo")
   @@index([privadaId])
   @@index([periodo])
-  @@index([fecha])
   @@map("folios_mensualidades")
 }
 

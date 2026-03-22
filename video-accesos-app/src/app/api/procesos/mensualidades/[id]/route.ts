@@ -26,8 +26,8 @@ export async function DELETE(
 
     // Obtener el registro a cancelar
     const registro = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT folio_mensualidad_id, privada_id, periodo, estatus_id
-       FROM folios_mensualidades WHERE folio_mensualidad_id = ?`,
+      `SELECT asignacion_id, privada_id, periodo, estatus_id
+       FROM folios_mensualidades WHERE asignacion_id = ?`,
       folioId
     );
 
@@ -61,7 +61,7 @@ export async function DELETE(
     await prisma.$executeRawUnsafe(
       `UPDATE folios_mensualidades
        SET estatus_id = 2, fecha_modificacion = NOW(), usuario_mod_id = ?
-       WHERE folio_mensualidad_id = ?`,
+       WHERE asignacion_id = ?`,
       userId, folioId
     );
 
