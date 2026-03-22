@@ -60,7 +60,6 @@ const fullNavigation: NavItem[] = [
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
       { label: "Gastos", href: "/procesos/gastos" },
       { label: "Pago de Mensualidades", href: "/procesos/mensualidades" },
-      { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
     ],
   },
   {
@@ -69,6 +68,7 @@ const fullNavigation: NavItem[] = [
     children: [
       { label: "Corrección Vencimientos", href: "/procesos/correccion-vencimientos" },
       { label: "Conciliación de Tarjetas", href: "/herramientas/conciliacion" },
+      { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
     ],
   },
   {
