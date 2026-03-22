@@ -42,6 +42,10 @@ interface Empleado {
   fechaBaja: string | null;
   motivoBaja: string | null;
   sueldo: number;
+  banco: string | null;
+  nroTarjeta: string | null;
+  clabe: string | null;
+  nroCuenta: string | null;
   permisoAdministrador: number;
   permisoSupervisor: number;
   permisoEncargadoAdministracion: number;
@@ -65,6 +69,10 @@ interface EmpleadoForm {
   email: string;
   fechaIngreso: string;
   sueldo: string;
+  banco: string;
+  nroTarjeta: string;
+  clabe: string;
+  nroCuenta: string;
   permisoAdministrador: number;
   permisoSupervisor: number;
   permisoEncargadoAdministracion: number;
@@ -93,6 +101,10 @@ const emptyForm: EmpleadoForm = {
   email: "",
   fechaIngreso: "",
   sueldo: "",
+  banco: "",
+  nroTarjeta: "",
+  clabe: "",
+  nroCuenta: "",
   permisoAdministrador: 0,
   permisoSupervisor: 0,
   permisoEncargadoAdministracion: 0,
@@ -240,6 +252,10 @@ export default function EmpleadosPage() {
         ? emp.fechaIngreso.substring(0, 10)
         : "",
       sueldo: emp.sueldo ? String(emp.sueldo) : "",
+      banco: emp.banco || "",
+      nroTarjeta: emp.nroTarjeta || "",
+      clabe: emp.clabe || "",
+      nroCuenta: emp.nroCuenta || "",
       permisoAdministrador: emp.permisoAdministrador ?? 0,
       permisoSupervisor: emp.permisoSupervisor ?? 0,
       permisoEncargadoAdministracion: emp.permisoEncargadoAdministracion ?? 0,
@@ -308,6 +324,10 @@ export default function EmpleadosPage() {
         email: form.email || null,
         fechaIngreso: form.fechaIngreso || null,
         sueldo: form.sueldo ? parseFloat(form.sueldo) : 0,
+        banco: form.banco || null,
+        nroTarjeta: form.nroTarjeta || null,
+        clabe: form.clabe || null,
+        nroCuenta: form.nroCuenta || null,
         permisoAdministrador: form.permisoAdministrador,
         permisoSupervisor: form.permisoSupervisor,
         permisoEncargadoAdministracion: form.permisoEncargadoAdministracion,
@@ -826,7 +846,7 @@ export default function EmpleadosPage() {
                 </div>
               </div>
 
-              {/* Sueldo */}
+              {/* Sueldo y Datos Bancarios */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -840,6 +860,64 @@ export default function EmpleadosPage() {
                     min="0"
                     step="0.01"
                     placeholder="0.00"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Banco
+                  </label>
+                  <input
+                    type="text"
+                    name="banco"
+                    value={form.banco}
+                    onChange={handleFormChange}
+                    maxLength={50}
+                    placeholder="Ej: BBVA, Banorte, HSBC"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    No. Tarjeta
+                  </label>
+                  <input
+                    type="text"
+                    name="nroTarjeta"
+                    value={form.nroTarjeta}
+                    onChange={handleFormChange}
+                    maxLength={20}
+                    placeholder="16 dígitos"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CLABE
+                  </label>
+                  <input
+                    type="text"
+                    name="clabe"
+                    value={form.clabe}
+                    onChange={handleFormChange}
+                    maxLength={18}
+                    placeholder="18 dígitos"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    No. Cuenta
+                  </label>
+                  <input
+                    type="text"
+                    name="nroCuenta"
+                    value={form.nroCuenta}
+                    onChange={handleFormChange}
+                    maxLength={20}
+                    placeholder="No. de cuenta"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   />
                 </div>

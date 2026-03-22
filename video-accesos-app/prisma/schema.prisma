@@ -161,6 +161,10 @@ model Empleado {
   motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
   googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(16)
   sueldo                        Float    @default(0) @map("sueldo")
+  banco                         String   @default("") @map("banco") @db.VarChar(50)
+  nroTarjeta                    String   @default("") @map("nro_tarjeta") @db.VarChar(20)
+  clabe                         String   @default("") @map("clabe") @db.VarChar(18)
+  nroCuenta                     String   @default("") @map("nro_cuenta") @db.VarChar(20)
   permisoAdministrador          Int      @default(0) @map("permiso_administrador")
   permisoEncargadoAdministracion Int     @default(0) @map("permiso_encargado_administracion")
   permisoSupervisor             Int      @default(0) @map("permiso_supervisor")
