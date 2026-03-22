@@ -160,6 +160,7 @@ model Empleado {
   fechaBaja                     DateTime? @map("fecha_baja") @db.Date
   motivoBaja                    String   @default("") @map("motivo_baja") @db.Text
   googleAuthCode                String   @default("") @map("google_auth_code") @db.VarChar(16)
+  sueldo                        Float    @default(0) @map("sueldo")
   permisoAdministrador          Int      @default(0) @map("permiso_administrador")
   permisoEncargadoAdministracion Int     @default(0) @map("permiso_encargado_administracion")
   permisoSupervisor             Int      @default(0) @map("permiso_supervisor")
@@ -174,6 +175,7 @@ model Empleado {
   ordenesTecnico   OrdenServicio[]  @relation("OrdenTecnico")
   ordenesCierre    OrdenServicio[]  @relation("OrdenCierreTecnico")
   ordenesEmpleado  OrdenServicio[]  @relation("OrdenEmpleado")
+  prenominas       Prenomina[]
 
   @@index([puestoId])
   @@map("empleados")
@@ -346,6 +348,31 @@ model FolioMensualidad {
   @@index([privadaId])
   @@index([periodo])
   @@map("folios_mensualidades")
+}
+
+// prenomina: prenomina quincenal de empleados
+model Prenomina {
+  id                Int      @id @default(autoincrement()) @map("prenomina_id")
+  empleadoId        Int      @map("empleado_id")
+  periodo           String   @db.VarChar(7)  // "YYYY-MM"
+  quincena          Int      @db.TinyInt     // 1 = 1ra quincena, 2 = 2da quincena
+  sueldoBase        Float    @default(0) @map("sueldo_base")
+  diasTrabajados    Int      @default(15) @map("dias_trabajados")
+  deducciones       Float    @default(0)
+  percepciones      Float    @default(0)
+  totalPagar        Float    @default(0) @map("total_pagar")
+  observaciones     String?  @db.Text
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt // 1=Pendiente, 2=Aprobada, 3=Pagada, 4=Cancelada
+  fechaCreacion     DateTime @default(now()) @map("fecha_creacion")
+  fechaModificacion DateTime? @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_mod_id")
+
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@unique([empleadoId, periodo, quincena], name: "uq_empleado_periodo_quincena")
+  @@index([empleadoId])
+  @@index([periodo])
+  @@map("prenomina")
 }
 
 // privadas_relays: tabla separada para config detallada de relays

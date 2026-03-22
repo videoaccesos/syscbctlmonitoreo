@@ -108,6 +108,7 @@ export async function PUT(
         celular: body.celular?.trim() || "",
         email: body.email?.trim() || "",
         fechaIngreso: body.fechaIngreso ? new Date(body.fechaIngreso) : new Date(),
+        sueldo: body.sueldo !== undefined ? Number(body.sueldo) : undefined,
         permisoAdministrador: body.permisoAdministrador || 0,
         permisoEncargadoAdministracion: body.permisoEncargadoAdministracion || 0,
         permisoSupervisor: body.permisoSupervisor || 0,

@@ -41,6 +41,7 @@ interface Empleado {
   fechaIngreso: string | null;
   fechaBaja: string | null;
   motivoBaja: string | null;
+  sueldo: number;
   permisoAdministrador: number;
   permisoSupervisor: number;
   permisoEncargadoAdministracion: number;
@@ -63,6 +64,7 @@ interface EmpleadoForm {
   celular: string;
   email: string;
   fechaIngreso: string;
+  sueldo: string;
   permisoAdministrador: number;
   permisoSupervisor: number;
   permisoEncargadoAdministracion: number;
@@ -90,6 +92,7 @@ const emptyForm: EmpleadoForm = {
   celular: "",
   email: "",
   fechaIngreso: "",
+  sueldo: "",
   permisoAdministrador: 0,
   permisoSupervisor: 0,
   permisoEncargadoAdministracion: 0,
@@ -236,6 +239,7 @@ export default function EmpleadosPage() {
       fechaIngreso: emp.fechaIngreso
         ? emp.fechaIngreso.substring(0, 10)
         : "",
+      sueldo: emp.sueldo ? String(emp.sueldo) : "",
       permisoAdministrador: emp.permisoAdministrador ?? 0,
       permisoSupervisor: emp.permisoSupervisor ?? 0,
       permisoEncargadoAdministracion: emp.permisoEncargadoAdministracion ?? 0,
@@ -303,6 +307,7 @@ export default function EmpleadosPage() {
         celular: form.celular || null,
         email: form.email || null,
         fechaIngreso: form.fechaIngreso || null,
+        sueldo: form.sueldo ? parseFloat(form.sueldo) : 0,
         permisoAdministrador: form.permisoAdministrador,
         permisoSupervisor: form.permisoSupervisor,
         permisoEncargadoAdministracion: form.permisoEncargadoAdministracion,
@@ -474,6 +479,9 @@ export default function EmpleadosPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Email
                 </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Sueldo
+                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
                   onClick={() => handleSort("estatusId")}
@@ -491,7 +499,7 @@ export default function EmpleadosPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12">
+                  <td colSpan={8} className="text-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
                     <p className="text-gray-600 text-sm mt-2">Cargando...</p>
                   </td>
@@ -499,7 +507,7 @@ export default function EmpleadosPage() {
               ) : empleados.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-12 text-gray-600 text-sm"
                   >
                     No se encontraron empleados
@@ -522,6 +530,9 @@ export default function EmpleadosPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {emp.email || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 text-right">
+                      {emp.sueldo ? `$${emp.sueldo.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "-"}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {emp.estatusId === 1 ? (
@@ -810,6 +821,25 @@ export default function EmpleadosPage() {
                     name="fechaIngreso"
                     value={form.fechaIngreso}
                     onChange={handleFormChange}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Sueldo */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sueldo Mensual
+                  </label>
+                  <input
+                    type="number"
+                    name="sueldo"
+                    value={form.sueldo}
+                    onChange={handleFormChange}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   />
                 </div>

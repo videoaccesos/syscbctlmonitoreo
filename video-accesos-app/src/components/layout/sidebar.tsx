@@ -60,6 +60,7 @@ const fullNavigation: NavItem[] = [
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
       { label: "Gastos", href: "/procesos/gastos" },
       { label: "Pago de Mensualidades", href: "/procesos/mensualidades" },
+      { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
     ],
   },
   {
