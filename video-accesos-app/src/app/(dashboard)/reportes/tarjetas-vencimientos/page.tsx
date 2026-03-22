@@ -335,6 +335,7 @@ function TablaVencimientos({
         <thead>
           <tr className="bg-slate-700 text-white print:bg-gray-800">
             <th className="text-center px-3 py-2 font-medium w-8">No.</th>
+            <th className="text-center px-3 py-2 font-medium">Folio</th>
             <th className="text-left px-3 py-2 font-medium">Folio Contrato</th>
             <th className="text-left px-3 py-2 font-medium">F. Asignación</th>
             <th className="text-left px-3 py-2 font-medium">Vencimiento</th>
@@ -373,6 +374,15 @@ function TablaVencimientos({
                 <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">
                   {String(row.asignacion_id || i + 1)}
                 </td>
+                <td className="px-3 py-1.5 text-center">
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                    String(row.folio_tipo) === "H"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {String(row.folio_tipo || "-")}
+                  </span>
+                </td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.folio_contrato || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(row.fecha_asignacion || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium whitespace-nowrap">{String(row.fecha_vencimiento || "-")}</td>
@@ -403,7 +413,7 @@ function TablaVencimientos({
         </tbody>
         <tfoot>
           <tr className="bg-slate-700 text-white print:bg-gray-800">
-            <td colSpan={13} className="px-3 py-2 text-right font-bold">
+            <td colSpan={14} className="px-3 py-2 text-right font-bold">
               Total: {rows.length} tarjeta(s)
             </td>
             <td className="px-3 py-2 text-right font-bold">

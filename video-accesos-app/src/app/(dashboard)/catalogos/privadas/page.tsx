@@ -562,7 +562,7 @@ export default function PrivadasPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* overlay */}
-          <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+          <div className="absolute inset-0 bg-black/50" />
 
           {/* dialog */}
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto mx-4">

@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Solo Folio H tiene fecha_vencimiento.
-    // Excluir tarjetas que ya fueron renovadas: existe otra asignación
-    // más reciente para la misma tarjeta (en cualquiera de las dos tablas).
-    const sql = `
+    // Incluir ambas tablas (Folio H y Folio B) con UNION ALL.
+    // Excluir tarjetas que ya fueron renovadas (asignación posterior en cualquier tabla).
+    const sqlBase = (tabla: string, folio: string) => `
       SELECT
         a.asignacion_id,
+        '${folio}' AS folio_tipo,
         CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha_asignacion,
         a.folio_contrato,
         CAST(NULLIF(a.fecha_vencimiento, '0000-00-00') AS CHAR) AS fecha_vencimiento,
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         a.observaciones,
         p.precio_vehicular, p.precio_peatonal,
         (CASE t.tipo_id WHEN 2 THEN p.precio_vehicular WHEN 1 THEN p.precio_peatonal ELSE 0 END) AS precio_renovacion
-      FROM residencias_residentes_tarjetas a
+      FROM \`${tabla}\` a
       INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
       INNER JOIN residencias res ON r.residencia_id = res.residencia_id
@@ -58,8 +58,6 @@ export async function GET(request: NextRequest) {
         AND a.fecha_vencimiento >= ?
         AND a.fecha_vencimiento <= ?
         AND a.fecha_vencimiento != '0000-00-00'
-        -- Excluir si ya se renovó en Folio H (misma tarjeta + misma residencia,
-        -- cualquier asignación posterior hasta HOY, no solo dentro del periodo)
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas r2
           INNER JOIN residencias_residentes rr2 ON r2.residente_id = rr2.residente_id
@@ -68,8 +66,6 @@ export async function GET(request: NextRequest) {
             AND r2.asignacion_id > a.asignacion_id
             AND r2.estatus_id = 1
         )
-        -- Excluir si ya se renovó en Folio B (misma tarjeta + misma residencia,
-        -- cualquier asignación posterior hasta HOY)
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas_no_renovacion r3
           INNER JOIN residencias_residentes rr3 ON r3.residente_id = rr3.residente_id
@@ -77,12 +73,17 @@ export async function GET(request: NextRequest) {
             AND rr3.residencia_id = res.residencia_id
             AND r3.asignacion_id > a.asignacion_id
             AND r3.estatus_id = 1
-        )
-      ORDER BY a.fecha_vencimiento ASC
+        )`;
+
+    const sql = `
+      (${sqlBase("residencias_residentes_tarjetas", "H")})
+      UNION ALL
+      (${sqlBase("residencias_residentes_tarjetas_no_renovacion", "B")})
+      ORDER BY fecha_vencimiento ASC
     `;
 
     const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      sql, fechaIni, fechaFin
+      sql, fechaIni, fechaFin, fechaIni, fechaFin
     );
 
     // Serializar BigInt a Number
@@ -157,7 +158,7 @@ export async function GET(request: NextRequest) {
     };
 
     const excelHeaders = [
-      "No.", "Folio Contrato", "Fecha Asignación", "Vencimiento", "Días Rest.",
+      "No.", "Folio", "Folio Contrato", "Fecha Asignación", "Vencimiento", "Días Rest.",
       "Privada", "Calle", "Casa", "Residente", "Teléfono", "Tipo", "Lectura",
       "Concepto", "Estatus", "Precio Renovación", "Observaciones"
     ];
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const addSheet = (name: string, title: string, data: Array<Record<string, unknown>>) => {
       const ws = workbook.addWorksheet(name);
-      ws.mergeCells("A1:P1");
+      ws.mergeCells("A1:Q1");
       const tc = ws.getCell("A1");
       tc.value = `${title} - Del ${fechaIni} al ${fechaFin}`;
       tc.font = { bold: true, size: 14, color: { argb: "FF1E40AF" } };
@@ -177,7 +178,8 @@ export async function GET(request: NextRequest) {
 
       for (const row of data) {
         const dr = ws.addRow([
-          row.asignacion_id || "", row.folio_contrato || "",
+          row.asignacion_id || "", row.folio_tipo || "",
+          row.folio_contrato || "",
           row.fecha_asignacion || "", row.fecha_vencimiento || "",
           row.dias_restantes ?? "", row.privada || "",
           row.calle || "", row.nro_casa || "",
@@ -189,28 +191,28 @@ export async function GET(request: NextRequest) {
         ]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         dr.eachCell((c: any) => { c.border = cellBorder; });
-        // Formato moneda para precio renovación
-        dr.getCell(15).numFmt = '$#,##0.00';
-        // Colorear días restantes
+        // Formato moneda para precio renovación (columna 16)
+        dr.getCell(16).numFmt = '$#,##0.00';
+        // Colorear días restantes (columna 6)
         const dias = Number(row.dias_restantes);
         if (dias < 0) {
-          dr.getCell(5).font = { bold: true, color: { argb: "FFDC2626" } };
+          dr.getCell(6).font = { bold: true, color: { argb: "FFDC2626" } };
         } else if (dias <= 30) {
-          dr.getCell(5).font = { bold: true, color: { argb: "FFF59E0B" } };
+          dr.getCell(6).font = { bold: true, color: { argb: "FFF59E0B" } };
         }
       }
 
       ws.addRow([]);
       const sumaRenovacion = data.reduce((acc, r) => acc + (Number(r.precio_renovacion) || 0), 0);
-      const totalRow = ws.addRow([`Total: ${data.length} tarjeta(s)`, "", "", "", "", "", "", "", "", "", "", "", "", "", sumaRenovacion]);
+      const totalRow = ws.addRow([`Total: ${data.length} tarjeta(s)`, "", "", "", "", "", "", "", "", "", "", "", "", "", "", sumaRenovacion]);
       totalRow.getCell(1).font = { bold: true, size: 12 };
-      totalRow.getCell(15).font = { bold: true, size: 12 };
-      totalRow.getCell(15).numFmt = '$#,##0.00';
+      totalRow.getCell(16).font = { bold: true, size: 12 };
+      totalRow.getCell(16).numFmt = '$#,##0.00';
 
       ws.columns = [
-        { width: 8 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 },
+        { width: 8 }, { width: 8 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 },
         { width: 20 }, { width: 20 }, { width: 8 }, { width: 30 }, { width: 14 },
-        { width: 12 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 16 }, { width: 25 }
+        { width: 12 }, { width: 18 }, { width: 14 }, { width: 12 }, { width: 16 }, { width: 25 }
       ];
       return ws;
     };
