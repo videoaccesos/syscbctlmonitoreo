@@ -11,6 +11,7 @@ import {
   ChevronDown,
   LogOut,
   Monitor,
+  Wrench,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useState, useEffect } from "react";
@@ -58,7 +59,14 @@ const fullNavigation: NavItem[] = [
       { label: "Órdenes de Servicio", href: "/procesos/ordenes-servicio" },
       { label: "Supervisión de Llamadas", href: "/procesos/supervision-llamadas" },
       { label: "Gastos", href: "/procesos/gastos" },
+    ],
+  },
+  {
+    label: "Herramientas",
+    icon: <Wrench className="h-5 w-5" />,
+    children: [
       { label: "Corrección Vencimientos", href: "/procesos/correccion-vencimientos" },
+      { label: "Conciliación de Tarjetas", href: "/herramientas/conciliacion" },
     ],
   },
   {
