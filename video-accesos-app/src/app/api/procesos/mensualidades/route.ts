@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureMensualidadesSchema } from "@/lib/ensure-mensualidades";
 
 // Helper: obtener el periodo siguiente a uno dado (YYYY-MM)
 function nextPeriodo(periodo: string): string {
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    await ensureMensualidadesSchema();
 
     const { searchParams } = new URL(request.url);
     const privadaId = searchParams.get("privadaId");
@@ -131,6 +134,8 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    await ensureMensualidadesSchema();
 
     const body = await request.json();
     const { privadaId, periodo, tipoPago, observaciones } = body;

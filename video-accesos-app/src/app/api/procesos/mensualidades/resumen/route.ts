@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureMensualidadesSchema } from "@/lib/ensure-mensualidades";
 
 // GET /api/procesos/mensualidades/resumen
 // Devuelve el estado de cada privada con mensualidad activa:
@@ -12,6 +13,8 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    await ensureMensualidadesSchema();
 
     const { searchParams } = new URL(request.url);
     const periodoActual = searchParams.get("periodoActual") ||

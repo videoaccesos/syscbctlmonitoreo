@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureMensualidadesSchema } from "@/lib/ensure-mensualidades";
 
 // DELETE /api/procesos/mensualidades/[id] — Cancela un pago de mensualidad
 // Solo permite cancelar el ÚLTIMO pago de esa privada (para mantener secuencia)
@@ -14,6 +15,8 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    await ensureMensualidadesSchema();
 
     const { id } = await params;
     const folioId = Number(id);
