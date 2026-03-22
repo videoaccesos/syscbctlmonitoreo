@@ -55,22 +55,21 @@ export async function GET(request: NextRequest) {
       INNER JOIN privadas p ON res.privada_id = p.privada_id
       WHERE a.estatus_id = 1
         AND p.estatus_id = 1
+        AND p.renovacion = 1
         AND a.fecha_vencimiento >= ?
         AND a.fecha_vencimiento <= ?
         AND a.fecha_vencimiento != '0000-00-00'
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas r2
           INNER JOIN residencias_residentes rr2 ON r2.residente_id = rr2.residente_id
-          WHERE r2.tarjeta_id = a.tarjeta_id
-            AND rr2.residencia_id = res.residencia_id
+          WHERE rr2.residencia_id = res.residencia_id
             AND r2.asignacion_id > a.asignacion_id
             AND r2.estatus_id = 1
         )
         AND NOT EXISTS (
           SELECT 1 FROM residencias_residentes_tarjetas_no_renovacion r3
           INNER JOIN residencias_residentes rr3 ON r3.residente_id = rr3.residente_id
-          WHERE r3.tarjeta_id = a.tarjeta_id
-            AND rr3.residencia_id = res.residencia_id
+          WHERE rr3.residencia_id = res.residencia_id
             AND r3.asignacion_id > a.asignacion_id
             AND r3.estatus_id = 1
         )

@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       FROM (${buildUnion(
         "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0",
         "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 0"
-      )}) a ${joinsSql} ORDER BY a.fecha
+      )}) a ${joinsSql} WHERE p.estatus_id = 1 ORDER BY a.fecha
     `;
 
     const sqlSeguro = `
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       FROM (${buildUnion(
         "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1",
         "fecha >= ? AND fecha <= ? AND estatus_id = 1 AND utilizo_seguro = 1"
-      )}) a ${joinsSql} ORDER BY a.fecha
+      )}) a ${joinsSql} WHERE p.estatus_id = 1 ORDER BY a.fecha
     `;
 
     const sqlCanceladas = `
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       FROM (${buildUnion(
         "fecha >= ? AND fecha <= ? AND estatus_id = 2",
         "fecha >= ? AND fecha <= ? AND estatus_id = 2"
-      )}) a ${joinsSql} ORDER BY a.fecha
+      )}) a ${joinsSql} WHERE p.estatus_id = 1 ORDER BY a.fecha
     `;
 
     const sqlConcentrado = `
@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         "fecha >= ? AND fecha <= ? AND estatus_id = 1",
         "fecha >= ? AND fecha <= ? AND estatus_id = 1"
       )}) a ${joinsSql}
+      WHERE p.estatus_id = 1
       GROUP BY p.descripcion, t.tipo_id
       ORDER BY p.descripcion
     `;
