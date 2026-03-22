@@ -1109,56 +1109,40 @@ export default function AsignacionTarjetasPage() {
                 </div>
               )}
 
-              {/* Tipo de Folio */}
+              {/* Tipo de Folio (definido por la privada, no editable) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Folio <span className="text-red-500">*</span>
+                  Tipo de Folio
                 </label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       name="folioTipo"
                       value="H"
                       checked={form.folioTipo === "H"}
-                      onChange={() => {
-                        setField("folioTipo", "H");
-                        if (!form.fechaVencimiento) {
-                          setField(
-                            "fechaVencimiento",
-                            calcularFechaVencimiento()
-                          );
-                        }
-                      }}
+                      disabled
                       className="text-blue-600"
                     />
-                    <span className="text-sm">
-                      <span className="font-semibold text-blue-700">
-                        Folio H
-                      </span>{" "}
-                      - Con Renovacion
+                    <span className={`text-sm ${form.folioTipo === "H" ? "font-semibold text-blue-700" : "text-gray-400"}`}>
+                      Folio H - Con Renovacion
                     </span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       name="folioTipo"
                       value="B"
                       checked={form.folioTipo === "B"}
-                      onChange={() => {
-                        setField("folioTipo", "B");
-                        setField("fechaVencimiento", "");
-                      }}
-                      className="text-orange-600"
+                      disabled
+                      className="text-amber-600"
                     />
-                    <span className="text-sm">
-                      <span className="font-semibold text-orange-700">
-                        Folio B
-                      </span>{" "}
-                      - Sin Renovacion
+                    <span className={`text-sm ${form.folioTipo === "B" ? "font-semibold text-amber-700" : "text-gray-400"}`}>
+                      Folio B - Sin Renovacion
                     </span>
                   </label>
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Definido por la configuración de la privada</p>
               </div>
 
               {/* Filtros de busqueda de residente */}
