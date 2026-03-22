@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const fechaHasta = searchParams.get("fechaHasta");
     const tipoPago = searchParams.get("tipoPago");
     const tipoGastoId = searchParams.get("tipoGastoId");
+    const cuentaGastoId = searchParams.get("cuentaGastoId");
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     // Construir filtros dinamicamente
     const where: Record<string, unknown> = {
-      estatusId: 1, // Solo gastos activos por defecto
+      estatusId: 1,
     };
 
     if (privadaId) {
@@ -39,26 +40,20 @@ export async function GET(request: NextRequest) {
       where.tipoGastoId = parseInt(tipoGastoId, 10);
     }
 
-    // Filtro de fechas - fechaPago is String (VarChar 100), not DateTime
-    // Use string comparison for date filtering
+    if (cuentaGastoId) {
+      where.cuentaGastoId = parseInt(cuentaGastoId, 10);
+    }
+
     if (fechaDesde || fechaHasta) {
       if (fechaDesde && fechaHasta) {
-        where.fechaPago = {
-          gte: fechaDesde,
-          lte: fechaHasta,
-        };
+        where.fechaPago = { gte: fechaDesde, lte: fechaHasta };
       } else if (fechaDesde) {
-        where.fechaPago = {
-          gte: fechaDesde,
-        };
+        where.fechaPago = { gte: fechaDesde };
       } else if (fechaHasta) {
-        where.fechaPago = {
-          lte: fechaHasta,
-        };
+        where.fechaPago = { lte: fechaHasta };
       }
     }
 
-    // Busqueda por descripcionGasto o comprobante
     if (search) {
       where.OR = [
         { descripcionGasto: { contains: search } },
@@ -76,6 +71,9 @@ export async function GET(request: NextRequest) {
           privada: {
             select: { id: true, descripcion: true },
           },
+          cuentaGasto: {
+            select: { id: true, clave: true, descripcion: true },
+          },
         },
         orderBy: { fechaPago: "desc" },
         skip,
@@ -84,9 +82,7 @@ export async function GET(request: NextRequest) {
       prisma.gasto.count({ where }),
       prisma.gasto.aggregate({
         where,
-        _sum: {
-          total: true,
-        },
+        _sum: { total: true },
       }),
     ]);
 
@@ -122,6 +118,7 @@ export async function POST(request: NextRequest) {
     const {
       tipoGastoId,
       privadaId,
+      cuentaGastoId,
       descripcionGasto,
       fechaPago,
       comprobante,
@@ -131,44 +128,38 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validacion de campos requeridos
-    if (!tipoGastoId || !privadaId || !descripcionGasto || !fechaPago || !total || tipoPago === undefined) {
+    if (!tipoGastoId || privadaId === undefined || !descripcionGasto || !fechaPago || !total || tipoPago === undefined) {
       return NextResponse.json(
-        {
-          error:
-            "Campos requeridos: tipoGastoId, privadaId, descripcionGasto, fechaPago, total, tipoPago",
-        },
+        { error: "Campos requeridos: tipoGastoId, privadaId, descripcionGasto, fechaPago, total, tipoPago" },
         { status: 400 }
       );
     }
 
-    // Validar que la privada existe
-    const privada = await prisma.privada.findFirst({
-      where: { id: parseInt(privadaId, 10), estatusId: 1 },
-    });
+    const pId = parseInt(privadaId, 10);
 
-    if (!privada) {
-      return NextResponse.json(
-        { error: "Privada no encontrada" },
-        { status: 404 }
-      );
+    // Si privadaId > 0, validar que la privada exista
+    if (pId > 0) {
+      const privada = await prisma.privada.findFirst({
+        where: { id: pId, estatusId: 1 },
+      });
+      if (!privada) {
+        return NextResponse.json({ error: "Privada no encontrada" }, { status: 404 });
+      }
     }
 
-    // Validar que el tipo de gasto existe
+    // Validar tipo de gasto
     const tipoGasto = await prisma.tipoGasto.findFirst({
       where: { id: parseInt(tipoGastoId, 10), estatusId: 1 },
     });
-
     if (!tipoGasto) {
-      return NextResponse.json(
-        { error: "Tipo de gasto no encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Tipo de gasto no encontrado" }, { status: 404 });
     }
 
     const gasto = await prisma.gasto.create({
       data: {
         tipoGastoId: parseInt(tipoGastoId, 10),
-        privadaId: parseInt(privadaId, 10),
+        privadaId: pId,
+        cuentaGastoId: cuentaGastoId ? parseInt(cuentaGastoId, 10) : 0,
         descripcionGasto: descripcionGasto.trim(),
         fechaPago: String(fechaPago) || "",
         comprobante: comprobante?.trim() || "",
@@ -177,12 +168,9 @@ export async function POST(request: NextRequest) {
         fecha: fecha ? String(fecha) : "",
       },
       include: {
-        tipoGasto: {
-          select: { id: true, gasto: true },
-        },
-        privada: {
-          select: { id: true, descripcion: true },
-        },
+        tipoGasto: { select: { id: true, gasto: true } },
+        privada: { select: { id: true, descripcion: true } },
+        cuentaGasto: { select: { id: true, clave: true, descripcion: true } },
       },
     });
 

@@ -1,20 +1,28 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Pencil, Trash2, X, DollarSign } from "lucide-react";
+import { Plus, Pencil, Trash2, X, DollarSign } from "lucide-react";
+
+interface CuentaGasto {
+  id: number;
+  clave: string;
+  descripcion: string;
+}
 
 interface Gasto {
   id: number;
   tipoGastoId: number;
   privadaId: number;
+  cuentaGastoId: number;
   descripcionGasto: string;
   fechaPago: string;
   comprobante: string | null;
   total: number;
   tipoPago: number;
   estatusId: number;
-  tipoGasto?: { descripcion: string };
-  privada?: { descripcion: string };
+  tipoGasto?: { id: number; gasto: string };
+  privada?: { id: number; descripcion: string };
+  cuentaGasto?: { id: number; clave: string; descripcion: string } | null;
 }
 
 interface Privada {
@@ -24,7 +32,7 @@ interface Privada {
 
 interface TipoGasto {
   id: number;
-  descripcion: string;
+  gasto: string;
 }
 
 const TIPO_PAGO: Record<number, string> = {
@@ -37,16 +45,19 @@ export default function GastosPage() {
   const [data, setData] = useState<Gasto[]>([]);
   const [privadas, setPrivadas] = useState<Privada[]>([]);
   const [tiposGasto, setTiposGasto] = useState<TipoGasto[]>([]);
+  const [cuentasGasto, setCuentasGasto] = useState<CuentaGasto[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [filtroPrivada, setFiltroPrivada] = useState("");
+  const [filtroCuenta, setFiltroCuenta] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Gasto | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     tipoGastoId: "",
     privadaId: "",
+    cuentaGastoId: "",
     descripcionGasto: "",
     fechaPago: new Date().toISOString().split("T")[0],
     comprobante: "",
@@ -63,21 +74,32 @@ export default function GastosPage() {
         limit: String(limit),
       });
       if (filtroPrivada) params.append("privadaId", filtroPrivada);
+      if (filtroCuenta) params.append("cuentaGastoId", filtroCuenta);
       const res = await fetch(`/api/procesos/gastos?${params}`);
       const json = await res.json();
       setData(json.data || []);
-      setTotal(json.total || 0);
+      setTotal(json.pagination?.total || 0);
     } catch {
       console.error("Error al cargar datos");
     } finally {
       setLoading(false);
     }
-  }, [page, filtroPrivada]);
+  }, [page, filtroPrivada, filtroCuenta]);
 
   useEffect(() => {
+    // Cargar catálogos
     fetch("/api/catalogos/privadas?pageSize=999&estatusId=1")
       .then((r) => r.json())
       .then((j) => setPrivadas(j.data || []));
+    fetch("/api/catalogos/cuentas-gasto?estatus=activos")
+      .then((r) => r.json())
+      .then((j) => setCuentasGasto(j.data || []));
+    fetch("/api/catalogos/tipos-gastos?estatus=activos")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.data) setTiposGasto(j.data);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -85,17 +107,14 @@ export default function GastosPage() {
   }, [fetchData]);
 
   const totalPages = Math.ceil(total / limit);
-
-  const sumaTotal = data.reduce(
-    (acc, g) => acc + (Number(g.total) || 0),
-    0
-  );
+  const sumaTotal = data.reduce((acc, g) => acc + (Number(g.total) || 0), 0);
 
   const openCreate = () => {
     setEditing(null);
     setForm({
       tipoGastoId: "",
       privadaId: "",
+      cuentaGastoId: "",
       descripcionGasto: "",
       fechaPago: new Date().toISOString().split("T")[0],
       comprobante: "",
@@ -111,6 +130,7 @@ export default function GastosPage() {
     setForm({
       tipoGastoId: String(gasto.tipoGastoId),
       privadaId: String(gasto.privadaId),
+      cuentaGastoId: gasto.cuentaGastoId ? String(gasto.cuentaGastoId) : "",
       descripcionGasto: gasto.descripcionGasto,
       fechaPago: gasto.fechaPago || "",
       comprobante: gasto.comprobante || "",
@@ -122,8 +142,8 @@ export default function GastosPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.tipoGastoId || !form.privadaId || !form.descripcionGasto || !form.total) {
-      setError("Todos los campos requeridos deben llenarse");
+    if (!form.privadaId || !form.descripcionGasto || !form.total) {
+      setError("Destino, descripción y total son requeridos");
       return;
     }
     try {
@@ -134,9 +154,12 @@ export default function GastosPage() {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          tipoGastoId: parseInt(form.tipoGastoId),
+          tipoGastoId: form.tipoGastoId ? parseInt(form.tipoGastoId) : 1,
           privadaId: parseInt(form.privadaId),
+          cuentaGastoId: form.cuentaGastoId ? parseInt(form.cuentaGastoId) : 0,
+          descripcionGasto: form.descripcionGasto,
+          fechaPago: form.fechaPago,
+          comprobante: form.comprobante,
           total: parseFloat(form.total),
           tipoPago: parseInt(form.tipoPago),
         }),
@@ -164,7 +187,9 @@ export default function GastosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-          <p className="text-gray-700 mt-1">Registro de gastos por privada</p>
+          <p className="text-gray-700 mt-1">
+            Registro de gastos por privada o gastos generales
+          </p>
         </div>
         <button
           onClick={openCreate}
@@ -177,10 +202,10 @@ export default function GastosPage() {
 
       {/* Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex gap-4 items-end">
+        <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Privada
+              Destino
             </label>
             <select
               value={filtroPrivada}
@@ -190,10 +215,31 @@ export default function GastosPage() {
               }}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
             >
-              <option value="">Todas</option>
+              <option value="">Todos</option>
+              <option value="0">Gastos Generales</option>
               {privadas.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.descripcion}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Cuenta de Gasto
+            </label>
+            <select
+              value={filtroCuenta}
+              onChange={(e) => {
+                setFiltroCuenta(e.target.value);
+                setPage(1);
+              }}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">Todas</option>
+              {cuentasGasto.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.clave} - {c.descripcion}
                 </option>
               ))}
             </select>
@@ -210,10 +256,10 @@ export default function GastosPage() {
                 Fecha
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">
-                Privada
+                Destino
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">
-                Tipo
+                Cuenta
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">
                 Descripcion
@@ -248,18 +294,25 @@ export default function GastosPage() {
                   key={gasto.id}
                   className="border-b hover:bg-gray-50 transition"
                 >
+                  <td className="px-4 py-3">{gasto.fechaPago || "-"}</td>
                   <td className="px-4 py-3">
-                    {gasto.fechaPago || "-"}
+                    {gasto.privadaId === 0 ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-600/20 ring-inset">
+                        Gasto General
+                      </span>
+                    ) : (
+                      gasto.privada?.descripcion || "--"
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    {gasto.privada?.descripcion || "--"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {gasto.tipoGasto?.descripcion || "--"}
+                  <td className="px-4 py-3 text-gray-600">
+                    {gasto.cuentaGasto
+                      ? `${gasto.cuentaGasto.clave} - ${gasto.cuentaGasto.descripcion}`
+                      : "-"}
                   </td>
                   <td className="px-4 py-3">{gasto.descripcionGasto}</td>
                   <td className="px-4 py-3 text-right font-medium">
-                    ${Number(gasto.total).toLocaleString("es-MX", {
+                    $
+                    {Number(gasto.total).toLocaleString("es-MX", {
                       minimumFractionDigits: 2,
                     })}
                   </td>
@@ -293,7 +346,8 @@ export default function GastosPage() {
                   Total:
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-green-700">
-                  ${sumaTotal.toLocaleString("es-MX", {
+                  $
+                  {sumaTotal.toLocaleString("es-MX", {
                     minimumFractionDigits: 2,
                   })}
                 </td>
@@ -350,7 +404,7 @@ export default function GastosPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Privada *
+                  Destino *
                 </label>
                 <select
                   value={form.privadaId}
@@ -360,9 +414,29 @@ export default function GastosPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="">Seleccionar...</option>
+                  <option value="0">--- GASTOS GENERALES ---</option>
                   {privadas.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.descripcion}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cuenta de Gasto
+                </label>
+                <select
+                  value={form.cuentaGastoId}
+                  onChange={(e) =>
+                    setForm({ ...form, cuentaGastoId: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">Sin cuenta asignada</option>
+                  {cuentasGasto.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.clave} - {c.descripcion}
                     </option>
                   ))}
                 </select>

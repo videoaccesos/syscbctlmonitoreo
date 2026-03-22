@@ -24,12 +24,9 @@ export async function GET(
     const gasto = await prisma.gasto.findUnique({
       where: { id: gastoId },
       include: {
-        tipoGasto: {
-          select: { id: true, gasto: true },
-        },
-        privada: {
-          select: { id: true, descripcion: true },
-        },
+        tipoGasto: { select: { id: true, gasto: true } },
+        privada: { select: { id: true, descripcion: true } },
+        cuentaGasto: { select: { id: true, clave: true, descripcion: true } },
       },
     });
 
@@ -109,17 +106,17 @@ export async function PUT(
     if (body.estatusId !== undefined) {
       data.estatusId = parseInt(body.estatusId, 10);
     }
+    if (body.cuentaGastoId !== undefined) {
+      data.cuentaGastoId = parseInt(body.cuentaGastoId, 10);
+    }
 
     const gasto = await prisma.gasto.update({
       where: { id: gastoId },
       data,
       include: {
-        tipoGasto: {
-          select: { id: true, gasto: true },
-        },
-        privada: {
-          select: { id: true, descripcion: true },
-        },
+        tipoGasto: { select: { id: true, gasto: true } },
+        privada: { select: { id: true, descripcion: true } },
+        cuentaGasto: { select: { id: true, clave: true, descripcion: true } },
       },
     });
 

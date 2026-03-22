@@ -47,6 +47,7 @@ const fullNavigation: NavItem[] = [
       { label: "Turnos", href: "/catalogos/turnos" },
       { label: "Fallas", href: "/catalogos/fallas" },
       { label: "Materiales", href: "/catalogos/materiales" },
+      { label: "Cuentas de Gasto", href: "/catalogos/cuentas-gasto" },
     ],
   },
   {

@@ -257,6 +257,18 @@ model TipoGasto {
   @@map("tipos_gastos")
 }
 
+// cuentas_gasto: catálogo de cuentas contables para clasificar gastos
+model CuentaGasto {
+  id          Int    @id @default(autoincrement()) @map("cuenta_gasto_id")
+  clave       String @default("") @db.VarChar(20)
+  descripcion String @default("") @db.VarChar(100)
+  estatusId   Int    @default(1) @map("estatus_id") @db.TinyInt
+
+  gastos Gasto[]
+
+  @@map("cuentas_gasto")
+}
+
 model Folio {
   id                Int      @id @default(autoincrement()) @map("folio_id")
   descripcion       String   @default("") @db.VarChar(30)
@@ -711,6 +723,7 @@ model Gasto {
   id               Int    @id @default(autoincrement()) @map("gasto_id")
   tipoGastoId      Int    @map("tipo_gasto") @db.TinyInt
   privadaId        Int    @map("privada_id")
+  cuentaGastoId    Int    @default(0) @map("cuenta_gasto_id")
   descripcionGasto String @default("") @map("descripcion_gasto") @db.VarChar(100)
   fechaPago        String @default("") @map("fecha_pago") @db.VarChar(100)
   comprobante      String @default("") @db.VarChar(50)
@@ -720,11 +733,13 @@ model Gasto {
   usuarioModId     Int    @default(0) @map("usuario_id")
   estatusId        Int    @default(1) @map("estatus_id")
 
-  tipoGasto TipoGasto @relation(fields: [tipoGastoId], references: [id])
-  privada   Privada   @relation(fields: [privadaId], references: [id])
+  tipoGasto   TipoGasto    @relation(fields: [tipoGastoId], references: [id])
+  privada     Privada      @relation(fields: [privadaId], references: [id])
+  cuentaGasto CuentaGasto? @relation(fields: [cuentaGastoId], references: [id], map: "fk_gasto_cuenta")
 
   @@index([tipoGastoId])
   @@index([privadaId])
+  @@index([cuentaGastoId])
   @@map("gastos")
 }
 
