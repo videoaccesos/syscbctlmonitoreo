@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
       porEstatusRaw,
       total,
       registrosParaFechas,
+      porPrivadaRaw,
     ] = await Promise.all([
       prisma.registroAcceso.groupBy({
         by: ["tipoGestionId"],
@@ -86,6 +87,14 @@ export async function GET(request: NextRequest) {
         where,
         select: { fechaModificacion: true },
       }),
+      // Agrupar por privada y tipo de gestion (para ranking de privadas)
+      !privadaId
+        ? prisma.registroAcceso.groupBy({
+            by: ["privadaId", "tipoGestionId"],
+            where,
+            _count: { id: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     // Transformar porTipoGestion
@@ -128,11 +137,53 @@ export async function GET(request: NextRequest) {
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([hora, count]) => ({ hora: Number(hora), count }));
 
+    // Construir ranking por privada (solo cuando no hay filtro de privada)
+    let porPrivada: {
+      privadaId: number;
+      privadaNombre: string;
+      total: number;
+      porTipo: Record<number, number>;
+    }[] = [];
+
+    if (!privadaId && Array.isArray(porPrivadaRaw) && porPrivadaRaw.length > 0) {
+      // Agrupar por privada
+      const privadaMap: Record<number, { total: number; porTipo: Record<number, number> }> = {};
+      for (const row of porPrivadaRaw as { privadaId: number; tipoGestionId: number; _count: { id: number } }[]) {
+        if (!privadaMap[row.privadaId]) {
+          privadaMap[row.privadaId] = { total: 0, porTipo: {} };
+        }
+        privadaMap[row.privadaId].total += row._count.id;
+        privadaMap[row.privadaId].porTipo[row.tipoGestionId] = row._count.id;
+      }
+
+      // Obtener nombres de privadas
+      const privadaIds = Object.keys(privadaMap).map(Number);
+      const privadasInfo = await prisma.privada.findMany({
+        where: { id: { in: privadaIds } },
+        select: { id: true, descripcion: true },
+      });
+      const nombresMap: Record<number, string> = {};
+      for (const p of privadasInfo) {
+        nombresMap[p.id] = p.descripcion;
+      }
+
+      // Construir array ordenado por total desc
+      porPrivada = Object.entries(privadaMap)
+        .map(([pid, data]) => ({
+          privadaId: Number(pid),
+          privadaNombre: nombresMap[Number(pid)] || `Privada ${pid}`,
+          total: data.total,
+          porTipo: data.porTipo,
+        }))
+        .sort((a, b) => b.total - a.total);
+    }
+
     return NextResponse.json({
       porTipoGestion,
       porEstatus,
       porDia,
       porHora,
+      porPrivada,
       total,
     });
   } catch (error) {

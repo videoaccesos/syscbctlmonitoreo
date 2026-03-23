@@ -31,11 +31,19 @@ interface HoraItem {
   count: number;
 }
 
+interface PrivadaRankingItem {
+  privadaId: number;
+  privadaNombre: string;
+  total: number;
+  porTipo: Record<number, number>;
+}
+
 interface GraficasData {
   porTipoGestion: TipoGestionItem[];
   porEstatus: EstatusItem[];
   porDia: DiaItem[];
   porHora: HoraItem[];
+  porPrivada: PrivadaRankingItem[];
   total: number;
 }
 
@@ -237,6 +245,76 @@ export default function AccesosGraficasPage() {
             <p className="text-sm text-gray-700">Total de accesos en el periodo</p>
             <p className="text-4xl font-bold text-gray-900">{data.total.toLocaleString()}</p>
           </div>
+
+          {/* Ranking por Privada (solo cuando no hay filtro de privada) */}
+          {data.porPrivada && data.porPrivada.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Ranking por Privada
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-2 text-gray-600 font-medium">#</th>
+                      <th className="text-left py-2 px-2 text-gray-600 font-medium">Privada</th>
+                      <th className="text-right py-2 px-2 text-gray-600 font-medium">Total</th>
+                      <th className="text-right py-2 px-2 text-green-700 font-medium">Residentes</th>
+                      <th className="text-right py-2 px-2 text-indigo-700 font-medium">Visitas</th>
+                      <th className="text-right py-2 px-2 text-purple-700 font-medium">Proveedores</th>
+                      <th className="text-right py-2 px-2 text-cyan-700 font-medium">Tecnicos</th>
+                      <th className="text-right py-2 px-2 text-yellow-700 font-medium">Morosos</th>
+                      <th className="text-right py-2 px-2 text-orange-700 font-medium">Otros</th>
+                      <th className="text-left py-2 px-3 text-gray-600 font-medium w-48">Distribucion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.porPrivada.map((item, idx) => {
+                      const residentes = item.porTipo[4] || 0;
+                      const visitas = (item.porTipo[8] || 0) + (item.porTipo[9] || 0);
+                      const proveedores = item.porTipo[3] || 0;
+                      const tecnicos = item.porTipo[5] || 0;
+                      const morosos = item.porTipo[2] || 0;
+                      const otros = item.total - residentes - visitas - proveedores - tecnicos - morosos;
+                      const maxTotal = data.porPrivada[0]?.total || 1;
+                      const barPct = (item.total / maxTotal) * 100;
+                      // Sub-bars within distribution
+                      const resPct = item.total > 0 ? (residentes / item.total) * 100 : 0;
+                      const visPct = item.total > 0 ? (visitas / item.total) * 100 : 0;
+                      const prvPct = item.total > 0 ? (proveedores / item.total) * 100 : 0;
+                      const tecPct = item.total > 0 ? (tecnicos / item.total) * 100 : 0;
+                      const morPct = item.total > 0 ? (morosos / item.total) * 100 : 0;
+                      const otrPct = item.total > 0 ? (otros / item.total) * 100 : 0;
+
+                      return (
+                        <tr key={item.privadaId} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-2 px-2 text-gray-500 font-mono">{idx + 1}</td>
+                          <td className="py-2 px-2 font-medium text-gray-900 whitespace-nowrap">{item.privadaNombre}</td>
+                          <td className="py-2 px-2 text-right font-bold text-gray-900">{item.total.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right text-green-700">{residentes > 0 ? residentes.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-2 text-right text-indigo-700">{visitas > 0 ? visitas.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-2 text-right text-purple-700">{proveedores > 0 ? proveedores.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-2 text-right text-cyan-700">{tecnicos > 0 ? tecnicos.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-2 text-right text-yellow-700">{morosos > 0 ? morosos.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-2 text-right text-orange-700">{otros > 0 ? otros.toLocaleString() : "-"}</td>
+                          <td className="py-2 px-3">
+                            <div className="flex h-4 rounded-full overflow-hidden bg-gray-100" style={{ width: `${Math.max(barPct, 8)}%` }}>
+                              {resPct > 0 && <div className="bg-green-500 transition-all" style={{ width: `${resPct}%` }} title={`Residentes: ${residentes}`} />}
+                              {visPct > 0 && <div className="bg-indigo-500 transition-all" style={{ width: `${visPct}%` }} title={`Visitas: ${visitas}`} />}
+                              {prvPct > 0 && <div className="bg-purple-500 transition-all" style={{ width: `${prvPct}%` }} title={`Proveedores: ${proveedores}`} />}
+                              {tecPct > 0 && <div className="bg-cyan-500 transition-all" style={{ width: `${tecPct}%` }} title={`Tecnicos: ${tecnicos}`} />}
+                              {morPct > 0 && <div className="bg-yellow-500 transition-all" style={{ width: `${morPct}%` }} title={`Morosos: ${morosos}`} />}
+                              {otrPct > 0 && <div className="bg-orange-400 transition-all" style={{ width: `${otrPct}%` }} title={`Otros: ${otros}`} />}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Grafica: Por Tipo de Gestion (barras horizontales) */}
