@@ -217,6 +217,7 @@ export default function AsignacionTarjetasPage() {
   const [renovarPrecio, setRenovarPrecio] = useState("");
   const [renovarFecha, setRenovarFecha] = useState("");
   const [renovarObs, setRenovarObs] = useState("");
+  const [renovarTipoPago, setRenovarTipoPago] = useState("0");
   const [renovando, setRenovando] = useState(false);
 
   // (reporte de ventas movido a /reportes/reporte-ventas)
@@ -739,6 +740,7 @@ export default function AsignacionTarjetasPage() {
     f.setFullYear(f.getFullYear() + 1);
     setRenovarFecha(f.toISOString().split("T")[0]);
     setRenovarObs("");
+    setRenovarTipoPago("1");
   };
 
   const handleRenovar = async () => {
@@ -756,6 +758,7 @@ export default function AsignacionTarjetasPage() {
             fechaVencimiento: renovarFecha,
             observaciones: renovarObs,
             concepto: "RENOVACION",
+            tipoPago: parseInt(renovarTipoPago, 10),
           }),
         }
       );
@@ -1847,6 +1850,20 @@ export default function AsignacionTarjetasPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de pago
+                </label>
+                <select
+                  value={renovarTipoPago}
+                  onChange={(e) => setRenovarTipoPago(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="1">Efectivo</option>
+                  <option value="2">Bancos</option>
+                </select>
               </div>
 
               <div>
