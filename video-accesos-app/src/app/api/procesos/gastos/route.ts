@@ -171,12 +171,22 @@ export async function POST(request: NextRequest) {
     const tp = parseInt(tipoPago, 10);
     const f = fecha ? String(fecha) : "";
 
-    // Use raw insert to avoid FK issues when privadaId=0 (corporate gastos)
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO gastos (tipo_gasto, privada_id, tipo_destino, cuenta_gasto_id, descripcion_gasto, fecha_pago, comprobante, total, tipo_pago, fecha, estatus_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      tgId, pId, td, cgId, desc, fp, comp, tot, tp, f
-    );
+    // Para gastos corporativos (privadaId=0), desactivar FK check temporalmente
+    if (td > 0) {
+      await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=0`);
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO gastos (tipo_gasto, privada_id, tipo_destino, cuenta_gasto_id, descripcion_gasto, fecha_pago, comprobante, total, tipo_pago, fecha, estatus_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        tgId, pId, td, cgId, desc, fp, comp, tot, tp, f
+      );
+    } finally {
+      if (td > 0) {
+        await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1`);
+      }
+    }
 
     return NextResponse.json({ message: "Gasto registrado exitosamente" }, { status: 201 });
   } catch (error) {

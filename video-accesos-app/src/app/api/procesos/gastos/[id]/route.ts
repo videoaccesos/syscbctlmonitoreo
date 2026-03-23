@@ -113,8 +113,36 @@ export async function PUT(
       const td = parseInt(body.tipoDestino, 10);
       data.tipoDestino = td;
       if (td > 0) {
-        data.privadaId = 0; // corporativo, no es privada
+        data.privadaId = 0;
       }
+    }
+
+    // Si privadaId=0 (corporativo), usar raw update para evitar FK
+    if (data.privadaId === 0) {
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      for (const [k, v] of Object.entries(data)) {
+        const colMap: Record<string, string> = {
+          tipoGastoId: "tipo_gasto", privadaId: "privada_id",
+          descripcionGasto: "descripcion_gasto", fechaPago: "fecha_pago",
+          tipoPago: "tipo_pago", estatusId: "estatus_id",
+          cuentaGastoId: "cuenta_gasto_id", tipoDestino: "tipo_destino",
+          comprobante: "comprobante", total: "total", fecha: "fecha",
+        };
+        const col = colMap[k] || k;
+        sets.push(`${col} = ?`);
+        vals.push(v);
+      }
+      await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=0`);
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE gastos SET ${sets.join(", ")} WHERE gasto_id = ?`,
+          ...vals, gastoId
+        );
+      } finally {
+        await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=1`);
+      }
+      return NextResponse.json({ message: "Gasto actualizado" });
     }
 
     const gasto = await prisma.gasto.update({
