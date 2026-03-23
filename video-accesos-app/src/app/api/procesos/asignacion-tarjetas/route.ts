@@ -36,10 +36,10 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       conditions.push(
-        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ? OR res.nro_casa LIKE ? OR res.calle LIKE ?)"
+        "(r.nombre LIKE ? OR r.ape_paterno LIKE ? OR r.ape_materno LIKE ? OR res.nro_casa LIKE ? OR res.calle LIKE ? OR a.tarjeta_id LIKE ? OR t.lectura LIKE ?)"
       );
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
     }
 
     const whereClause =
@@ -76,12 +76,13 @@ export async function GET(request: NextRequest) {
       unionSql = `${sqlH} UNION ALL ${sqlB}`;
     }
 
-    // Base FROM con JOINs a residente -> residencia -> privada
+    // Base FROM con JOINs a residente -> residencia -> privada -> tarjeta
     const baseSql = `
       FROM (${unionSql}) a
       INNER JOIN residencias_residentes r ON a.residente_id = r.residente_id
       INNER JOIN residencias res ON r.residencia_id = res.residencia_id
       INNER JOIN privadas p ON res.privada_id = p.privada_id
+      LEFT JOIN tarjetas t ON t.tarjeta_id = CAST(a.tarjeta_id AS UNSIGNED)
       ${whereClause}
     `;
 
@@ -99,7 +100,8 @@ export async function GET(request: NextRequest) {
              r.residente_id AS res_id, r.nombre AS res_nombre,
              r.ape_paterno AS res_ape_paterno, r.ape_materno AS res_ape_materno,
              res.residencia_id, res.nro_casa, res.calle,
-             p.privada_id AS priv_id, p.descripcion AS priv_descripcion
+             p.privada_id AS priv_id, p.descripcion AS priv_descripcion,
+             t.lectura AS tarjeta_lectura, t.tipo_id AS tarjeta_tipo_id
       ${baseSql}
       ORDER BY a.folio_tipo ASC, a.asignacion_id DESC
       LIMIT ? OFFSET ?
@@ -145,7 +147,13 @@ export async function GET(request: NextRequest) {
       estatusId: toNum(row.estatus_id),
       observaciones: toStr(row.observaciones),
       folioTipo: toStr(row.folio_tipo),
-      tarjeta: null,
+      tarjeta: row.tarjeta_lectura
+        ? {
+            id: toNum(row.tarjeta_id),
+            lectura: toStr(row.tarjeta_lectura),
+            tipoId: toNum(row.tarjeta_tipo_id),
+          }
+        : null,
       residente: {
         id: toStr(row.res_id),
         nombre: toStr(row.res_nombre),
