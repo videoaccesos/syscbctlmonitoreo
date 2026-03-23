@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureGastosSchema } from "@/lib/ensure-gastos-schema";
 
 // GET /api/procesos/gastos/[id] - Obtener un gasto por ID
 export async function GET(
@@ -9,6 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureGastosSchema();
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -39,9 +42,10 @@ export async function GET(
 
     return NextResponse.json(gasto);
   } catch (error) {
-    console.error("Error al obtener gasto:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error al obtener gasto:", errMsg, error);
     return NextResponse.json(
-      { error: "Error al obtener gasto" },
+      { error: "Error al obtener gasto: " + errMsg },
       { status: 500 }
     );
   }
@@ -53,6 +57,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureGastosSchema();
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -157,9 +163,10 @@ export async function PUT(
 
     return NextResponse.json(gasto);
   } catch (error) {
-    console.error("Error al actualizar gasto:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error al actualizar gasto:", errMsg, error);
     return NextResponse.json(
-      { error: "Error al actualizar gasto" },
+      { error: "Error al actualizar gasto: " + errMsg },
       { status: 500 }
     );
   }
@@ -211,9 +218,10 @@ export async function DELETE(
       message: "Gasto eliminado correctamente",
     });
   } catch (error) {
-    console.error("Error al eliminar gasto:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error al eliminar gasto:", errMsg, error);
     return NextResponse.json(
-      { error: "Error al eliminar gasto" },
+      { error: "Error al eliminar gasto: " + errMsg },
       { status: 500 }
     );
   }

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureGastosSchema } from "@/lib/ensure-gastos-schema";
 
 // GET /api/catalogos/cuentas-gasto
 export async function GET(request: NextRequest) {
+  await ensureGastosSchema();
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

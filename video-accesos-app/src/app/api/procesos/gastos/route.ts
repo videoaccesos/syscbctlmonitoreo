@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureGastosSchema } from "@/lib/ensure-gastos-schema";
 
 // GET /api/procesos/gastos - Listar gastos con filtros y paginacion
 export async function GET(request: NextRequest) {
   try {
+    await ensureGastosSchema();
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -103,9 +106,10 @@ export async function GET(request: NextRequest) {
       totalSum: totalSum._sum.total || 0,
     });
   } catch (error) {
-    console.error("Error al listar gastos:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error al listar gastos:", errMsg, error);
     return NextResponse.json(
-      { error: "Error al obtener gastos" },
+      { error: "Error al obtener gastos: " + errMsg },
       { status: 500 }
     );
   }
@@ -114,6 +118,8 @@ export async function GET(request: NextRequest) {
 // POST /api/procesos/gastos - Crear nuevo gasto
 export async function POST(request: NextRequest) {
   try {
+    await ensureGastosSchema();
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -190,9 +196,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: "Gasto registrado exitosamente" }, { status: 201 });
   } catch (error) {
-    console.error("Error al crear gasto:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error al crear gasto:", errMsg, error);
     return NextResponse.json(
-      { error: "Error al crear gasto" },
+      { error: "Error al crear gasto: " + errMsg },
       { status: 500 }
     );
   }

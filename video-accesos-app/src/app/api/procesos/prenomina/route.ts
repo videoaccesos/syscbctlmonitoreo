@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureGastosSchema } from "@/lib/ensure-gastos-schema";
 
 // GET /api/procesos/prenomina?periodo=YYYY-MM&quincena=1|2
 export async function GET(request: NextRequest) {
   try {
+    await ensureGastosSchema();
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
