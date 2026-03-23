@@ -12,6 +12,7 @@ import {
   XCircle,
   Trash2,
   Printer,
+  RefreshCw,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -127,11 +128,13 @@ const emptyForm: AsignacionForm = {
 const ESTATUS_ASIGNACION: Record<number, string> = {
   1: "Activa",
   2: "Cancelada",
+  3: "Renovada",
 };
 
 const ESTATUS_BADGE: Record<number, string> = {
   1: "bg-green-100 text-green-700",
   2: "bg-red-100 text-red-700",
+  3: "bg-blue-100 text-blue-700",
 };
 
 const TIPO_TARJETA: Record<number, string> = {
@@ -208,6 +211,13 @@ export default function AsignacionTarjetasPage() {
   // cancelar asignacion
   const [cancelTarget, setCancelTarget] = useState<Asignacion | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  // renovar asignacion
+  const [renovarTarget, setRenovarTarget] = useState<Asignacion | null>(null);
+  const [renovarPrecio, setRenovarPrecio] = useState("");
+  const [renovarFecha, setRenovarFecha] = useState("");
+  const [renovarObs, setRenovarObs] = useState("");
+  const [renovando, setRenovando] = useState(false);
 
   // (reporte de ventas movido a /reportes/reporte-ventas)
 
@@ -720,6 +730,51 @@ export default function AsignacionTarjetasPage() {
     }
   };
 
+  /* ---------- renovar asignacion ---------- */
+  const openRenovar = (item: Asignacion) => {
+    setRenovarTarget(item);
+    setRenovarPrecio(item.precio ? String(item.precio) : "0");
+    // Fecha vencimiento +1 año desde hoy
+    const f = new Date();
+    f.setFullYear(f.getFullYear() + 1);
+    setRenovarFecha(f.toISOString().split("T")[0]);
+    setRenovarObs("");
+  };
+
+  const handleRenovar = async () => {
+    if (!renovarTarget) return;
+    setRenovando(true);
+
+    try {
+      const res = await fetch(
+        `/api/procesos/asignacion-tarjetas/${renovarTarget.id}/renovar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            precio: parseFloat(renovarPrecio) || 0,
+            fechaVencimiento: renovarFecha,
+            observaciones: renovarObs,
+            concepto: "RENOVACION",
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const json = await res.json();
+        alert(json.error || "Error al renovar");
+        return;
+      }
+
+      setRenovarTarget(null);
+      fetchData();
+    } catch {
+      alert("Error de conexion al renovar");
+    } finally {
+      setRenovando(false);
+    }
+  };
+
   /* ---------- imprimir comprobante ---------- */
   const handlePrintComprobante = (asignacionId: number, folioTipo: string) => {
     window.open(
@@ -993,6 +1048,15 @@ export default function AsignacionTarjetasPage() {
                         >
                           <Printer className="h-4 w-4" />
                         </button>
+                        {item.estatusId === 1 && item.folioTipo === "H" && (
+                          <button
+                            onClick={() => openRenovar(item)}
+                            title="Renovar tarjeta"
+                            className="p-1.5 rounded hover:bg-blue-50 text-blue-600 transition"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+                        )}
                         {item.estatusId === 1 && (
                           <button
                             onClick={() => setCancelTarget(item)}
@@ -1698,6 +1762,121 @@ export default function AsignacionTarjetasPage() {
               >
                 {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
                 {cancelling ? "Cancelando..." : "Cancelar Asignacion"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Renovar */}
+      {renovarTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setRenovarTarget(null)}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-blue-600" />
+              Renovar Tarjeta (Folio H)
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Se cerrara la asignacion actual y se creara una nueva con la{" "}
+              <span className="font-semibold">misma tarjeta</span> para el
+              residente{" "}
+              <span className="font-semibold">
+                {renovarTarget.residente.nombre}{" "}
+                {renovarTarget.residente.apePaterno}
+              </span>{" "}
+              en{" "}
+              <span className="font-semibold">
+                {renovarTarget.residente.residencia.privada.descripcion} -
+                Casa {renovarTarget.residente.residencia.nroCasa}
+              </span>
+              .
+            </p>
+
+            <div className="space-y-3 mb-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tarjeta
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={renovarTarget.tarjetaId || "-"}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Asignacion anterior
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={`#${renovarTarget.id}`}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nueva fecha de vencimiento
+                  </label>
+                  <input
+                    type="date"
+                    value={renovarFecha}
+                    onChange={(e) => setRenovarFecha(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Precio renovacion
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={renovarPrecio}
+                    onChange={(e) => setRenovarPrecio(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observaciones
+                </label>
+                <textarea
+                  value={renovarObs}
+                  onChange={(e) => setRenovarObs(e.target.value)}
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Notas sobre la renovacion..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setRenovarTarget(null)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRenovar}
+                disabled={renovando}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {renovando && <Loader2 className="h-4 w-4 animate-spin" />}
+                {renovando ? "Renovando..." : "Renovar Tarjeta"}
               </button>
             </div>
           </div>
