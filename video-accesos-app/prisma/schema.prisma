@@ -724,6 +724,7 @@ model Gasto {
   tipoGastoId      Int    @map("tipo_gasto") @db.TinyInt
   privadaId        Int    @map("privada_id")
   cuentaGastoId    Int    @default(0) @map("cuenta_gasto_id")
+  tipoDestino      Int    @default(0) @map("tipo_destino") @db.TinyInt // 0=Privada, 1=General, 2=Operación, 3=Administrativo
   descripcionGasto String @default("") @map("descripcion_gasto") @db.VarChar(100)
   fechaPago        String @default("") @map("fecha_pago") @db.VarChar(100)
   comprobante      String @default("") @db.VarChar(50)
@@ -734,7 +735,7 @@ model Gasto {
   estatusId        Int    @default(1) @map("estatus_id")
 
   tipoGasto   TipoGasto    @relation(fields: [tipoGastoId], references: [id])
-  privada     Privada      @relation(fields: [privadaId], references: [id])
+  privada     Privada?     @relation(fields: [privadaId], references: [id], map: "fk_gasto_privada")
   cuentaGasto CuentaGasto? @relation(fields: [cuentaGastoId], references: [id], map: "fk_gasto_cuenta")
 
   @@index([tipoGastoId])

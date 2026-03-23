@@ -109,6 +109,13 @@ export async function PUT(
     if (body.cuentaGastoId !== undefined) {
       data.cuentaGastoId = parseInt(body.cuentaGastoId, 10);
     }
+    if (body.tipoDestino !== undefined) {
+      const td = parseInt(body.tipoDestino, 10);
+      data.tipoDestino = td;
+      if (td > 0) {
+        data.privadaId = 0; // corporativo, no es privada
+      }
+    }
 
     const gasto = await prisma.gasto.update({
       where: { id: gastoId },

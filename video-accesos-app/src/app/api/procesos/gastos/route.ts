@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const tipoPago = searchParams.get("tipoPago");
     const tipoGastoId = searchParams.get("tipoGastoId");
     const cuentaGastoId = searchParams.get("cuentaGastoId");
+    const tipoDestino = searchParams.get("tipoDestino");
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
@@ -30,6 +31,11 @@ export async function GET(request: NextRequest) {
 
     if (privadaId) {
       where.privadaId = parseInt(privadaId, 10);
+      where.tipoDestino = 0; // solo privadas
+    }
+
+    if (tipoDestino) {
+      where.tipoDestino = parseInt(tipoDestino, 10);
     }
 
     if (tipoPago) {
@@ -118,6 +124,7 @@ export async function POST(request: NextRequest) {
     const {
       tipoGastoId,
       privadaId,
+      tipoDestino,
       cuentaGastoId,
       descripcionGasto,
       fechaPago,
@@ -127,18 +134,26 @@ export async function POST(request: NextRequest) {
       fecha,
     } = body;
 
+    const td = tipoDestino !== undefined ? parseInt(tipoDestino, 10) : 0;
+    const pId = td > 0 ? 0 : parseInt(privadaId || "0", 10);
+
     // Validacion de campos requeridos
-    if (!tipoGastoId || privadaId === undefined || !descripcionGasto || !fechaPago || !total || tipoPago === undefined) {
+    if (!descripcionGasto || !fechaPago || !total || tipoPago === undefined) {
       return NextResponse.json(
-        { error: "Campos requeridos: tipoGastoId, privadaId, descripcionGasto, fechaPago, total, tipoPago" },
+        { error: "Campos requeridos: descripcionGasto, fechaPago, total, tipoPago" },
         { status: 400 }
       );
     }
 
-    const pId = parseInt(privadaId, 10);
+    if (td === 0 && pId === 0) {
+      return NextResponse.json(
+        { error: "Debe seleccionar un destino (privada o tipo de gasto corporativo)" },
+        { status: 400 }
+      );
+    }
 
-    // Si privadaId > 0, validar que la privada exista
-    if (pId > 0) {
+    // Si es privada, validar que exista
+    if (td === 0 && pId > 0) {
       const privada = await prisma.privada.findFirst({
         where: { id: pId, estatusId: 1 },
       });
@@ -147,34 +162,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validar tipo de gasto
-    const tipoGasto = await prisma.tipoGasto.findFirst({
-      where: { id: parseInt(tipoGastoId, 10), estatusId: 1 },
-    });
-    if (!tipoGasto) {
-      return NextResponse.json({ error: "Tipo de gasto no encontrado" }, { status: 404 });
-    }
+    const tgId = tipoGastoId ? parseInt(tipoGastoId, 10) : 1;
+    const cgId = cuentaGastoId ? parseInt(cuentaGastoId, 10) : 0;
+    const desc = descripcionGasto.trim();
+    const fp = String(fechaPago) || "";
+    const comp = comprobante?.trim() || "";
+    const tot = parseFloat(total);
+    const tp = parseInt(tipoPago, 10);
+    const f = fecha ? String(fecha) : "";
 
-    const gasto = await prisma.gasto.create({
-      data: {
-        tipoGastoId: parseInt(tipoGastoId, 10),
-        privadaId: pId,
-        cuentaGastoId: cuentaGastoId ? parseInt(cuentaGastoId, 10) : 0,
-        descripcionGasto: descripcionGasto.trim(),
-        fechaPago: String(fechaPago) || "",
-        comprobante: comprobante?.trim() || "",
-        total: parseFloat(total),
-        tipoPago: parseInt(tipoPago, 10),
-        fecha: fecha ? String(fecha) : "",
-      },
-      include: {
-        tipoGasto: { select: { id: true, gasto: true } },
-        privada: { select: { id: true, descripcion: true } },
-        cuentaGasto: { select: { id: true, clave: true, descripcion: true } },
-      },
-    });
+    // Use raw insert to avoid FK issues when privadaId=0 (corporate gastos)
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO gastos (tipo_gasto, privada_id, tipo_destino, cuenta_gasto_id, descripcion_gasto, fecha_pago, comprobante, total, tipo_pago, fecha, estatus_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      tgId, pId, td, cgId, desc, fp, comp, tot, tp, f
+    );
 
-    return NextResponse.json(gasto, { status: 201 });
+    return NextResponse.json({ message: "Gasto registrado exitosamente" }, { status: 201 });
   } catch (error) {
     console.error("Error al crear gasto:", error);
     return NextResponse.json(

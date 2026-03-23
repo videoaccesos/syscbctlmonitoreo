@@ -14,6 +14,7 @@ interface Gasto {
   tipoGastoId: number;
   privadaId: number;
   cuentaGastoId: number;
+  tipoDestino: number;
   descripcionGasto: string;
   fechaPago: string;
   comprobante: string | null;
@@ -41,6 +42,13 @@ const TIPO_PAGO: Record<number, string> = {
   3: "Caja",
 };
 
+// tipoDestino: 0=Privada, 1=General, 2=Operación, 3=Administrativo
+const TIPO_DESTINO: Record<number, { label: string; color: string }> = {
+  1: { label: "Gastos Generales", color: "bg-amber-50 text-amber-700 ring-amber-600/20" },
+  2: { label: "Gastos de Operación", color: "bg-blue-50 text-blue-700 ring-blue-600/20" },
+  3: { label: "Gastos Administrativos", color: "bg-purple-50 text-purple-700 ring-purple-600/20" },
+};
+
 export default function GastosPage() {
   const [data, setData] = useState<Gasto[]>([]);
   const [privadas, setPrivadas] = useState<Privada[]>([]);
@@ -49,14 +57,14 @@ export default function GastosPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [filtroPrivada, setFiltroPrivada] = useState("");
+  const [filtroDestino, setFiltroDestino] = useState("");
   const [filtroCuenta, setFiltroCuenta] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Gasto | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     tipoGastoId: "",
-    privadaId: "",
+    destino: "",       // "p:<privadaId>" or "t:<tipoDestino>"
     cuentaGastoId: "",
     descripcionGasto: "",
     fechaPago: new Date().toISOString().split("T")[0],
@@ -64,6 +72,24 @@ export default function GastosPage() {
     total: "",
     tipoPago: "1",
   });
+
+  // Parse destino value into privadaId + tipoDestino
+  const parseDestino = (val: string) => {
+    if (val.startsWith("t:")) {
+      return { privadaId: 0, tipoDestino: parseInt(val.slice(2), 10) };
+    }
+    if (val.startsWith("p:")) {
+      return { privadaId: parseInt(val.slice(2), 10), tipoDestino: 0 };
+    }
+    return { privadaId: 0, tipoDestino: 0 };
+  };
+
+  // Build destino value from gasto data
+  const buildDestino = (gasto: Gasto) => {
+    if (gasto.tipoDestino > 0) return `t:${gasto.tipoDestino}`;
+    if (gasto.privadaId > 0) return `p:${gasto.privadaId}`;
+    return "t:1"; // default: general
+  };
   const limit = 20;
 
   const fetchData = useCallback(async () => {
@@ -73,7 +99,13 @@ export default function GastosPage() {
         page: String(page),
         limit: String(limit),
       });
-      if (filtroPrivada) params.append("privadaId", filtroPrivada);
+      if (filtroDestino) {
+        if (filtroDestino.startsWith("t:")) {
+          params.append("tipoDestino", filtroDestino.slice(2));
+        } else if (filtroDestino.startsWith("p:")) {
+          params.append("privadaId", filtroDestino.slice(2));
+        }
+      }
       if (filtroCuenta) params.append("cuentaGastoId", filtroCuenta);
       const res = await fetch(`/api/procesos/gastos?${params}`);
       const json = await res.json();
@@ -84,7 +116,7 @@ export default function GastosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, filtroPrivada, filtroCuenta]);
+  }, [page, filtroDestino, filtroCuenta]);
 
   useEffect(() => {
     // Cargar catálogos
@@ -94,12 +126,6 @@ export default function GastosPage() {
     fetch("/api/catalogos/cuentas-gasto?estatus=activos")
       .then((r) => r.json())
       .then((j) => setCuentasGasto(j.data || []));
-    fetch("/api/catalogos/tipos-gastos?estatus=activos")
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.data) setTiposGasto(j.data);
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -113,7 +139,7 @@ export default function GastosPage() {
     setEditing(null);
     setForm({
       tipoGastoId: "",
-      privadaId: "",
+      destino: "",
       cuentaGastoId: "",
       descripcionGasto: "",
       fechaPago: new Date().toISOString().split("T")[0],
@@ -129,7 +155,7 @@ export default function GastosPage() {
     setEditing(gasto);
     setForm({
       tipoGastoId: String(gasto.tipoGastoId),
-      privadaId: String(gasto.privadaId),
+      destino: buildDestino(gasto),
       cuentaGastoId: gasto.cuentaGastoId ? String(gasto.cuentaGastoId) : "",
       descripcionGasto: gasto.descripcionGasto,
       fechaPago: gasto.fechaPago || "",
@@ -142,7 +168,7 @@ export default function GastosPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.privadaId || !form.descripcionGasto || !form.total) {
+    if (!form.destino || !form.descripcionGasto || !form.total) {
       setError("Destino, descripción y total son requeridos");
       return;
     }
@@ -155,7 +181,7 @@ export default function GastosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipoGastoId: form.tipoGastoId ? parseInt(form.tipoGastoId) : 1,
-          privadaId: parseInt(form.privadaId),
+          ...parseDestino(form.destino),
           cuentaGastoId: form.cuentaGastoId ? parseInt(form.cuentaGastoId) : 0,
           descripcionGasto: form.descripcionGasto,
           fechaPago: form.fechaPago,
@@ -208,20 +234,24 @@ export default function GastosPage() {
               Destino
             </label>
             <select
-              value={filtroPrivada}
+              value={filtroDestino}
               onChange={(e) => {
-                setFiltroPrivada(e.target.value);
+                setFiltroDestino(e.target.value);
                 setPage(1);
               }}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Todos</option>
-              <option value="0">Gastos Generales</option>
-              {privadas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.descripcion}
-                </option>
-              ))}
+              <optgroup label="Gastos corporativos">
+                {Object.entries(TIPO_DESTINO).map(([id, d]) => (
+                  <option key={`t:${id}`} value={`t:${id}`}>{d.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Privadas">
+                {privadas.map((p) => (
+                  <option key={`p:${p.id}`} value={`p:${p.id}`}>{p.descripcion}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
           <div>
@@ -296,13 +326,17 @@ export default function GastosPage() {
                 >
                   <td className="px-4 py-3">{gasto.fechaPago || "-"}</td>
                   <td className="px-4 py-3">
-                    {gasto.privadaId === 0 ? (
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-600/20 ring-inset">
-                        Gasto General
-                      </span>
-                    ) : (
-                      gasto.privada?.descripcion || "--"
-                    )}
+                    {(() => {
+                      const td = TIPO_DESTINO[gasto.tipoDestino];
+                      if (td) {
+                        return (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${td.color}`}>
+                            {td.label}
+                          </span>
+                        );
+                      }
+                      return gasto.privada?.descripcion || "--";
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {gasto.cuentaGasto
@@ -407,19 +441,23 @@ export default function GastosPage() {
                   Destino *
                 </label>
                 <select
-                  value={form.privadaId}
+                  value={form.destino}
                   onChange={(e) =>
-                    setForm({ ...form, privadaId: e.target.value })
+                    setForm({ ...form, destino: e.target.value })
                   }
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="0">--- GASTOS GENERALES ---</option>
-                  {privadas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.descripcion}
-                    </option>
-                  ))}
+                  <optgroup label="Gastos corporativos">
+                    {Object.entries(TIPO_DESTINO).map(([id, d]) => (
+                      <option key={`t:${id}`} value={`t:${id}`}>{d.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Privadas">
+                    {privadas.map((p) => (
+                      <option key={`p:${p.id}`} value={`p:${p.id}`}>{p.descripcion}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
               <div>
