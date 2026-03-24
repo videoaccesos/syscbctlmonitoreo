@@ -13,6 +13,7 @@ import {
   Trash2,
   Printer,
   RefreshCw,
+  History,
 } from "lucide-react";
 
 /* ---------- tipos ---------- */
@@ -167,7 +168,7 @@ export default function AsignacionTarjetasPage() {
 
   // filtros
   const [filterPrivada, setFilterPrivada] = useState("");
-  const [filterEstatus, setFilterEstatus] = useState("");
+  const [filterEstatus, setFilterEstatus] = useState("1");
   const [filterFolioTipo, setFilterFolioTipo] = useState("");
   const [privadas, setPrivadas] = useState<Privada[]>([]);
 
@@ -211,6 +212,19 @@ export default function AsignacionTarjetasPage() {
   // cancelar asignacion
   const [cancelTarget, setCancelTarget] = useState<Asignacion | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  // historial de tarjeta
+  const [historialTarget, setHistorialTarget] = useState<Asignacion | null>(null);
+  const [historialData, setHistorialData] = useState<{
+    tarjeta: { id: number; lectura: string; tipoId: number; estatusId: number };
+    historial: Array<{
+      id: number; fecha: string | null; fechaVencimiento: string | null;
+      precio: number | null; estatusId: number; estatusLabel: string;
+      concepto: string | null; observaciones: string | null; folioTipo: string;
+      residente: string; residencia: string; privada: string;
+    }>;
+  } | null>(null);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
 
   // renovar asignacion
   const [renovarTarget, setRenovarTarget] = useState<Asignacion | null>(null);
@@ -731,6 +745,25 @@ export default function AsignacionTarjetasPage() {
     }
   };
 
+  /* ---------- historial de tarjeta ---------- */
+  const openHistorial = async (item: Asignacion) => {
+    if (!item.tarjetaId) return;
+    setHistorialTarget(item);
+    setLoadingHistorial(true);
+    setHistorialData(null);
+    try {
+      const res = await fetch(`/api/catalogos/tarjetas/${item.tarjetaId}/historial`);
+      if (res.ok) {
+        const json = await res.json();
+        setHistorialData(json);
+      }
+    } catch {
+      console.error("Error al cargar historial");
+    } finally {
+      setLoadingHistorial(false);
+    }
+  };
+
   /* ---------- renovar asignacion ---------- */
   const openRenovar = (item: Asignacion) => {
     setRenovarTarget(item);
@@ -1044,6 +1077,13 @@ export default function AsignacionTarjetasPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => openHistorial(item)}
+                          title="Ver historial de tarjeta"
+                          className="p-1.5 rounded hover:bg-purple-50 text-purple-600 transition"
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => handlePrintComprobante(item.id, item.folioTipo)}
                           title="Imprimir comprobante"
@@ -1765,6 +1805,137 @@ export default function AsignacionTarjetasPage() {
               >
                 {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
                 {cancelling ? "Cancelando..." : "Cancelar Asignacion"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Historial */}
+      {historialTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => { setHistorialTarget(null); setHistorialData(null); }}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-purple-600" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Historial de Tarjeta #{historialTarget.tarjetaId}
+                </h3>
+                {historialData?.tarjeta && (
+                  <span className="text-sm text-gray-500 ml-2">
+                    Lectura: <span className="font-mono font-medium">{historialData.tarjeta.lectura}</span>
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => { setHistorialTarget(null); setHistorialData(null); }}
+                className="p-1 rounded hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {loadingHistorial && (
+                <div className="text-center py-8 text-gray-500">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                  Cargando historial...
+                </div>
+              )}
+
+              {!loadingHistorial && historialData && (
+                <>
+                  {/* Info tarjeta */}
+                  <div className="mb-4 p-3 rounded-lg bg-gray-50 flex items-center gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Estado actual:</span>{" "}
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                        { 1: "bg-green-100 text-green-700", 2: "bg-blue-100 text-blue-700",
+                          3: "bg-red-100 text-red-700", 4: "bg-yellow-100 text-yellow-700",
+                          5: "bg-gray-100 text-gray-700" }[historialData.tarjeta.estatusId] || "bg-gray-100 text-gray-700"
+                      }`}>
+                        {{ 1: "Activa", 2: "Asignada", 3: "Danada", 4: "Consignacion", 5: "Baja" }[historialData.tarjeta.estatusId] || "Desconocido"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Tipo:</span>{" "}
+                      <span className="font-medium">{{ 1: "Peatonal", 2: "Vehicular" }[historialData.tarjeta.tipoId] || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Total asignaciones:</span>{" "}
+                      <span className="font-bold">{historialData.historial.length}</span>
+                    </div>
+                  </div>
+
+                  {historialData.historial.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">Sin asignaciones registradas</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {historialData.historial.map((h, idx) => (
+                        <div
+                          key={`${h.folioTipo}-${h.id}`}
+                          className={`p-3 rounded-lg border ${
+                            h.estatusId === 1
+                              ? "border-green-200 bg-green-50"
+                              : h.estatusId === 3
+                              ? "border-blue-200 bg-blue-50"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                                FOLIO_BADGE[h.folioTipo] || "bg-gray-100 text-gray-700"
+                              }`}>
+                                {h.folioTipo}
+                              </span>
+                              <span className="text-sm font-mono text-gray-500">#{h.id}</span>
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                h.estatusId === 1 ? "bg-green-100 text-green-700" :
+                                h.estatusId === 3 ? "bg-blue-100 text-blue-700" :
+                                "bg-red-100 text-red-700"
+                              }`}>
+                                {h.estatusLabel}
+                              </span>
+                              {idx === 0 && h.estatusId === 1 && (
+                                <span className="text-xs font-semibold text-green-600">VIGENTE</span>
+                              )}
+                            </div>
+                            <span className="text-sm text-gray-500">{h.fecha || "-"}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                            <div><span className="text-gray-500">Privada:</span> <span className="font-medium">{h.privada}</span></div>
+                            <div><span className="text-gray-500">Residente:</span> <span className="font-medium">{h.residente}</span></div>
+                            <div><span className="text-gray-500">Residencia:</span> {h.residencia}</div>
+                            <div><span className="text-gray-500">Precio:</span> ${(h.precio || 0).toFixed(2)}</div>
+                            {h.fechaVencimiento && (
+                              <div><span className="text-gray-500">Vencimiento:</span> {h.fechaVencimiento}</div>
+                            )}
+                            {h.concepto && (
+                              <div><span className="text-gray-500">Concepto:</span> {h.concepto}</div>
+                            )}
+                          </div>
+                          {h.observaciones && (
+                            <div className="mt-1 text-xs text-gray-500 italic">{h.observaciones}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => { setHistorialTarget(null); setHistorialData(null); }}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Cerrar
               </button>
             </div>
           </div>
