@@ -338,6 +338,119 @@ def _parse_raw_frames(raw_data, total_size, session_offset, debug=False):
     return bytes(all_data[:total_size])
 
 
+def read_table_by_fields(panel, table_name, fields_info, table_index,
+                         debug=False, timeout=60):
+    """Lee una tabla campo por campo para evitar respuestas grandes.
+
+    Si la tabla completa no cabe en un frame, pedimos un campo a la vez.
+    Luego combinamos los resultados por posición (registro N).
+    """
+    all_field_records = {}  # field_name -> [val0, val1, ...]
+    record_count = None
+
+    for field in fields_info:
+        fidx = field['index']
+        fname = field['name']
+
+        parameters = [table_index, 1, fidx, 0, 0]
+
+        if debug:
+            print(f"  DEBUG: GETDATA campo '{fname}' (idx={fidx})...")
+
+        try:
+            message, msg_size = panel._send_receive(
+                consts.Command.GETDATA, parameters
+            )
+        except Exception as e:
+            print(f"  ERROR leyendo campo {fname}: {e}")
+            # Reconectar si es necesario
+            if not panel.is_connected():
+                return []
+            continue
+
+        if not message or len(message) < 3:
+            if debug:
+                print(f"  DEBUG: {fname}: respuesta vacia")
+            continue
+
+        # Verificar si es data_stat (aun demasiado grande)
+        if message[0] == 0x00 and len(message) >= 9:
+            stat = parse_data_stat(message)
+            if stat:
+                if debug:
+                    print(f"  DEBUG: {fname}: data_stat aun con 1 campo "
+                          f"({stat['total_size']} bytes)")
+                send_free_data(panel, debug=False)
+                continue
+
+        # Respuesta directa - parsear
+        if message[0] != table_index:
+            if debug:
+                print(f"  DEBUG: {fname}: byte0={message[0]:#04x} "
+                      f"(esperado {table_index:#04x})")
+                print(f"  DEBUG: {fname}: hex={message[:30].hex(' ')}")
+            continue
+
+        resp_field_cnt = message[1]
+        if resp_field_cnt != 1:
+            if debug:
+                print(f"  DEBUG: {fname}: field_cnt={resp_field_cnt} "
+                      f"(esperado 1)")
+
+        resp_field_idx = message[2]
+        record_data = message[3:]
+
+        # Parsear valores del campo
+        values = []
+        pos = 0
+        while pos < len(record_data):
+            if pos >= len(record_data):
+                break
+            field_size = record_data[pos]
+            pos += 1
+            if field_size > len(record_data) - pos or field_size > 200:
+                break
+            raw = record_data[pos:pos + field_size]
+            if field['type'] == 'i':
+                values.append(
+                    int.from_bytes(raw, 'little') if raw else 0
+                )
+            else:
+                values.append(
+                    raw.decode('ascii', errors='ignore').rstrip('\x00')
+                )
+            pos += field_size
+
+        all_field_records[fname] = values
+
+        if record_count is None:
+            record_count = len(values)
+
+        print(f"    {fname}: {len(values)} valores OK")
+
+        if debug and values:
+            preview = values[:3]
+            print(f"    DEBUG: primeros: {preview}")
+
+    if not all_field_records or record_count is None:
+        return []
+
+    # Combinar campos por posición de registro
+    records = []
+    for i in range(record_count):
+        rec = {}
+        for field in fields_info:
+            fname = field['name']
+            if fname in all_field_records:
+                vals = all_field_records[fname]
+                if i < len(vals):
+                    rec[fname] = vals[i]
+        if rec:
+            records.append(rec)
+
+    return records
+
+
 def send_free_data(panel, debug=False):
     """Envia FREE_DATA para liberar el buffer del panel."""
     for cmd_byte in CMD_FREE_DATA_CANDIDATES:
@@ -390,103 +503,19 @@ def read_table(panel, table_name, fields_info, table_index,
         total_size = stat['total_size']
         extra = stat['extra']
         print(f"  Two-phase transfer: {total_size} bytes, extra={extra}")
+        print(f"  Tabla demasiado grande para single-frame.")
 
         if total_size == 0:
             print(f"  Tabla vacia")
             return []
 
-        # Estrategia A: leer raw TCP / frames C3 que ya esten en el socket
-        all_data = read_twophase_data(panel, total_size, debug, timeout)
-
-        if not all_data or len(all_data) < 10:
-            # Estrategia B: re-enviar GETDATA - quiza data_stat fue "prepare"
-            # y el segundo GETDATA devuelve los datos reales
-            if debug:
-                print(f"  DEBUG: === Estrategia B: Re-send GETDATA ===")
-            try:
-                msg2, sz2 = panel._send_receive(
-                    consts.Command.GETDATA, parameters
-                )
-                if msg2 and len(msg2) > 17 and msg2[0] == table_index:
-                    print(f"  Estrategia B: GETDATA re-send funciono! "
-                          f"({len(msg2)} bytes)")
-                    all_data = msg2
-                elif msg2 and debug:
-                    print(f"  DEBUG: re-GETDATA: {len(msg2)} bytes, "
-                          f"byte0={msg2[0]:#04x}: {msg2[:20].hex(' ')}")
-            except Exception as e:
-                if debug:
-                    print(f"  DEBUG: re-GETDATA error: {e}")
-
-        if not all_data or len(all_data) < 10:
-            # Estrategia C: GETDATA con trailing bytes variados
-            # [table, fields..., start_record, page_size]
-            if debug:
-                print(f"  DEBUG: === Estrategia C: GETDATA paginado ===")
-            for trail_a, trail_b in [(1, 0), (0, 1), (1, 1), (0, 100)]:
-                params_paged = ([table_index, len(field_indexes)]
-                                + field_indexes + [trail_a, trail_b])
-                try:
-                    msg3, sz3 = panel._send_receive(
-                        consts.Command.GETDATA, params_paged
-                    )
-                    if msg3 and len(msg3) > 17 and msg3[0] == table_index:
-                        print(f"  Estrategia C: trail=[{trail_a},{trail_b}] "
-                              f"funciono! ({len(msg3)} bytes)")
-                        all_data = msg3
-                        break
-                    elif msg3 and debug:
-                        is_stat = (msg3[0] == 0x00 and len(msg3) >= 9)
-                        tag = "data_stat" if is_stat else "otro"
-                        print(f"  DEBUG: trail=[{trail_a},{trail_b}]: "
-                              f"{len(msg3)} bytes ({tag})")
-                except Exception as e:
-                    if debug:
-                        print(f"  DEBUG: trail=[{trail_a},{trail_b}] error: {e}")
-                    break  # Conexion rota
-
-        if not all_data or len(all_data) < 10:
-            # Estrategia D: enviar cmd 0x09, luego esperar 15s por frames
-            if debug:
-                print(f"  DEBUG: === Estrategia D: cmd 0x09 + wait 15s ===")
-            rdy_payload = struct.pack('<II', 0, total_size)
-            send_raw_cmd(panel, 0x09, rdy_payload, debug, timeout=3)
-            # Esperar más tiempo por si los datos llegan con delay
-            raw = recv_all_available(panel._sock, timeout=15)
-            if raw and len(raw) > 20:
-                if debug:
-                    print(f"  DEBUG: datos tardios: {len(raw)} bytes")
-                    print(f"  DEBUG: inicio: {raw[:80].hex(' ')}")
-                if raw[0] == consts.C3_MESSAGE_START:
-                    session_off = 4 if not panel._session_less else 0
-                    all_data = _parse_raw_frames(
-                        raw, total_size, session_off, debug
-                    )
-                else:
-                    all_data = raw[:total_size]
-            elif debug:
-                print(f"  DEBUG: sin datos tardios "
-                      f"({len(raw) if raw else 0} bytes)")
-
-        # FREE_DATA
+        # FREE_DATA para limpiar el buffer pendiente
         send_free_data(panel, debug)
 
-        if debug:
-            preview = all_data[:200].hex(' ') if all_data else '(vacio)'
-            print(f"  DEBUG: datos totales: {len(all_data)} bytes")
-            print(f"  DEBUG: preview: {preview}")
-
-        if not all_data:
-            return []
-
-        # Si los datos ya incluyen table header (byte0 == table_index)
-        if all_data[0] == table_index:
-            return parse_table_records(
-                bytes(all_data), fields_info, table_index, debug
-            )
-        # Si los datos son raw sin header, agregar header
-        return parse_table_records(
-            bytes(all_data), fields_info, table_index, debug
+        # Estrategia: pedir UN campo a la vez para mantener respuestas pequeñas
+        print(f"  Intentando lectura campo-por-campo...")
+        return read_table_by_fields(
+            panel, table_name, fields_info, table_index, debug, timeout
         )
 
     # Caso 3: Formato desconocido
