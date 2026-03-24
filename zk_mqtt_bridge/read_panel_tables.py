@@ -254,167 +254,87 @@ def send_raw_cmd(panel, cmd_byte, payload_data=None, debug=False, timeout=5):
     return cmd, resp
 
 
-def read_buffer_chunks(panel, total_size, debug=False, timeout=60):
-    """Lee datos del panel usando READ_BUFFER (0x09) con offset+size.
+def read_twophase_data(panel, total_size, debug=False, timeout=60):
+    """Lee datos two-phase probando multiples estrategias.
 
-    Modelo pull como pyzk: enviar solicitud con [offset, chunk_size]
-    para cada chunk hasta completar total_size bytes.
-
-    Prueba múltiples formatos de payload para descubrir el correcto:
-    1. [offset:4LE, size:4LE] - formato pyzk estándar
-    2. [0:4LE, total_size:4LE] - DATA_RDY estilo (todo de una vez)
-    3. Sin payload (solo el comando)
-    4. [offset:4LE, size:4LE, 0:4LE] - con padding extra
+    Estrategias:
+    A) Raw TCP: leer bytes crudos del socket (sin framing C3)
+    B) GETDATA paginado: re-enviar GETDATA con offset en trailing bytes
+    C) GETDATA re-send: re-enviar mismo GETDATA para obtener datos
+    D) Esperar frames C3 con timeout largo
     """
-    CMD_READ_BUFFER = 0x09
-    MAX_CHUNK = 0xFC00  # ~64KB por chunk
+    session_offset = 4 if not panel._session_less else 0
 
+    # ============================================================
+    # Estrategia A: leer raw TCP inmediatamente
+    # Quiza el panel envia datos sin framing C3 despues del data_stat
+    # ============================================================
+    if debug:
+        print(f"  DEBUG: === Estrategia A: Raw TCP ===")
+    raw = recv_all_available(panel._sock, timeout=3)
+    if raw and len(raw) > 20:
+        if debug:
+            print(f"  DEBUG: raw TCP: {len(raw)} bytes")
+            print(f"  DEBUG: inicio: {raw[:80].hex(' ')}")
+        # Verificar si empieza con 0xAA (frame C3) o es datos puros
+        if raw[0] != consts.C3_MESSAGE_START:
+            print(f"  Estrategia A: datos raw TCP ({len(raw)} bytes)")
+            return bytes(raw[:total_size])
+        else:
+            # Son frames C3 - parsearlos
+            print(f"  Estrategia A: frames C3 encontrados ({len(raw)} bytes raw)")
+            return _parse_raw_frames(raw, total_size, session_offset, debug)
+    elif debug:
+        print(f"  DEBUG: no hay datos raw ({len(raw) if raw else 0} bytes)")
+
+    # ============================================================
+    # Estrategia B: re-enviar GETDATA con diferentes trailing params
+    # Los [0, 0] al final podrian ser [page, flags]
+    # ============================================================
+    if debug:
+        print(f"  DEBUG: === Estrategia B: GETDATA paginado ===")
+
+    # Necesitamos la info de tabla para reconstruir GETDATA
+    # Usamos tabla user (idx=1) como referencia, pero esto se llama
+    # desde read_table que pasa la info correcta
+    return b''
+
+
+def _parse_raw_frames(raw_data, total_size, session_offset, debug=False):
+    """Parsea frames C3 de datos raw del socket."""
     all_data = bytearray()
-    start = time.time()
+    pos = 0
+    frames = 0
 
-    # Estrategia 1: READ_BUFFER con [offset, size] - chunks
-    chunk_size = min(total_size, MAX_CHUNK)
-    offset = 0
-
-    # Probar diferentes formatos de payload para el primer request
-    payloads_to_try = [
-        ('offset+size', struct.pack('<II', 0, chunk_size)),
-        ('offset+size+total', struct.pack('<III', 0, chunk_size, total_size)),
-        ('zero+total', struct.pack('<II', 0, total_size)),
-        ('solo_total', struct.pack('<I', total_size)),
-        ('sin_payload', None),
-    ]
-
-    working_format = None
-
-    for fmt_name, payload_data in payloads_to_try:
-        if debug:
-            hex_preview = payload_data.hex(' ') if payload_data else '(none)'
-            print(f"  DEBUG: READ_BUFFER formato '{fmt_name}': {hex_preview}")
-
-        cmd, resp = send_raw_cmd(
-            panel, CMD_READ_BUFFER, payload_data, debug, timeout=10
-        )
-
-        if cmd == REPLY_OK and resp and len(resp) > 4:
-            # Datos recibidos! Este formato funciona
-            session_offset = 4 if not panel._session_less else 0
-            frame_data = resp[session_offset:]
-            if frame_data:
-                working_format = fmt_name
-                all_data.extend(frame_data)
-                print(f"  READ_BUFFER formato '{fmt_name}' funciona! "
-                      f"({len(frame_data)} bytes)")
-                break
-
-        if cmd == REPLY_OK and (not resp or len(resp) <= 4):
-            # ACK vacio - panel acepto pero no envio datos
-            # Quizas los datos vienen en frames posteriores
-            if debug:
-                print(f"  DEBUG: formato '{fmt_name}' -> ACK vacio, "
-                      f"esperando frames...")
-            # Intentar leer frames de datos
-            frame_cmd, frame_data = recv_c3_frame(panel._sock, timeout=5)
-            if frame_cmd == REPLY_OK and frame_data and len(frame_data) > 4:
-                session_offset = 4 if not panel._session_less else 0
-                clean = frame_data[session_offset:]
-                if clean:
-                    working_format = fmt_name
-                    all_data.extend(clean)
-                    print(f"  READ_BUFFER formato '{fmt_name}' funciona "
-                          f"(datos en frame siguiente, {len(clean)} bytes)!")
-                    break
-            elif frame_cmd is not None and debug:
-                print(f"  DEBUG: frame despues de ACK: cmd={frame_cmd:#04x}, "
-                      f"{len(frame_data) if frame_data else 0} bytes")
-
-        if cmd == REPLY_ERROR:
-            if debug:
-                err = resp[-1] if resp else '?'
-                print(f"  DEBUG: formato '{fmt_name}' -> ERROR ({err})")
-            # Error puede romper la sesion, necesitar reconexion
-            # Pero intentemos el siguiente formato primero
+    while pos < len(raw_data) and len(all_data) < total_size:
+        if raw_data[pos] != consts.C3_MESSAGE_START:
+            pos += 1
             continue
 
-        if cmd is None:
-            if debug:
-                print(f"  DEBUG: formato '{fmt_name}' -> timeout")
-            continue
-
-    if not working_format:
-        print(f"  ERROR: Ningun formato READ_BUFFER funciono")
-        if debug:
-            # Ultimo intento: leer raw del socket por si los datos llegan tarde
-            raw = recv_all_available(panel._sock, timeout=5)
-            if raw:
-                print(f"  DEBUG: datos raw en socket: {len(raw)} bytes: "
-                      f"{raw[:100].hex(' ')}")
-        return b''
-
-    # Si ya tenemos todos los datos en el primer chunk
-    if len(all_data) >= total_size:
-        elapsed = time.time() - start
-        print(f"  Completado: {len(all_data)} bytes ({elapsed:.1f}s)")
-        return bytes(all_data[:total_size])
-
-    # Leer chunks restantes con el formato que funciono
-    chunk_nr = 1
-    while len(all_data) < total_size:
-        elapsed = time.time() - start
-        if elapsed > timeout:
-            print(f"\n  TIMEOUT: {len(all_data)}/{total_size} bytes")
+        if pos + 5 > len(raw_data):
             break
 
-        offset = len(all_data)
-        remaining = total_size - offset
-        chunk_size = min(remaining, MAX_CHUNK)
+        cmd = raw_data[pos + 2]
+        data_size = raw_data[pos + 3] + (raw_data[pos + 4] * 256)
 
-        # Construir payload con el formato que funciono
-        if working_format == 'offset+size':
-            payload_data = struct.pack('<II', offset, chunk_size)
-        elif working_format == 'offset+size+total':
-            payload_data = struct.pack('<III', offset, chunk_size, total_size)
-        elif working_format == 'zero+total':
-            payload_data = struct.pack('<II', offset, remaining)
-        elif working_format == 'solo_total':
-            payload_data = struct.pack('<I', remaining)
-        else:
-            payload_data = None
-
-        cmd, resp = send_raw_cmd(
-            panel, CMD_READ_BUFFER, payload_data, debug=False, timeout=10
-        )
-
-        if cmd == REPLY_OK and resp:
-            session_offset = 4 if not panel._session_less else 0
-            frame_data = resp[session_offset:]
-            if frame_data:
-                all_data.extend(frame_data)
-                chunk_nr += 1
-                if chunk_nr % 5 == 0 or debug:
-                    pct = len(all_data) * 100 / total_size
-                    print(f"\r  Chunk {chunk_nr}: {len(all_data)}/{total_size} "
-                          f"({pct:.0f}%)", end='', flush=True)
-            elif not frame_data:
-                # ACK vacio, intentar leer frame siguiente
-                f_cmd, f_data = recv_c3_frame(panel._sock, timeout=5)
-                if f_cmd == REPLY_OK and f_data:
-                    clean = f_data[session_offset:]
-                    if clean:
-                        all_data.extend(clean)
-                        chunk_nr += 1
-                else:
-                    if debug:
-                        print(f"\n  DEBUG: chunk {chunk_nr} sin datos")
-                    break
-        else:
-            if debug:
-                print(f"\n  DEBUG: chunk {chunk_nr} fallo "
-                      f"(cmd={'None' if cmd is None else hex(cmd)})")
+        frame_end = pos + 5 + data_size + 3  # header + payload + CRC + END
+        if frame_end > len(raw_data):
             break
 
-    elapsed = time.time() - start
-    print(f"\n  Completado: {len(all_data)} bytes en {chunk_nr} chunks ({elapsed:.1f}s)")
+        payload = raw_data[pos + 5:pos + 5 + data_size]
+        frame_data = payload[session_offset:] if len(payload) > session_offset else payload
+
+        if cmd == REPLY_OK and frame_data:
+            all_data.extend(frame_data)
+            frames += 1
+            if debug and frames <= 3:
+                print(f"  DEBUG: raw frame {frames}: cmd={cmd:#04x}, "
+                      f"{len(frame_data)} bytes")
+
+        pos = frame_end
+
+    if debug:
+        print(f"  DEBUG: parseados {frames} frames, {len(all_data)} bytes")
     return bytes(all_data[:total_size])
 
 
@@ -468,16 +388,87 @@ def read_table(panel, table_name, fields_info, table_index,
     stat = parse_data_stat(message)
     if stat:
         total_size = stat['total_size']
-        print(f"  Two-phase transfer: {total_size} bytes, extra={stat['extra']}")
+        extra = stat['extra']
+        print(f"  Two-phase transfer: {total_size} bytes, extra={extra}")
 
         if total_size == 0:
             print(f"  Tabla vacia")
             return []
 
-        # Paso 2: Leer datos con READ_BUFFER (pull model)
-        all_data = read_buffer_chunks(panel, total_size, debug, timeout)
+        # Estrategia A: leer raw TCP / frames C3 que ya esten en el socket
+        all_data = read_twophase_data(panel, total_size, debug, timeout)
 
-        # Paso 3: FREE_DATA para liberar buffer
+        if not all_data or len(all_data) < 10:
+            # Estrategia B: re-enviar GETDATA - quiza data_stat fue "prepare"
+            # y el segundo GETDATA devuelve los datos reales
+            if debug:
+                print(f"  DEBUG: === Estrategia B: Re-send GETDATA ===")
+            try:
+                msg2, sz2 = panel._send_receive(
+                    consts.Command.GETDATA, parameters
+                )
+                if msg2 and len(msg2) > 17 and msg2[0] == table_index:
+                    print(f"  Estrategia B: GETDATA re-send funciono! "
+                          f"({len(msg2)} bytes)")
+                    all_data = msg2
+                elif msg2 and debug:
+                    print(f"  DEBUG: re-GETDATA: {len(msg2)} bytes, "
+                          f"byte0={msg2[0]:#04x}: {msg2[:20].hex(' ')}")
+            except Exception as e:
+                if debug:
+                    print(f"  DEBUG: re-GETDATA error: {e}")
+
+        if not all_data or len(all_data) < 10:
+            # Estrategia C: GETDATA con trailing bytes variados
+            # [table, fields..., start_record, page_size]
+            if debug:
+                print(f"  DEBUG: === Estrategia C: GETDATA paginado ===")
+            for trail_a, trail_b in [(1, 0), (0, 1), (1, 1), (0, 100)]:
+                params_paged = ([table_index, len(field_indexes)]
+                                + field_indexes + [trail_a, trail_b])
+                try:
+                    msg3, sz3 = panel._send_receive(
+                        consts.Command.GETDATA, params_paged
+                    )
+                    if msg3 and len(msg3) > 17 and msg3[0] == table_index:
+                        print(f"  Estrategia C: trail=[{trail_a},{trail_b}] "
+                              f"funciono! ({len(msg3)} bytes)")
+                        all_data = msg3
+                        break
+                    elif msg3 and debug:
+                        is_stat = (msg3[0] == 0x00 and len(msg3) >= 9)
+                        tag = "data_stat" if is_stat else "otro"
+                        print(f"  DEBUG: trail=[{trail_a},{trail_b}]: "
+                              f"{len(msg3)} bytes ({tag})")
+                except Exception as e:
+                    if debug:
+                        print(f"  DEBUG: trail=[{trail_a},{trail_b}] error: {e}")
+                    break  # Conexion rota
+
+        if not all_data or len(all_data) < 10:
+            # Estrategia D: enviar cmd 0x09, luego esperar 15s por frames
+            if debug:
+                print(f"  DEBUG: === Estrategia D: cmd 0x09 + wait 15s ===")
+            rdy_payload = struct.pack('<II', 0, total_size)
+            send_raw_cmd(panel, 0x09, rdy_payload, debug, timeout=3)
+            # Esperar más tiempo por si los datos llegan con delay
+            raw = recv_all_available(panel._sock, timeout=15)
+            if raw and len(raw) > 20:
+                if debug:
+                    print(f"  DEBUG: datos tardios: {len(raw)} bytes")
+                    print(f"  DEBUG: inicio: {raw[:80].hex(' ')}")
+                if raw[0] == consts.C3_MESSAGE_START:
+                    session_off = 4 if not panel._session_less else 0
+                    all_data = _parse_raw_frames(
+                        raw, total_size, session_off, debug
+                    )
+                else:
+                    all_data = raw[:total_size]
+            elif debug:
+                print(f"  DEBUG: sin datos tardios "
+                      f"({len(raw) if raw else 0} bytes)")
+
+        # FREE_DATA
         send_free_data(panel, debug)
 
         if debug:
@@ -488,7 +479,15 @@ def read_table(panel, table_name, fields_info, table_index,
         if not all_data:
             return []
 
-        return parse_table_records(bytes(all_data), fields_info, table_index, debug)
+        # Si los datos ya incluyen table header (byte0 == table_index)
+        if all_data[0] == table_index:
+            return parse_table_records(
+                bytes(all_data), fields_info, table_index, debug
+            )
+        # Si los datos son raw sin header, agregar header
+        return parse_table_records(
+            bytes(all_data), fields_info, table_index, debug
+        )
 
     # Caso 3: Formato desconocido
     print(f"  AVISO: formato respuesta desconocido (byte0={message[0]:#04x})")
