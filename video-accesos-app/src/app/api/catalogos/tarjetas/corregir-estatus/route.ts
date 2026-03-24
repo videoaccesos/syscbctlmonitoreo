@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // POST /api/catalogos/tarjetas/corregir-estatus
-// Corrige tarjetas con estatus_id=1 (Activa) que tienen asignacion activa
+// Corrige tarjetas con estatus_id=1 (Disponible) que tienen asignacion activa
 // y las cambia a estatus_id=2 (Asignada)
 export async function POST() {
   try {
@@ -57,12 +57,12 @@ export async function POST() {
       },
       data: {
         estatusId: 2,
-        observaciones: "Correccion automatica: tenia asignacion activa",
+        observaciones: "Correccion automatica: tarjeta disponible con asignacion activa",
       },
     });
 
     return NextResponse.json({
-      message: `Se corrigieron ${result.count} tarjeta(s) de Activa a Asignada`,
+      message: `Se corrigieron ${result.count} tarjeta(s) de Disponible a Asignada`,
       actualizadas: result.count,
       ids,
     });

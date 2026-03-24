@@ -36,7 +36,7 @@ const TIPOS: Record<number, string> = {
 };
 
 const ESTATUS: Record<number, string> = {
-  1: "Activa",
+  1: "Disponible",
   2: "Asignada",
   3: "Danada",
   4: "Consignacion",
@@ -53,11 +53,11 @@ const ESTATUS_BADGE: Record<number, string> = {
 
 // Estados a los que se puede cambiar manualmente (nunca a "Asignada")
 const ESTATUS_EDITABLES: Record<number, number[]> = {
-  1: [3, 4, 5],       // Activa -> Danada, Consignacion, Baja
+  1: [3, 4, 5],       // Disponible -> Danada, Consignacion, Baja
   2: [3, 4, 5],       // Asignada -> Danada, Consignacion, Baja (cancela asignacion automaticamente)
-  3: [1],             // Danada -> Activa
-  4: [1],             // Consignacion -> Activa
-  5: [1],             // Baja -> Activa
+  3: [1],             // Danada -> Disponible
+  4: [1],             // Consignacion -> Disponible
+  5: [1],             // Baja -> Disponible
 };
 
 const emptyForm = { lectura: "", numeroSerie: "", tipoId: "1", estatusId: "", observaciones: "" };
@@ -405,7 +405,7 @@ export default function TarjetasPage() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Todas</option>
-              <option value="1">Activa</option>
+              <option value="1">Disponible</option>
               <option value="2">Asignada</option>
               <option value="3">Danada</option>
               <option value="4">Consignacion</option>

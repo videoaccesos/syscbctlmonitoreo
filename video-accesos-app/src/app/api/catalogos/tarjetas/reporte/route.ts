@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     });
 
     const ESTATUS_LABELS: Record<number, string> = {
-      1: "ACTIVA", 2: "ASIGNADA", 3: "DANADA", 4: "CONSIGNACION", 5: "BAJA",
+      1: "DISPONIBLE", 2: "ASIGNADA", 3: "DANADA", 4: "CONSIGNACION", 5: "BAJA",
     };
     const TIPO_LABELS: Record<number, string> = { 1: "PEATONAL", 2: "VEHICULAR" };
 
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
     hRow.eachCell((c: any) => { c.style = headerStyle; });
 
     const estatusColors: Record<string, string> = {
-      ACTIVA: "FF16A34A", ASIGNADA: "FF2563EB", DANADA: "FFDC2626",
+      DISPONIBLE: "FF16A34A", ASIGNADA: "FF2563EB", DANADA: "FFDC2626",
       CONSIGNACION: "FFD97706", BAJA: "FF6B7280",
     };
 

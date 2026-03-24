@@ -166,7 +166,7 @@ export async function PUT(
 
     if (![1, 2, 3, 4, 5].includes(nuevoEstatus)) {
       return NextResponse.json(
-        { error: "El estatus debe ser 1 (Activa), 2 (Asignada), 3 (Danada), 4 (Consignacion) o 5 (Baja)" },
+        { error: "El estatus debe ser 1 (Disponible), 2 (Asignada), 3 (Danada), 4 (Consignacion) o 5 (Baja)" },
         { status: 400 }
       );
     }
@@ -179,10 +179,10 @@ export async function PUT(
       );
     }
 
-    // No se puede cambiar de Asignada a Activa directamente - debe cancelar la asignacion primero
+    // No se puede cambiar de Asignada a Disponible directamente - debe cancelar la asignacion primero
     if (existente.estatusId === 2 && nuevoEstatus === 1) {
       return NextResponse.json(
-        { error: "No se puede cambiar a Activa una tarjeta asignada. Cancele la asignacion desde el proceso de asignacion, o cambie a Danada/Consignacion/Baja." },
+        { error: "No se puede cambiar a Disponible una tarjeta asignada. Cancele la asignacion desde el proceso de asignacion, o cambie a Danada/Consignacion/Baja." },
         { status: 400 }
       );
     }
@@ -208,19 +208,21 @@ export async function PUT(
       asignacionesCanceladas = await cancelarAsignacionesDeTarjeta(tarjetaId);
     }
 
-    // Verificar duplicado de lectura (excluyendo el registro actual)
-    const duplicado = await prisma.tarjeta.findFirst({
-      where: {
-        lectura: body.lectura.trim(),
-        NOT: { id: tarjetaId },
-      },
-    });
+    // Verificar duplicado de lectura solo si la lectura cambio
+    if (body.lectura.trim() !== existente.lectura) {
+      const duplicado = await prisma.tarjeta.findFirst({
+        where: {
+          lectura: body.lectura.trim(),
+          NOT: { id: tarjetaId },
+        },
+      });
 
-    if (duplicado) {
-      return NextResponse.json(
-        { error: "Ya existe otra tarjeta con esa lectura" },
-        { status: 409 }
-      );
+      if (duplicado) {
+        return NextResponse.json(
+          { error: "Ya existe otra tarjeta con esa lectura" },
+          { status: 409 }
+        );
+      }
     }
 
     const tarjeta = await prisma.tarjeta.update({
