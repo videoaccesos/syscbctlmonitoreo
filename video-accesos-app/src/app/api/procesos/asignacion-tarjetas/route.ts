@@ -341,8 +341,8 @@ export async function POST(request: NextRequest) {
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        estatus_id, usuario_id, interfon_extra
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
@@ -377,6 +377,7 @@ export async function POST(request: NextRequest) {
       dataComun.utilizoSeguro5,
       1,   // estatus_id
       0,   // usuario_id
+      0,   // interfon_extra
     );
 
     // Obtener el ID del registro recién creado

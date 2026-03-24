@@ -140,8 +140,8 @@ export async function POST(
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        estatus_id, usuario_id, interfon_extra
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       tarjetaIdRenovar,
       "",    // tarjeta_id2 (renovacion individual)
       "",    // tarjeta_id3
@@ -173,7 +173,8 @@ export async function POST(
         : `Renovacion de tarjeta ${tarjetaIdRenovar} (asignacion #${asignacionId})`,
       0, 0, 0, 0, 0, // utilizo_seguro 1-5
       1,     // estatus_id (activa)
-      0      // usuario_id
+      0,     // usuario_id
+      0      // interfon_extra
     );
 
     // Obtener ID de la nueva asignacion
