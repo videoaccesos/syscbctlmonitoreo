@@ -139,6 +139,24 @@ class MQTTPublisher:
         except Exception as e:
             logger.error(f"Error publicando MQTT: {e}")
 
+    def publish_data(self, data_type: str, records: list, extra: dict = None):
+        """Publica datos de tabla (usuarios, transacciones, etc.)."""
+        topic = f"{self.topic_prefix}/{self.site_id}/data/{data_type}"
+
+        payload = {
+            "site_id": self.site_id,
+            "source": "zk_c3_400",
+            "data_type": data_type,
+            "count": len(records),
+            "records": records,
+            "synced_at": datetime.now().isoformat(),
+        }
+        if extra:
+            payload.update(extra)
+
+        self._publish(topic, payload)
+        logger.info(f"Sync {data_type}: {len(records)} registros publicados")
+
     def _publish_status(self, status: str, payload: dict = None):
         """Publica estado del bridge."""
         topic = f"{self.topic_prefix}/{self.site_id}/bridge/status"

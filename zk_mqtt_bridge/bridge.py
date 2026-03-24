@@ -151,7 +151,50 @@ def run_bridge(config: dict):
         site_id=site_id,
     )
 
-    # Callback para comandos remotos (abrir puerta via MQTT)
+    # --- Funciones de sync de tablas ---
+    def sync_users():
+        """Lee tabla de usuarios del panel y publica por MQTT."""
+        if not panel.connected:
+            logger.warning("Panel no conectado, no se puede sincronizar usuarios")
+            return False
+        try:
+            logger.info("Sincronizando usuarios del panel...")
+            users = panel.get_users()
+            publisher.publish_data('users', users)
+            return True
+        except Exception as e:
+            logger.error(f"Error sincronizando usuarios: {e}")
+            return False
+
+    def sync_transactions():
+        """Lee transacciones del panel y publica por MQTT."""
+        if not panel.connected:
+            logger.warning("Panel no conectado, no se puede sincronizar transacciones")
+            return False
+        try:
+            logger.info("Sincronizando transacciones del panel...")
+            transactions = panel.get_transactions()
+            publisher.publish_data('transactions', transactions)
+            return True
+        except Exception as e:
+            logger.error(f"Error sincronizando transacciones: {e}")
+            return False
+
+    def sync_table(table_name: str):
+        """Lee una tabla arbitraria del panel y publica por MQTT."""
+        if not panel.connected:
+            logger.warning(f"Panel no conectado, no se puede sincronizar {table_name}")
+            return False
+        try:
+            logger.info(f"Sincronizando tabla '{table_name}' del panel...")
+            records = panel.get_table(table_name)
+            publisher.publish_data(table_name, records)
+            return True
+        except Exception as e:
+            logger.error(f"Error sincronizando tabla {table_name}: {e}")
+            return False
+
+    # Callback para comandos remotos (abrir puerta, sync, etc.)
     def on_command(topic: str, payload: dict):
         cmd = payload.get('command', '')
         if cmd == 'open_door':
@@ -160,7 +203,6 @@ def run_bridge(config: dict):
             logger.info(f"Comando remoto: abrir puerta {door_id} por {duration}s")
             if panel.connected:
                 success = panel.open_door(door_id, duration)
-                # Publicar resultado
                 publisher.publish_event({
                     'type': 'command_result',
                     'command': 'open_door',
@@ -170,6 +212,30 @@ def run_bridge(config: dict):
                 })
             else:
                 logger.warning("Panel no conectado, no se puede abrir puerta")
+
+        elif cmd == 'sync_users':
+            logger.info("Comando remoto: sync usuarios")
+            sync_users()
+
+        elif cmd == 'sync_transactions':
+            logger.info("Comando remoto: sync transacciones")
+            sync_transactions()
+
+        elif cmd == 'sync_table':
+            table_name = payload.get('table', '')
+            if table_name:
+                logger.info(f"Comando remoto: sync tabla '{table_name}'")
+                sync_table(table_name)
+            else:
+                logger.warning("Comando sync_table sin nombre de tabla")
+
+        elif cmd == 'sync_all':
+            logger.info("Comando remoto: sync completo")
+            sync_users()
+            sync_transactions()
+
+        else:
+            logger.warning(f"Comando desconocido: {cmd}")
 
     publisher.on_command = on_command
 
@@ -199,7 +265,13 @@ def run_bridge(config: dict):
     reconnect_delay = 5
     events_total = 0
 
-    logger.info(f"Bridge activo - Site: {site_id} | Poll: {poll_interval}s")
+    # Sync inicial de tablas al arrancar
+    if panel_connected:
+        logger.info("Ejecutando sync inicial de tablas...")
+        sync_users()
+        sync_transactions()
+
+    logger.info(f"Bridge activo - Site: {site_id} | Poll: {poll_interval}s | Sync: {sync_interval}s")
     logger.info("Presiona Ctrl+C para detener")
 
     while running:
@@ -242,8 +314,15 @@ def run_bridge(config: dict):
                     'event_number': events_total,
                 })
 
-            # Heartbeat periodico (cada 60s)
+            # Sync periodico de tablas (cada sync_interval segundos)
             now = time.time()
+            if now - last_sync >= sync_interval:
+                logger.info(f"Sync periodico de tablas (cada {sync_interval}s)")
+                sync_users()
+                sync_transactions()
+                last_sync = now
+
+            # Heartbeat periodico (cada 60s)
             if now - last_heartbeat >= 60:
                 publisher.publish_heartbeat(
                     panel.connected,
