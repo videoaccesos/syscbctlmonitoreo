@@ -264,26 +264,21 @@ def try_data_rdy(panel, total_size, debug=False):
             else:
                 print(f"  DEBUG: sin respuesta")
 
-        if cmd == REPLY_OK and payload:
-            # Recibimos datos! Este es el command correcto
-            print(f"  DATA_RDY command encontrado: {cmd_byte:#04x}")
+        if cmd == REPLY_OK:
+            # ACK recibido - este es el command correcto
+            # payload puede ser vacio (ACK puro) o contener datos iniciales
+            print(f"  DATA_RDY aceptado: cmd={cmd_byte:#04x} "
+                  f"(payload={len(payload)} bytes)")
             return cmd, payload, cmd_byte
 
         if cmd == REPLY_ERROR:
             if debug:
                 print(f"  DEBUG: cmd {cmd_byte:#04x} -> ERROR")
-            # Puede que haya roto la conexion, reconectar
             return cmd, payload, cmd_byte
 
         if cmd is None:
-            # Timeout - podria ser que el panel esta enviando datos por otro canal
-            # Intentar leer datos crudos
-            raw = recv_all_available(panel._sock, timeout=3)
-            if raw and len(raw) > 10:
-                if debug:
-                    print(f"  DEBUG: datos raw despues de cmd {cmd_byte:#04x}: "
-                          f"{len(raw)} bytes: {raw[:50].hex(' ')}")
-                return REPLY_OK, raw, cmd_byte
+            if debug:
+                print(f"  DEBUG: cmd {cmd_byte:#04x} -> sin respuesta")
             continue
 
     return None, None, None
