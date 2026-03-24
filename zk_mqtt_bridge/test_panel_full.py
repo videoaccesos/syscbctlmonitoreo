@@ -205,7 +205,9 @@ def read_params_one_by_one(panel):
 
 
 def read_all_tables(panel):
-    """Lee todas las tablas disponibles."""
+    """Lee todas las tablas disponibles.
+    Reconecta automaticamente si una tabla grande rompe la conexion.
+    """
     print("\n" + "-" * 60)
     print("  TABLAS DE DATOS")
     print("-" * 60)
@@ -216,10 +218,39 @@ def read_all_tables(panel):
         print(f"  Error obteniendo config de tablas: {e}")
         return
 
+    # Tablas que suelen fallar con datos grandes o firmware viejo
+    skip_tables = {'firstcard', 'multimcard', 'inoutfun'}
+    # Tablas criticas que queremos leer (en orden de prioridad)
+    priority_tables = ['user', 'userauthorize', 'timezone', 'holiday', 'transaction']
+
+    # Ordenar: primero las prioritarias, luego el resto
+    cfg_map = {cfg.name: cfg for cfg in data_cfg}
+    ordered = []
+    for name in priority_tables:
+        if name in cfg_map:
+            ordered.append(cfg_map[name])
     for cfg in data_cfg:
+        if cfg.name not in priority_tables:
+            ordered.append(cfg)
+
+    for cfg in ordered:
         fields = [f.name for f in cfg.fields]
         print(f"\n  Tabla: {cfg.name}")
         print(f"  Campos: {', '.join(fields)}")
+
+        if cfg.name in skip_tables:
+            print(f"  (saltada - tabla auxiliar no critica)")
+            continue
+
+        # Verificar conexion antes de leer
+        if not panel.is_connected():
+            print(f"  Reconectando...")
+            try:
+                panel.connect()
+                print(f"  Reconectado OK")
+            except Exception as e:
+                print(f"  No se pudo reconectar: {e}")
+                break
 
         try:
             rows = panel.get_device_data(cfg.name)
@@ -231,6 +262,9 @@ def read_all_tables(panel):
                     print(f"    [{i+1}] {row}")
                 if len(rows) > 10:
                     print(f"    ... ({len(rows) - 10} mas)")
+        except ConnectionError as e:
+            print(f"  Error conexion: {e}")
+            print(f"  (tabla grande o timeout - reconectando para siguiente)")
         except Exception as e:
             print(f"  Error leyendo: {e}")
 
@@ -327,22 +361,43 @@ def main():
 
     if args.full_test or (not args.open_door and not args.monitor):
         # Leer parametros
-        read_params_one_by_one(panel)
+        params = read_params_one_by_one(panel)
 
         # Leer tablas
         read_all_tables(panel)
 
-        # Status actual
+        # Reconectar si tabla grande rompio conexion
+        if not panel.is_connected():
+            print("\n  Reconectando para status...")
+            panel.connect()
+
+        # Status actual (usando params ya leidos, no door_settings que crashea)
         print("\n" + "-" * 60)
         print("  STATUS DE PUERTAS")
         print("-" * 60)
-        for i in range(1, panel.nr_of_locks + 1):
-            lock = panel.lock_status(i)
-            ds = panel.door_settings(i)
+        nr_locks = int(params.get('LockCount', 4))
+        for i in range(1, nr_locks + 1):
+            try:
+                lock = panel.lock_status(i)
+            except Exception:
+                lock = "?"
+            # Usar los params que ya leimos individualmente
+            drive = params.get(f'Door{i}Drivertime', '?')
+            detect = params.get(f'Door{i}Detectortime', '?')
+            sensor = params.get(f'Door{i}SensorType', '?')
+            verify = params.get(f'Door{i}VerifyType', '?')
+            valid_tz = params.get(f'Door{i}ValidTZ', '?')
             print(f"  Puerta {i}: cerradura={lock} "
-                  f"drive_time={ds.lock_drive_time}s "
-                  f"alarm_timeout={ds.door_alarm_timeout}s "
-                  f"sensor={ds.sensor_type}")
+                  f"drive_time={drive}s "
+                  f"alarm_timeout={detect}s "
+                  f"sensor={sensor} "
+                  f"verify={verify} "
+                  f"timezone={valid_tz}")
+
+    # Reconectar si necesario antes de comandos
+    if (args.open_door or args.monitor or args.full_test) and not panel.is_connected():
+        print("\n  Reconectando...")
+        panel.connect()
 
     # Abrir puerta si se pidio
     if args.open_door:
