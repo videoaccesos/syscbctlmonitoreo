@@ -309,7 +309,7 @@ def main():
 
     tables = {}
     for cfg in data_cfg:
-        fields = [{'index': f.index, 'name': f.name, 'size': f.size, 'type': f.type}
+        fields = [{'index': f.index, 'name': f.name, 'type': f.type}
                   for f in cfg.fields]
         tables[cfg.name] = {
             'index': cfg.index,
@@ -352,7 +352,7 @@ def main():
                         tbl = {
                             'index': cfg.index,
                             'fields': [{'index': f.index, 'name': f.name,
-                                        'size': f.size, 'type': f.type}
+                                        'type': f.type}
                                        for f in cfg.fields],
                         }
                         break
