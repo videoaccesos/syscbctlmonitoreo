@@ -58,7 +58,7 @@ export async function GET(
           select: { id: true, codigo: true, descripcion: true },
         },
         seguimientos: {
-          orderBy: { fecha_modificacion: "asc" },
+          orderBy: { fecha: "asc" },
         },
       },
     });
@@ -207,7 +207,7 @@ export async function PUT(
           select: { id: true, codigo: true, descripcion: true },
         },
         seguimientos: {
-          orderBy: { fecha_modificacion: "asc" },
+          orderBy: { fecha: "asc" },
         },
       },
     });
