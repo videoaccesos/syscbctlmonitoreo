@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         permisoAdministrador: body.permisoAdministrador || 0,
         permisoEncargadoAdministracion: body.permisoEncargadoAdministracion || 0,
         permisoSupervisor: body.permisoSupervisor || 0,
+        googleAuthCode: body.googleAuthCode?.trim() || "",
         fechaBaja: null,
         motivoBaja: "",
         usuarioModId: Number((session.user as Record<string, unknown>)?.usuarioId) || 0,
