@@ -190,6 +190,7 @@ export async function POST(request: NextRequest) {
     const orden = await prisma.ordenServicio.create({
       data: {
         folio,
+        fecha: new Date(),
         empleadoId: parseInt(empleadoId, 10),
         privadaId: parseInt(privadaId, 10),
         tecnicoId: parseInt(tecnicoId, 10),
@@ -198,6 +199,11 @@ export async function POST(request: NextRequest) {
         diagnosticoId: diagnosticoId ? parseInt(diagnosticoId, 10) : 0,
         detalleDiagnostico: detalleDiagnostico?.trim() || "",
         cierreTecnicoId: 0,
+        cierreFecha: new Date("1970-01-01"),
+        cierreComentario: "",
+        fechaAsistio: new Date("1970-01-01"),
+        tiempo: 0,
+        estatusId: 1,
       },
       include: {
         privada: {

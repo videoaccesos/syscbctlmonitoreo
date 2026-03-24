@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
       data: {
         registroAccesoId: parseInt(registroAccesoId, 10),
         supervisorId: parseInt(supervisorId, 10),
+        fecha: new Date(),
         saludo: saludo ? 1 : 0,
         identificoEmpresa: identificoEmpresa ? 1 : 0,
         identificoOperador: identificoOperador ? 1 : 0,
