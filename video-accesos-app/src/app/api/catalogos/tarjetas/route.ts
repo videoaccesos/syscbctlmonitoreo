@@ -99,7 +99,6 @@ export async function GET(request: NextRequest) {
     const [tarjetas, total] = await Promise.all([
       prisma.tarjeta.findMany({
         where,
-        distinct: ["lectura"],
         orderBy: { [sortBy]: sortDir },
         skip,
         take: limit,
