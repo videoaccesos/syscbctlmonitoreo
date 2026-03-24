@@ -25,8 +25,13 @@ export async function GET(request: NextRequest) {
     const params: unknown[] = [];
 
     if (estatusId) {
-      conditions.push("a.estatus_id = ?");
-      params.push(parseInt(estatusId, 10));
+      if (estatusId === "vencida") {
+        // Vencida = activa (1) + folio H + fecha_vencimiento < hoy
+        conditions.push("a.estatus_id = 1 AND a.fecha_vencimiento < CURDATE() AND a.fecha_vencimiento != '0000-00-00'");
+      } else {
+        conditions.push("a.estatus_id = ?");
+        params.push(parseInt(estatusId, 10));
+      }
     }
 
     if (privadaId) {
