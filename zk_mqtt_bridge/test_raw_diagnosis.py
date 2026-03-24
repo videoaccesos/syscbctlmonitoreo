@@ -387,29 +387,36 @@ def test_without_header(ip, port):
 
 
 def test_zkaccess_c3_lib(ip, port):
-    """Intenta usar la libreria zkaccess-c3 directamente."""
-    print("\n[TEST 9] Libreria zkaccess-c3 (pip)")
+    """Intenta usar la libreria zkaccess-c3 (modulo 'c3')."""
+    print("\n[TEST 9] Libreria zkaccess-c3 (pip install zkaccess-c3, import c3)")
     try:
-        import zkaccess_c3
-        ver = getattr(zkaccess_c3, '__version__', '?')
-        print(f"  zkaccess-c3 version: {ver}")
-        C3 = zkaccess_c3.C3
-        panel = C3(ip, port)
-        print(f"  Conectando a {ip}:{port}...")
+        from c3 import C3
+        print(f"  Modulo 'c3' importado OK")
+        panel = C3(ip)  # Solo IP, sin puerto (hardcoded 4370)
+        print(f"  Conectando a {ip}...")
         panel.connect()
         print("  >>> CONEXION EXITOSA via zkaccess-c3!")
 
         try:
-            params = panel.get_device_param(['SerialNumber'])
+            params = panel.get_device_param(['~SerialNumber'])
             print(f"  Serial: {params}")
         except Exception as e:
             print(f"  Serial: no disponible ({e})")
 
+        try:
+            events = panel.get_rt_log()
+            print(f"  Eventos: {len(events) if events else 0} registros")
+            for ev in (events or [])[:3]:
+                print(f"    {ev}")
+        except Exception as e:
+            print(f"  Eventos: {e}")
+
         panel.disconnect()
+        print("  Desconectado OK")
         return True
     except ImportError:
         print("  No instalado. Instalar con:")
-        print("    pip install zkaccess-c3")
+        print("    pip3 install zkaccess-c3")
         return False
     except Exception as e:
         print(f"  Error: {e}")

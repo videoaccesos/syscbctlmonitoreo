@@ -3,11 +3,12 @@ ZK C3-400 Panel Communication Module
 
 Maneja la comunicacion TCP con el panel de control de acceso ZKTeco C3-400.
 Soporta tres modos (en orden de prioridad):
-  1. zkaccess-c3 (Python puro, funciona en Linux/Windows) - PREFERIDO
+  1. zkaccess-c3 (pip install zkaccess-c3, modulo 'c3') - PREFERIDO
   2. pyzkaccess (wrapper del PULL SDK DLL) - solo Windows
   3. Protocolo TCP directo - fallback universal
 
 El C3-400 usa protocolo binario propietario sobre TCP puerto 4370.
+Nota: la libreria zkaccess-c3 se importa como 'c3', no 'zkaccess_c3'.
 """
 
 import struct
@@ -139,10 +140,10 @@ class ZKC3Panel:
 
     def _detect_backend(self):
         """Detecta el mejor backend disponible."""
-        # Prioridad 1: zkaccess-c3 (Python puro, Linux nativo)
+        # Prioridad 1: zkaccess-c3 (pip install zkaccess-c3, modulo 'c3')
         try:
-            import zkaccess_c3
-            self._c3_module = zkaccess_c3
+            import c3 as zkaccess_c3_mod
+            self._c3_module = zkaccess_c3_mod
             self._backend = "zkaccess_c3"
             logger.info("Backend: zkaccess-c3 (Python puro, Linux nativo)")
             return
@@ -222,7 +223,7 @@ class ZKC3Panel:
     def _connect_c3(self) -> bool:
         try:
             C3 = self._c3_module.C3
-            self._c3_panel = C3(self.ip, self.port)
+            self._c3_panel = C3(self.ip)
             self._c3_panel.connect()
             self._connected = True
             serial = self._get_serial_c3()
