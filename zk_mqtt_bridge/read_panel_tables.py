@@ -223,122 +223,199 @@ def parse_data_stat(message):
     }
 
 
-def try_data_rdy(panel, total_size, debug=False):
-    """Intenta enviar DATA_RDY con diferentes command bytes.
+def send_raw_cmd(panel, cmd_byte, payload_data=None, debug=False, timeout=5):
+    """Envia un comando C3 raw y recibe la respuesta."""
+    frame = build_c3_raw_frame(
+        panel._session_id, panel._request_nr,
+        cmd_byte, payload_data
+    )
+    panel._request_nr += 1
 
-    Protocolo standalone: CMD_DATA_RDY = 0x1504
-    rdy_struct = [4 bytes zero] + [4 bytes LE total_size]
+    try:
+        panel._sock.send(frame)
+    except Exception as e:
+        if debug:
+            print(f"  DEBUG: error enviando cmd={cmd_byte:#04x}: {e}")
+        return None, b''
 
-    Para C3, el command byte es desconocido. Probamos candidatos.
+    try:
+        cmd, resp = recv_c3_frame(panel._sock, timeout=timeout)
+    except Exception:
+        cmd, resp = None, b''
+
+    if debug:
+        if cmd is not None:
+            preview = resp[:60].hex(' ') if resp else '(vacio)'
+            print(f"  DEBUG: cmd={cmd_byte:#04x} -> resp={cmd:#04x}, "
+                  f"{len(resp)} bytes: {preview}")
+        else:
+            print(f"  DEBUG: cmd={cmd_byte:#04x} -> sin respuesta")
+
+    return cmd, resp
+
+
+def read_buffer_chunks(panel, total_size, debug=False, timeout=60):
+    """Lee datos del panel usando READ_BUFFER (0x09) con offset+size.
+
+    Modelo pull como pyzk: enviar solicitud con [offset, chunk_size]
+    para cada chunk hasta completar total_size bytes.
+
+    Prueba múltiples formatos de payload para descubrir el correcto:
+    1. [offset:4LE, size:4LE] - formato pyzk estándar
+    2. [0:4LE, total_size:4LE] - DATA_RDY estilo (todo de una vez)
+    3. Sin payload (solo el comando)
+    4. [offset:4LE, size:4LE, 0:4LE] - con padding extra
     """
-    # rdy_struct: 4 zero bytes + 4-byte LE dataset size
-    rdy_payload = struct.pack('<II', 0x00000000, total_size)
+    CMD_READ_BUFFER = 0x09
+    MAX_CHUNK = 0xFC00  # ~64KB por chunk
 
-    for cmd_byte in CMD_DATA_RDY_CANDIDATES:
+    all_data = bytearray()
+    start = time.time()
+
+    # Estrategia 1: READ_BUFFER con [offset, size] - chunks
+    chunk_size = min(total_size, MAX_CHUNK)
+    offset = 0
+
+    # Probar diferentes formatos de payload para el primer request
+    payloads_to_try = [
+        ('offset+size', struct.pack('<II', 0, chunk_size)),
+        ('offset+size+total', struct.pack('<III', 0, chunk_size, total_size)),
+        ('zero+total', struct.pack('<II', 0, total_size)),
+        ('solo_total', struct.pack('<I', total_size)),
+        ('sin_payload', None),
+    ]
+
+    working_format = None
+
+    for fmt_name, payload_data in payloads_to_try:
         if debug:
-            print(f"  DEBUG: probando DATA_RDY con cmd={cmd_byte:#04x}...")
+            hex_preview = payload_data.hex(' ') if payload_data else '(none)'
+            print(f"  DEBUG: READ_BUFFER formato '{fmt_name}': {hex_preview}")
 
-        frame = build_c3_raw_frame(
-            panel._session_id, panel._request_nr,
-            cmd_byte, rdy_payload
+        cmd, resp = send_raw_cmd(
+            panel, CMD_READ_BUFFER, payload_data, debug, timeout=10
         )
-        panel._request_nr += 1
 
-        try:
-            panel._sock.send(frame)
-        except Exception as e:
+        if cmd == REPLY_OK and resp and len(resp) > 4:
+            # Datos recibidos! Este formato funciona
+            session_offset = 4 if not panel._session_less else 0
+            frame_data = resp[session_offset:]
+            if frame_data:
+                working_format = fmt_name
+                all_data.extend(frame_data)
+                print(f"  READ_BUFFER formato '{fmt_name}' funciona! "
+                      f"({len(frame_data)} bytes)")
+                break
+
+        if cmd == REPLY_OK and (not resp or len(resp) <= 4):
+            # ACK vacio - panel acepto pero no envio datos
+            # Quizas los datos vienen en frames posteriores
             if debug:
-                print(f"  DEBUG: error enviando: {e}")
-            return None, None, cmd_byte
-
-        # Esperar respuesta
-        try:
-            cmd, payload = recv_c3_frame(panel._sock, timeout=5)
-        except Exception:
-            cmd, payload = None, b''
-
-        if debug:
-            if cmd is not None:
-                preview = payload[:50].hex(' ') if payload else '(vacio)'
-                print(f"  DEBUG: respuesta cmd={cmd:#04x}, {len(payload)} bytes: {preview}")
-            else:
-                print(f"  DEBUG: sin respuesta")
-
-        if cmd == REPLY_OK:
-            # ACK recibido - este es el command correcto
-            # payload puede ser vacio (ACK puro) o contener datos iniciales
-            print(f"  DATA_RDY aceptado: cmd={cmd_byte:#04x} "
-                  f"(payload={len(payload)} bytes)")
-            return cmd, payload, cmd_byte
+                print(f"  DEBUG: formato '{fmt_name}' -> ACK vacio, "
+                      f"esperando frames...")
+            # Intentar leer frames de datos
+            frame_cmd, frame_data = recv_c3_frame(panel._sock, timeout=5)
+            if frame_cmd == REPLY_OK and frame_data and len(frame_data) > 4:
+                session_offset = 4 if not panel._session_less else 0
+                clean = frame_data[session_offset:]
+                if clean:
+                    working_format = fmt_name
+                    all_data.extend(clean)
+                    print(f"  READ_BUFFER formato '{fmt_name}' funciona "
+                          f"(datos en frame siguiente, {len(clean)} bytes)!")
+                    break
+            elif frame_cmd is not None and debug:
+                print(f"  DEBUG: frame despues de ACK: cmd={frame_cmd:#04x}, "
+                      f"{len(frame_data) if frame_data else 0} bytes")
 
         if cmd == REPLY_ERROR:
             if debug:
-                print(f"  DEBUG: cmd {cmd_byte:#04x} -> ERROR")
-            return cmd, payload, cmd_byte
+                err = resp[-1] if resp else '?'
+                print(f"  DEBUG: formato '{fmt_name}' -> ERROR ({err})")
+            # Error puede romper la sesion, necesitar reconexion
+            # Pero intentemos el siguiente formato primero
+            continue
 
         if cmd is None:
             if debug:
-                print(f"  DEBUG: cmd {cmd_byte:#04x} -> sin respuesta")
+                print(f"  DEBUG: formato '{fmt_name}' -> timeout")
             continue
 
-    return None, None, None
+    if not working_format:
+        print(f"  ERROR: Ningun formato READ_BUFFER funciono")
+        if debug:
+            # Ultimo intento: leer raw del socket por si los datos llegan tarde
+            raw = recv_all_available(panel._sock, timeout=5)
+            if raw:
+                print(f"  DEBUG: datos raw en socket: {len(raw)} bytes: "
+                      f"{raw[:100].hex(' ')}")
+        return b''
 
+    # Si ya tenemos todos los datos en el primer chunk
+    if len(all_data) >= total_size:
+        elapsed = time.time() - start
+        print(f"  Completado: {len(all_data)} bytes ({elapsed:.1f}s)")
+        return bytes(all_data[:total_size])
 
-def read_chunked_data(panel, total_size, data_rdy_cmd, debug=False, timeout=60):
-    """Lee datos chunked despues de enviar DATA_RDY exitosamente.
-    Recibe frames C3 hasta completar total_size bytes.
-    """
-    all_data = bytearray()
-    frames = 0
-    start = time.time()
-
-    session_offset = 4 if not panel._session_less else 0
-
+    # Leer chunks restantes con el formato que funciono
+    chunk_nr = 1
     while len(all_data) < total_size:
         elapsed = time.time() - start
         if elapsed > timeout:
-            print(f"  TIMEOUT: {len(all_data)}/{total_size} bytes en {elapsed:.1f}s")
+            print(f"\n  TIMEOUT: {len(all_data)}/{total_size} bytes")
             break
 
-        remaining_timeout = min(timeout - elapsed, 10)
-        cmd, payload = recv_c3_frame(panel._sock, timeout=remaining_timeout)
+        offset = len(all_data)
+        remaining = total_size - offset
+        chunk_size = min(remaining, MAX_CHUNK)
 
-        if cmd is None:
-            if debug:
-                print(f"  DEBUG: frame timeout despues de {frames} frames, "
-                      f"{len(all_data)} bytes")
-            break
+        # Construir payload con el formato que funciono
+        if working_format == 'offset+size':
+            payload_data = struct.pack('<II', offset, chunk_size)
+        elif working_format == 'offset+size+total':
+            payload_data = struct.pack('<III', offset, chunk_size, total_size)
+        elif working_format == 'zero+total':
+            payload_data = struct.pack('<II', offset, remaining)
+        elif working_format == 'solo_total':
+            payload_data = struct.pack('<I', remaining)
+        else:
+            payload_data = None
 
-        # Strip session bytes
-        frame_data = payload[session_offset:] if len(payload) > session_offset else payload
+        cmd, resp = send_raw_cmd(
+            panel, CMD_READ_BUFFER, payload_data, debug=False, timeout=10
+        )
 
-        if cmd == REPLY_OK and frame_data:
-            all_data.extend(frame_data)
-            frames += 1
-
-            if debug and frames <= 3:
-                preview = frame_data[:40].hex(' ')
-                print(f"  DEBUG: frame {frames}: {len(frame_data)} bytes: {preview}")
-
-            if frames % 20 == 0:
-                pct = len(all_data) * 100 / total_size if total_size else 0
-                print(f"\r  Recibiendo: {len(all_data)}/{total_size} "
-                      f"({pct:.0f}%) - {frames} frames", end='', flush=True)
-
-        elif cmd == REPLY_OK and not frame_data:
-            # ACK_OK vacio = fin de transferencia
-            if debug:
-                print(f"  DEBUG: ACK_OK vacio = fin de datos")
-            break
+        if cmd == REPLY_OK and resp:
+            session_offset = 4 if not panel._session_less else 0
+            frame_data = resp[session_offset:]
+            if frame_data:
+                all_data.extend(frame_data)
+                chunk_nr += 1
+                if chunk_nr % 5 == 0 or debug:
+                    pct = len(all_data) * 100 / total_size
+                    print(f"\r  Chunk {chunk_nr}: {len(all_data)}/{total_size} "
+                          f"({pct:.0f}%)", end='', flush=True)
+            elif not frame_data:
+                # ACK vacio, intentar leer frame siguiente
+                f_cmd, f_data = recv_c3_frame(panel._sock, timeout=5)
+                if f_cmd == REPLY_OK and f_data:
+                    clean = f_data[session_offset:]
+                    if clean:
+                        all_data.extend(clean)
+                        chunk_nr += 1
+                else:
+                    if debug:
+                        print(f"\n  DEBUG: chunk {chunk_nr} sin datos")
+                    break
         else:
             if debug:
-                print(f"  DEBUG: frame inesperado cmd={cmd:#04x}")
+                print(f"\n  DEBUG: chunk {chunk_nr} fallo "
+                      f"(cmd={'None' if cmd is None else hex(cmd)})")
             break
 
     elapsed = time.time() - start
-    print(f"\r  Recibidos: {len(all_data)} bytes en {frames} frames ({elapsed:.1f}s)   ")
-
-    return bytes(all_data)
+    print(f"\n  Completado: {len(all_data)} bytes en {chunk_nr} chunks ({elapsed:.1f}s)")
+    return bytes(all_data[:total_size])
 
 
 def send_free_data(panel, debug=False):
@@ -397,33 +474,10 @@ def read_table(panel, table_name, fields_info, table_index,
             print(f"  Tabla vacia")
             return []
 
-        # Paso 2: Enviar DATA_RDY
-        cmd, initial_data, rdy_cmd = try_data_rdy(panel, total_size, debug)
+        # Paso 2: Leer datos con READ_BUFFER (pull model)
+        all_data = read_buffer_chunks(panel, total_size, debug, timeout)
 
-        if cmd is None or rdy_cmd is None:
-            print(f"  ERROR: No se encontro el comando DATA_RDY correcto")
-            print(f"  Probados: {[hex(c) for c in CMD_DATA_RDY_CANDIDATES]}")
-            return []
-
-        if cmd == REPLY_ERROR:
-            print(f"  ERROR: Panel rechazo DATA_RDY con cmd={rdy_cmd:#04x}")
-            return []
-
-        # Paso 3: Leer datos chunked
-        all_data = bytearray()
-        if initial_data:
-            # Strip session si viene en el primer payload
-            session_offset = 4 if not panel._session_less else 0
-            clean_data = initial_data[session_offset:] if len(initial_data) > session_offset else initial_data
-            all_data.extend(clean_data)
-
-        if len(all_data) < total_size:
-            remaining = read_chunked_data(
-                panel, total_size, rdy_cmd, debug, timeout
-            )
-            all_data.extend(remaining)
-
-        # Paso 4: FREE_DATA
+        # Paso 3: FREE_DATA para liberar buffer
         send_free_data(panel, debug)
 
         if debug:
