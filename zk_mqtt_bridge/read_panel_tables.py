@@ -1,330 +1,147 @@
 #!/usr/bin/env python3
 """
-Lector raw de tablas ZK C3 - maneja tablas grandes (users, transactions)
+Lector de tablas ZK C3 - usa la libreria c3 con workarounds para tablas grandes
 
 La libreria c3 falla con tablas grandes porque:
 1. recv() no maneja fragmentacion TCP
-2. No soporta respuestas multi-paquete
+2. Algunos paneles responden con table_index diferente al esperado
+3. Tablas con muchos registros necesitan mayor timeout
 
-Este script implementa el protocolo a bajo nivel para leer correctamente.
+Este script usa la conexion de la libreria pero parsea las respuestas con tolerancia.
 
 Uso:
   python3 read_panel_tables.py interlomas.ddns.accessbot.net
   python3 read_panel_tables.py interlomas.ddns.accessbot.net --table user
   python3 read_panel_tables.py interlomas.ddns.accessbot.net --table transaction --limit 50
+  python3 read_panel_tables.py interlomas.ddns.accessbot.net --debug
 """
 
 import sys
 import argparse
 import socket
-import struct
 import time
 from datetime import datetime
+from c3 import C3
+from c3 import consts
 
 
 # ============================================================
-# Constantes del protocolo C3
+# Monkey-patch para mejorar recv de la libreria c3
 # ============================================================
-C3_START = 0xAA
-C3_END = 0x55
-C3_PROTO_V1 = 0x01
-C3_PORT = 4370
+def patched_receive(self):
+    """Receive mejorado que maneja fragmentacion TCP."""
+    self._sock.settimeout(self.receive_timeout)
 
-CMD_CONNECT_SESSION = 0x76
-CMD_CONNECT_SESSIONLESS = 0x01
-CMD_DISCONNECT = 0x02
-CMD_DATATABLE_CFG = 0x06
-CMD_GETDATA = 0x08
-CMD_GETPARAM = 0x04
-
-REPLY_OK = 0xC8
-REPLY_ERROR = 0xC9
-
-CRC_POLY_16 = 0xA001
-
-
-# ============================================================
-# CRC16
-# ============================================================
-def crc16(data):
-    crc = 0x0000
-    for byte in data:
-        b = byte if isinstance(byte, int) else ord(byte)
-        b = b & 0xFF
-        msb = crc >> 8
-        # calc divisor
-        poly = 0
-        val = crc ^ b
-        for _ in range(8):
-            if ((poly ^ val) & 0x0001) == 1:
-                poly = (poly >> 1) ^ CRC_POLY_16
-            else:
-                poly = poly >> 1
-            val = val >> 1
-        crc = msb ^ poly
-    return crc & 0xFFFF
-
-
-def lsb(val):
-    return val & 0xFF
-
-
-def msb(val):
-    return (val >> 8) & 0xFF
-
-
-# ============================================================
-# Protocolo C3 raw
-# ============================================================
-class C3Raw:
-    def __init__(self, host, port=C3_PORT, timeout=10):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.sock = None
-        self.session_id = 0xFEFE
-        self.request_nr = 0
-        self.session_less = True
-        self.connected = False
-
-    def _build_msg(self, command, data=None):
-        """Construye mensaje C3 completo."""
-        payload_len = (len(data) if data else 0)
-        if not self.session_less and self.session_id is not None:
-            payload_len += 4
-
-        msg = bytearray([
-            C3_PROTO_V1,
-            command,
-            lsb(payload_len),
-            msb(payload_len),
-        ])
-
-        if not self.session_less and self.session_id is not None:
-            msg.append(lsb(self.session_id))
-            msg.append(msb(self.session_id))
-            msg.append(lsb(self.request_nr))
-            msg.append(msb(self.request_nr))
-
-        if data:
-            for b in data:
-                if isinstance(b, int):
-                    msg.append(b)
-                elif isinstance(b, str):
-                    msg.append(ord(b))
-
-        checksum = crc16(msg)
-        msg.append(lsb(checksum))
-        msg.append(msb(checksum))
-        msg.insert(0, C3_START)
-        msg.append(C3_END)
-        return bytes(msg)
-
-    def _recv_exact(self, n, timeout=None):
-        """Recibe exactamente n bytes, manejando fragmentacion TCP."""
-        self.sock.settimeout(timeout or self.timeout)
-        data = bytearray()
-        retries = 0
-        while len(data) < n:
-            try:
-                chunk = self.sock.recv(n - len(data))
-                if not chunk:
-                    break
-                data.extend(chunk)
-                retries = 0
-            except socket.timeout:
-                retries += 1
-                if retries > 3:
-                    break
-        return bytes(data)
-
-    def _recv_message(self, timeout=None):
-        """Recibe un mensaje C3 completo. Retorna (command, payload)."""
-        header = self._recv_exact(5, timeout)
-        if len(header) < 5:
-            return None, b''
-
-        if header[0] != C3_START:
-            return None, b''
-
-        command = header[2]
-        data_size = header[3] + (header[4] * 256)
-
-        # Payload + 2 bytes CRC + 1 byte END
-        rest = self._recv_exact(data_size + 3, timeout)
-        if len(rest) < data_size + 3:
-            # Partial response
+    # Leer header (5 bytes) con reintentos
+    header = bytes()
+    for _ in range(self.receive_retries):
+        try:
+            header = _recv_exact(self._sock, 5, self.receive_timeout)
+            if len(header) == 5:
+                break
+        except socket.timeout:
             pass
 
-        full = header + rest
-        if len(rest) >= 3 and rest[-1] == C3_END:
-            # Extraer payload (sin header 5 bytes, sin CRC 2 bytes, sin END 1 byte)
-            payload = full[5:-3]
-        else:
-            payload = rest[:-3] if len(rest) >= 3 else rest
+    if len(header) != 5:
+        raise ConnectionError(
+            f"Invalid response header received; expected 5 bytes, received {header}"
+        )
 
-        # Si tiene session, quitar session_id (4 bytes) del inicio del payload
-        session_offset = 0
-        if not self.session_less and data_size > 2:
-            session_offset = 4
+    self.log.debug("Received header: %s", header.hex())
 
-        return command, payload[session_offset:]
+    message = bytearray()
+    received_command, data_size, protocol_version = self._get_message_header(header)
 
-    def connect(self):
-        """Conecta al panel C3."""
-        ip = socket.gethostbyname(self.host)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(self.timeout)
-        self.sock.connect((ip, self.port))
+    # Leer payload + CRC(2) + END(1) con recv_exact
+    remaining = data_size + 3
+    payload = _recv_exact(self._sock, remaining, self.receive_timeout)
 
-        # Intentar conexion con session
-        msg = self._build_msg(CMD_CONNECT_SESSION)
-        self.sock.send(msg)
-        self.request_nr += 1
+    if data_size > 0:
+        self.log.debug("Receiving payload (data size %d): %s", data_size, payload.hex())
+        full_msg = header + payload
+        message = self._get_message(full_msg)
 
-        cmd, payload = self._recv_message()
-        if cmd == REPLY_OK and len(payload) >= 2:
-            self.session_id = payload[1] << 8 | payload[0]
-            self.session_less = False
-            self.connected = True
-            return True
+    if len(message) != data_size:
+        raise ValueError(
+            f"Length of received message ({len(message)}) doesn't match specified ({data_size})"
+        )
 
-        # Fallback: sin session
-        self.session_id = None
-        self.session_less = True
-        msg = self._build_msg(CMD_CONNECT_SESSIONLESS)
-        self.sock.send(msg)
-        self.request_nr += 1
+    if received_command == consts.C3_REPLY_OK:
+        pass
+    elif received_command == consts.C3_REPLY_ERROR:
+        from c3 import utils
+        error = utils.byte_to_signed_int(message[-1])
+        raise ConnectionError(
+            f"Error {error} received in reply: {consts.Errors.get(error, 'Unknown')}"
+        )
 
-        cmd, payload = self._recv_message()
-        if cmd == REPLY_OK:
-            self.connected = True
-            return True
+    return message, data_size, protocol_version
 
-        return False
 
-    def disconnect(self):
-        if self.sock:
-            try:
-                msg = self._build_msg(CMD_DISCONNECT)
-                self.sock.send(msg)
-                self.request_nr += 1
-            except Exception:
-                pass
-            try:
-                self.sock.close()
-            except Exception:
-                pass
-        self.connected = False
+def _recv_exact(sock, n, timeout=10):
+    """Recibe exactamente n bytes manejando fragmentacion TCP."""
+    sock.settimeout(timeout)
+    data = bytearray()
+    deadline = time.time() + timeout
+    while len(data) < n:
+        remaining_time = deadline - time.time()
+        if remaining_time <= 0:
+            break
+        sock.settimeout(max(remaining_time, 0.5))
+        try:
+            chunk = sock.recv(n - len(data))
+            if not chunk:
+                break
+            data.extend(chunk)
+        except socket.timeout:
+            if len(data) > 0:
+                # Tenemos datos parciales, esperar un poco mas
+                continue
+            break
+    return bytes(data)
 
-    def get_param(self, param_name):
-        """Lee un parametro del panel."""
-        data = list(param_name.encode('ascii')) + [0x00]
-        msg = self._build_msg(CMD_GETPARAM, data)
-        self.sock.send(msg)
-        self.request_nr += 1
 
-        cmd, payload = self._recv_message()
-        if cmd == REPLY_OK and payload:
-            # Parsear key=value
-            text = payload.decode('ascii', errors='ignore').strip('\x00')
-            result = {}
-            for pair in text.split(','):
-                if '=' in pair:
-                    k, v = pair.split('=', 1)
-                    result[k.strip()] = v.strip()
-            return result.get(param_name, text)
-        return None
+# ============================================================
+# Lectura tolerante de tablas
+# ============================================================
+def read_table_tolerant(panel, table_name, fields_info, table_index, debug=False):
+    """Lee una tabla usando _send_receive de la libreria, pero con parseo tolerante."""
+    field_indexes = [f['index'] for f in fields_info]
+    field_indexes.sort()
 
-    def get_data_table_cfg(self):
-        """Obtiene configuracion de tablas de datos."""
-        msg = self._build_msg(CMD_DATATABLE_CFG)
-        self.sock.send(msg)
-        self.request_nr += 1
+    # Parametros GETDATA: [table_index, num_fields, field1, field2, ..., 0, 0]
+    parameters = [table_index, len(field_indexes)] + field_indexes + [0, 0]
 
-        cmd, payload = self._recv_message()
-        if cmd != REPLY_OK or not payload:
+    message, msg_size = panel._send_receive(consts.Command.GETDATA, parameters)
+
+    if debug:
+        hex_dump = message[:200].hex(' ') if message else '(vacio)'
+        print(f"  DEBUG raw ({len(message)} bytes): {hex_dump}")
+        if len(message) > 200:
+            print(f"  ... ({len(message) - 200} bytes mas)")
+
+    if not message or len(message) < 2:
+        return []
+
+    resp_table = message[0]
+    resp_field_cnt = message[1]
+
+    # Tolerancia: si el panel responde con index diferente
+    if resp_table != table_index:
+        if debug:
+            print(f"  DEBUG: tabla esperada={table_index}, recibida={resp_table}")
+        # Si responde 0 o el field count parece razonable, intentar parsear
+        if resp_field_cnt == 0 or resp_field_cnt > 20:
             return []
 
-        tables = []
-        for line in payload.split(b'\x0a'):
-            if not line.strip():
-                continue
-            kv = {}
-            text = line.decode('ascii', errors='ignore')
-            for pair in text.split(','):
-                if '=' in pair:
-                    k, v = pair.split('=', 1)
-                    kv[k.strip()] = v.strip()
-            if 'tablename' in kv:
-                tables.append(kv)
-        return tables
+    resp_field_indexes = list(message[2:2 + resp_field_cnt])
+    data = message[2 + resp_field_cnt:]
 
-    def get_data_raw(self, table_index, field_indexes, timeout=15):
-        """Lee datos raw de una tabla. Retorna el payload binario."""
-        params = [table_index, len(field_indexes)] + field_indexes + [0, 0]
-        msg = self._build_msg(CMD_GETDATA, params)
-        self.sock.send(msg)
-        self.request_nr += 1
+    if debug:
+        print(f"  DEBUG: resp_table={resp_table}, field_cnt={resp_field_cnt}, "
+              f"field_idxs={resp_field_indexes}, data_len={len(data)}")
 
-        cmd, payload = self._recv_message(timeout=timeout)
-        return cmd, payload
-
-
-def parse_table_cfg(cfg_text):
-    """Parsea la config de una tabla en fields list.
-    Formato: tablename=user,0,7,1,CardNo,2,i,Pin,2,s,Password,2,s,...
-    """
-    parts = cfg_text.split(',')
-    if len(parts) < 3:
-        return None, None, []
-
-    name_part = parts[0]  # tablename=xxx
-    name = name_part.split('=')[1] if '=' in name_part else name_part
-    table_index = int(parts[1])
-    field_count = int(parts[2])
-
-    fields = []
-    i = 3
-    while i + 2 < len(parts) and len(fields) < field_count:
-        try:
-            field_idx = int(parts[i])
-            field_name = parts[i + 1]
-            field_size = int(parts[i + 2])
-            field_type = parts[i + 3] if i + 3 < len(parts) else 's'
-            fields.append({
-                'index': field_idx,
-                'name': field_name,
-                'size': field_size,
-                'type': field_type,
-            })
-            i += 4
-        except (ValueError, IndexError):
-            i += 1
-
-    return name, table_index, fields
-
-
-def parse_binary_data(payload, table_index, fields):
-    """Parsea datos binarios de una tabla C3."""
     records = []
-
-    if not payload or len(payload) < 2:
-        return records
-
-    resp_table = payload[0]
-    if resp_table != table_index:
-        # Podria ser un offset o formato diferente
-        print(f"  AVISO: tabla respuesta={resp_table}, esperada={table_index}")
-        # Intentar parsear de todos modos si el primer byte es 0
-        if resp_table != 0:
-            return records
-
-    resp_field_cnt = payload[1]
-    resp_field_indexes = list(payload[2:2 + resp_field_cnt])
-    data = payload[2 + resp_field_cnt:]
-
-    record_count = 0
     while data and len(data) > 1:
         record = {}
         valid = True
@@ -335,150 +152,173 @@ def parse_binary_data(payload, table_index, fields):
                 break
 
             field_size = data[0]
-            if field_size > len(data) - 1:
+            if field_size > len(data) - 1 or field_size > 200:
                 valid = False
                 break
 
-            field_info = next((f for f in fields if f['index'] == fidx), None)
+            field_info = next((f for f in fields_info if f['index'] == fidx), None)
             if field_info:
                 raw = data[1:1 + field_size]
                 if field_info['type'] == 'i':
                     record[field_info['name']] = int.from_bytes(raw, 'little') if raw else 0
                 else:
-                    record[field_info['name']] = raw.decode('ascii', errors='ignore')
+                    record[field_info['name']] = raw.decode('ascii', errors='ignore').rstrip('\x00')
             data = data[1 + field_size:]
 
         if valid and record:
             records.append(record)
-            record_count += 1
-        else:
+        elif not valid:
             break
 
     return records
 
 
+# ============================================================
+# Event type mapping
+# ============================================================
+EVENT_NAMES = {
+    0: 'Acceso OK (tarjeta)',
+    1: 'Acceso en Normal Open TZ',
+    2: 'Primera tarjeta abre',
+    3: 'Multi-tarjeta abre',
+    4: 'Password emergencia',
+    5: 'Abierto en Normal Open TZ',
+    6: 'Linkage trigger',
+    7: 'Cancelar alarma',
+    8: 'Apertura remota',
+    9: 'Cierre remoto',
+    10: 'Deshab Normal Open TZ',
+    11: 'Hab Normal Open TZ',
+    14: 'Huella OK',
+    17: 'Tarjeta+Huella OK',
+    20: 'Intervalo muy corto',
+    21: 'TZ inactiva (tarjeta)',
+    22: 'TZ ilegal',
+    23: 'Acceso DENEGADO',
+    24: 'Anti-passback',
+    27: 'Tarjeta NO REGISTRADA',
+    29: 'Tarjeta EXPIRADA',
+    30: 'Password error',
+    34: 'Huella no registrada',
+    200: 'Puerta abierta correcta',
+    201: 'Puerta cerrada correcta',
+    202: 'Boton salida',
+    206: 'Inicio dispositivo',
+    220: 'Aux in desconectado',
+    221: 'Aux in corto',
+}
+
+INOUT_NAMES = {0: 'Entrada', 2: 'N/A', 3: 'Salida', 15: 'Desconocido'}
+
+
+def format_user(i, rec):
+    card = rec.get('CardNo', '?')
+    pin = rec.get('Pin', '?')
+    group = rec.get('Group', '?')
+    start = rec.get('StartTime', '?')
+    end = rec.get('EndTime', '?')
+    sa = rec.get('SuperAuthorize', 0)
+    role = 'SUPER' if sa else 'normal'
+    # Formatear card como string
+    if isinstance(card, int):
+        card = str(card)
+    if isinstance(pin, int):
+        pin = str(pin)
+    return (f"  [{i:4d}] Tarjeta: {card:>12s} | PIN: {pin:>8s} | "
+            f"Grupo: {group} | Vigencia: {start} a {end} | {role}")
+
+
 def format_transaction(rec):
-    """Formatea un registro de transaccion legible."""
     card = rec.get('Cardno', rec.get('CardNo', '?'))
     pin = rec.get('Pin', '?')
     door = rec.get('DoorID', '?')
-    event = rec.get('EventType', '?')
-    inout = rec.get('InOutState', '?')
+    event = rec.get('EventType', -1)
+    inout = rec.get('InOutState', 2)
     ts = rec.get('Time_second', '?')
 
-    # Mapeo de eventos comunes
-    event_names = {
-        0: 'Acceso OK',
-        1: 'Acceso en hora normal',
-        8: 'Apertura remota',
-        9: 'Cierre remoto',
-        22: 'Zona horaria ilegal',
-        23: 'Acceso denegado',
-        27: 'Tarjeta no registrada',
-        29: 'Tarjeta expirada',
-        200: 'Puerta abierta correcta',
-        201: 'Puerta cerrada correcta',
-        202: 'Boton salida',
-        206: 'Inicio dispositivo',
-        255: 'Status heartbeat',
-    }
-    event_name = event_names.get(event, f'Evento {event}')
-    inout_names = {0: 'Entrada', 2: 'N/A', 3: 'Salida'}
-    inout_name = inout_names.get(inout, f'Dir {inout}')
+    event_name = EVENT_NAMES.get(event, f'Evento({event})')
+    inout_name = INOUT_NAMES.get(inout, f'Dir({inout})')
 
-    return f"[{ts}] Puerta {door} | {event_name} | Tarjeta: {card} | PIN: {pin} | {inout_name}"
+    if isinstance(card, int):
+        card = str(card)
+    if isinstance(pin, int):
+        pin = str(pin)
+    return (f"  [{ts}] P{door} | {event_name:<28s} | "
+            f"Tarjeta: {card:>12s} | PIN: {pin:>8s} | {inout_name}")
 
 
+def format_userauthorize(i, rec):
+    pin = rec.get('Pin', '?')
+    tz = rec.get('AuthorizeTimezoneId', '?')
+    door = rec.get('AuthorizeDoorId', '?')
+    return f"  [{i:4d}] PIN: {pin} | Timezone: {tz} | Puerta: {door}"
+
+
+# ============================================================
+# Main
+# ============================================================
 def main():
-    parser = argparse.ArgumentParser(description='Lector raw de tablas ZK C3')
+    parser = argparse.ArgumentParser(description='Lector de tablas ZK C3')
     parser.add_argument('host', help='IP o hostname del panel')
     parser.add_argument('--table', '-t', metavar='NAME',
-                        help='Tabla especifica a leer (user, transaction, timezone, etc)')
+                        help='Tabla especifica (user, transaction, timezone, etc)')
     parser.add_argument('--limit', '-l', type=int, default=100,
-                        help='Maximo de registros a mostrar (default: 100)')
-    parser.add_argument('--timeout', type=int, default=15,
-                        help='Timeout para lectura de tabla (default: 15s)')
+                        help='Max registros a mostrar (default: 100)')
     parser.add_argument('--debug', action='store_true',
-                        help='Mostrar datos raw en hex')
+                        help='Mostrar datos raw hex')
+    parser.add_argument('--timeout', type=int, default=15,
+                        help='Timeout de recepcion (default: 15s)')
     args = parser.parse_args()
 
     print("=" * 70)
-    print(f"  ZK C3 - Lector de Tablas Raw")
+    print(f"  ZK C3 - Lector de Tablas")
     print(f"  Host: {args.host}")
     print(f"  Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
 
+    # Aplicar monkey-patch para mejorar recv
+    C3._receive = patched_receive
+
     # Conectar
-    panel = C3Raw(args.host)
+    panel = C3(args.host)
+    panel.receive_timeout = args.timeout
     print(f"\nConectando a {args.host}...")
-    if not panel.connect():
-        print("ERROR: No se pudo conectar")
+    try:
+        panel.connect()
+    except Exception as e:
+        print(f"ERROR conectando: {e}")
         sys.exit(1)
-    print(f"Conectado (session_id={panel.session_id:#06x}, session_less={panel.session_less})")
+    print("Conectado OK")
 
     # Info basica
-    serial = panel.get_param('~SerialNumber')
-    firmware = panel.get_param('FirmVer')
-    print(f"  Serial:   {serial}")
-    print(f"  Firmware: {firmware}")
+    print(f"  Serial:   {panel.serial_number}")
+    print(f"  Firmware: {panel.firmware_version}")
+    print(f"  Puertas:  {panel.nr_of_locks}")
 
     # Obtener config de tablas
     print("\n" + "-" * 70)
-    print("  CONFIGURACION DE TABLAS")
+    print("  TABLAS DISPONIBLES")
     print("-" * 70)
 
-    msg = panel._build_msg(CMD_DATATABLE_CFG)
-    panel.sock.send(msg)
-    panel.request_nr += 1
-    cmd, payload = panel._recv_message()
-
-    if cmd != REPLY_OK or not payload:
-        print("  ERROR: No se pudo obtener config de tablas")
+    try:
+        data_cfg = panel._get_device_data_cfg()
+    except Exception as e:
+        print(f"  ERROR obteniendo tablas: {e}")
         panel.disconnect()
         sys.exit(1)
 
-    # Parsear cada linea de config
     tables = {}
-    for line in payload.split(b'\x0a'):
-        if not line.strip():
-            continue
-        text = line.decode('ascii', errors='ignore')
-        parts = text.split(',')
-        if len(parts) >= 3 and '=' in parts[0]:
-            name = parts[0].split('=')[1]
-            try:
-                table_idx = int(parts[1])
-                field_count = int(parts[2])
-            except ValueError:
-                continue
+    for cfg in data_cfg:
+        fields = [{'index': f.index, 'name': f.name, 'size': f.size, 'type': f.type}
+                  for f in cfg.fields]
+        tables[cfg.name] = {
+            'index': cfg.index,
+            'fields': fields,
+        }
+        field_names = [f['name'] for f in fields]
+        print(f"  {cfg.name} (idx={cfg.index}): {', '.join(field_names)}")
 
-            fields = []
-            i = 3
-            while i + 3 < len(parts) and len(fields) < field_count:
-                try:
-                    fidx = int(parts[i])
-                    fname = parts[i + 1]
-                    fsize = int(parts[i + 2])
-                    ftype = parts[i + 3]
-                    fields.append({
-                        'index': fidx,
-                        'name': fname,
-                        'size': fsize,
-                        'type': ftype,
-                    })
-                    i += 4
-                except (ValueError, IndexError):
-                    i += 1
-
-            tables[name] = {
-                'index': table_idx,
-                'fields': fields,
-                'raw_config': text,
-            }
-            field_names = [f['name'] for f in fields]
-            print(f"  {name} (idx={table_idx}): {', '.join(field_names)}")
-
-    # Determinar que tablas leer
+    # Determinar tablas a leer
     if args.table:
         tables_to_read = [args.table]
     else:
@@ -491,98 +331,91 @@ def main():
         print("=" * 70)
 
         if table_name not in tables:
-            print(f"  ERROR: Tabla '{table_name}' no existe")
-            print(f"  Disponibles: {', '.join(tables.keys())}")
+            print(f"  ERROR: No existe. Disponibles: {', '.join(tables.keys())}")
             continue
 
         tbl = tables[table_name]
-        field_indexes = [f['index'] for f in tbl['fields']]
 
         # Reconectar si necesario
-        if not panel.connected:
+        if not panel.is_connected():
             print("  Reconectando...")
-            panel = C3Raw(args.host)
-            if not panel.connect():
-                print("  ERROR: No se pudo reconectar")
+            try:
+                panel = C3(args.host)
+                panel.receive_timeout = args.timeout
+                C3._receive = patched_receive
+                panel.connect()
+                print("  OK")
+                # Re-obtener config
+                data_cfg = panel._get_device_data_cfg()
+                for cfg in data_cfg:
+                    if cfg.name == table_name:
+                        tbl = {
+                            'index': cfg.index,
+                            'fields': [{'index': f.index, 'name': f.name,
+                                        'size': f.size, 'type': f.type}
+                                       for f in cfg.fields],
+                        }
+                        break
+            except Exception as e:
+                print(f"  ERROR reconectando: {e}")
                 break
-            # Re-obtener tabla cfg
-            print("  Reconectado OK")
 
-        print(f"  Enviando GETDATA (tabla_idx={tbl['index']}, fields={field_indexes})...")
+        print(f"  Leyendo tabla idx={tbl['index']}, "
+              f"campos={[f['name'] for f in tbl['fields']]}...")
         start_time = time.time()
-        cmd, raw_payload = panel.get_data_raw(tbl['index'], field_indexes, args.timeout)
+
+        try:
+            records = read_table_tolerant(
+                panel, table_name, tbl['fields'], tbl['index'], args.debug
+            )
+        except ConnectionError as e:
+            print(f"  ERROR conexion: {e}")
+            print(f"  (tabla muy grande o timeout - el panel cerro la conexion)")
+            # Marcar como desconectado para que reconecte
+            panel._connected = False
+            continue
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            continue
+
         elapsed = time.time() - start_time
-
-        if cmd is None:
-            print(f"  ERROR: Sin respuesta ({elapsed:.1f}s)")
-            panel.connected = False
-            continue
-
-        if cmd == REPLY_ERROR:
-            err = raw_payload[-1] if raw_payload else '?'
-            print(f"  ERROR del panel: {err}")
-            continue
-
-        if not raw_payload:
-            print(f"  Tabla vacia (0 registros)")
-            continue
-
-        print(f"  Respuesta: cmd={cmd:#04x}, {len(raw_payload)} bytes ({elapsed:.1f}s)")
-
-        if args.debug:
-            hex_dump = raw_payload[:200].hex(' ')
-            print(f"  RAW (primeros 200 bytes): {hex_dump}")
-            if len(raw_payload) > 200:
-                print(f"  ... ({len(raw_payload) - 200} bytes mas)")
-
-        # Parsear datos binarios
-        records = parse_binary_data(raw_payload, tbl['index'], tbl['fields'])
+        print(f"  Registros: {len(records)} ({elapsed:.1f}s)")
 
         if not records:
-            # Intentar parsear con index 0 si el panel reporto index distinto
-            if raw_payload and raw_payload[0] == 0:
-                print(f"  Re-intentando parse con tabla_idx=0...")
-                # El panel puede reportar 0 como respuesta generica
-                modified_payload = bytes([tbl['index']]) + raw_payload[1:]
-                records = parse_binary_data(modified_payload, tbl['index'], tbl['fields'])
-
-        if not records:
-            print(f"  No se pudieron parsear registros")
-            if args.debug or len(raw_payload) < 50:
-                print(f"  Payload completo: {raw_payload.hex(' ')}")
             continue
 
-        print(f"  Total registros: {len(records)}")
         print("-" * 70)
 
-        # Mostrar registros
+        # Mostrar registros formateados
         shown = min(len(records), args.limit)
-        for i, rec in enumerate(records[:shown]):
-            if table_name == 'transaction':
-                print(f"  {format_transaction(rec)}")
-            elif table_name == 'user':
-                card = rec.get('CardNo', '?')
-                pin = rec.get('Pin', '?')
-                group = rec.get('Group', '?')
-                start = rec.get('StartTime', '?')
-                end = rec.get('EndTime', '?')
-                super_auth = rec.get('SuperAuthorize', 0)
-                role = 'SUPER' if super_auth else 'normal'
-                print(f"  [{i+1:4d}] Tarjeta: {card:>12s} | PIN: {pin:>8s} | "
-                      f"Grupo: {group} | {start} - {end} | {role}")
+        for i, rec in enumerate(records[:shown], 1):
+            if table_name == 'user':
+                print(format_user(i, rec))
+            elif table_name == 'transaction':
+                print(format_transaction(rec))
             elif table_name == 'userauthorize':
-                pin = rec.get('Pin', '?')
-                tz = rec.get('AuthorizeTimezoneId', '?')
-                door = rec.get('AuthorizeDoorId', '?')
-                print(f"  [{i+1:4d}] PIN: {pin} | Timezone: {tz} | Puerta: {door}")
+                print(format_userauthorize(i, rec))
             else:
-                print(f"  [{i+1:4d}] {rec}")
+                print(f"  [{i:4d}] {rec}")
 
         if len(records) > shown:
-            print(f"  ... ({len(records) - shown} registros mas, usa --limit para ver mas)")
+            print(f"\n  ... ({len(records) - shown} registros mas, usa --limit {len(records)})")
+
+        # Resumen para user
+        if table_name == 'user' and records:
+            groups = {}
+            for rec in records:
+                g = rec.get('Group', 0)
+                groups[g] = groups.get(g, 0) + 1
+            print(f"\n  RESUMEN: {len(records)} usuarios")
+            for g in sorted(groups.keys()):
+                print(f"    Grupo {g}: {groups[g]} usuarios")
 
     # Desconectar
-    panel.disconnect()
+    try:
+        panel.disconnect()
+    except Exception:
+        pass
     print("\n" + "=" * 70)
     print("  Desconectado OK")
     print("=" * 70)
