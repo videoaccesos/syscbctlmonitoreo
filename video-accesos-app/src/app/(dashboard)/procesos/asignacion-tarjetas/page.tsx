@@ -250,6 +250,8 @@ export default function AsignacionTarjetasPage() {
   const [renovarFecha, setRenovarFecha] = useState("");
   const [renovarObs, setRenovarObs] = useState("");
   const [renovarTipoPago, setRenovarTipoPago] = useState("0");
+  const [renovarTarjetaId, setRenovarTarjetaId] = useState("");
+  const [renovarTarjetas, setRenovarTarjetas] = useState<string[]>([]);
   const [renovando, setRenovando] = useState(false);
 
   // (reporte de ventas movido a /reportes/reporte-ventas)
@@ -805,6 +807,16 @@ export default function AsignacionTarjetasPage() {
     setRenovarFecha(f.toISOString().split("T")[0]);
     setRenovarObs("");
     setRenovarTipoPago("1");
+    // Recolectar todas las tarjetas del folio
+    const tarjetas = [
+      item.tarjetaId,
+      item.tarjetaId2,
+      item.tarjetaId3,
+      item.tarjetaId4,
+      item.tarjetaId5,
+    ].filter((t): t is string => !!t && t.trim() !== "" && t !== "0");
+    setRenovarTarjetas(tarjetas);
+    setRenovarTarjetaId(tarjetas[0] || "");
   };
 
   const handleRenovar = async () => {
@@ -818,6 +830,7 @@ export default function AsignacionTarjetasPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            tarjetaId: renovarTarjetaId,
             precio: parseFloat(renovarPrecio) || 0,
             fechaVencimiento: renovarFecha,
             observaciones: renovarObs,
@@ -2047,9 +2060,7 @@ export default function AsignacionTarjetasPage() {
               Renovar Tarjeta (Folio H)
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Se cerrara la asignacion actual y se creara una nueva con la{" "}
-              <span className="font-semibold">misma tarjeta</span> para el
-              residente{" "}
+              Se creara una nueva asignacion con la tarjeta seleccionada para{" "}
               <span className="font-semibold">
                 {renovarTarget.residente.nombre}{" "}
                 {renovarTarget.residente.apePaterno}
@@ -2060,20 +2071,42 @@ export default function AsignacionTarjetasPage() {
                 Casa {renovarTarget.residente.residencia.nroCasa}
               </span>
               .
+              {renovarTarjetas.length > 1 && (
+                <> Solo se renovara la tarjeta seleccionada, las demas permaneceran en el folio actual.</>
+              )}
             </p>
 
             <div className="space-y-3 mb-5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tarjeta
+                    Tarjeta a renovar
                   </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={renovarTarget.tarjetaId || "-"}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
-                  />
+                  {renovarTarjetas.length > 1 ? (
+                    <select
+                      value={renovarTarjetaId}
+                      onChange={(e) => setRenovarTarjetaId(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {renovarTarjetas.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      readOnly
+                      value={renovarTarjetaId || "-"}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
+                    />
+                  )}
+                  {renovarTarjetas.length > 1 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Este folio tiene {renovarTarjetas.length} tarjetas. Selecciona cual renovar.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
