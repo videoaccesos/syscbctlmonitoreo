@@ -6,10 +6,10 @@ Puente entre panel de control de acceso ZKTeco C3-400 y broker MQTT.
 Lee eventos del panel en tiempo real y los publica al broker.
 Tambien recibe comandos MQTT para abrir puertas remotamente.
 
-Uso:
-  python3 bridge.py                     # Usa config.yaml por defecto
-  python3 bridge.py -c mi_config.yaml   # Config personalizado
-  python3 bridge.py --test              # Solo probar conexiones
+Modos de operacion:
+  bridge.exe -c config.yaml             # Loop continuo (tiempo real)
+  bridge.exe -c config.yaml --sync      # Sync una vez y salir (batch)
+  bridge.exe -c config.yaml --test      # Solo probar conexiones
 """
 
 import argparse
@@ -124,8 +124,87 @@ def test_connections(config: dict) -> bool:
     return ok
 
 
+def run_sync(config: dict):
+    """Modo batch: conecta, sincroniza tablas y eventos, y sale."""
+    logger = logging.getLogger('sync')
+
+    site_id = config.get('site_id', 'default')
+    zk_conf = config['zk_panel']
+    mqtt_conf = config['mqtt']
+    doors = {d['id']: d['name'] for d in config.get('doors', [])}
+
+    panel = ZKC3Panel(zk_conf['ip'], zk_conf['port'], zk_conf.get('timeout', 5))
+    publisher = MQTTPublisher(
+        broker=mqtt_conf['broker'],
+        port=mqtt_conf['port'],
+        username=mqtt_conf.get('username', ''),
+        password=mqtt_conf.get('password', ''),
+        use_tls=mqtt_conf.get('use_tls', False),
+        qos=mqtt_conf.get('qos', 1),
+        keepalive=mqtt_conf.get('keepalive', 60),
+        topic_prefix=mqtt_conf.get('topic_prefix', 'videoaccesos'),
+        site_id=site_id,
+    )
+
+    # Conectar MQTT
+    if not publisher.connect():
+        logger.error("No se pudo conectar a MQTT")
+        return False
+
+    # Conectar panel
+    if not panel.connect():
+        logger.error("No se pudo conectar al panel ZK")
+        publisher.disconnect()
+        return False
+
+    serial = panel.get_serial()
+    logger.info(f"Panel conectado (S/N: {serial})")
+
+    # Leer eventos pendientes
+    try:
+        events = panel.get_events()
+        for event in events:
+            door_name = doors.get(event.door_id, f"Puerta {event.door_id}")
+            logger.info(f"Evento: {event.event_name} | Tarjeta: {event.card_no} | {door_name}")
+            publisher.publish_event({
+                **event.to_dict(),
+                'door_name': door_name,
+            })
+        logger.info(f"Eventos publicados: {len(events)}")
+    except Exception as e:
+        logger.error(f"Error leyendo eventos: {e}")
+
+    # Sync usuarios
+    try:
+        users = panel.get_users()
+        publisher.publish_data('users', users)
+        logger.info(f"Usuarios sincronizados: {len(users)}")
+    except Exception as e:
+        logger.error(f"Error sincronizando usuarios: {e}")
+
+    # Sync transacciones
+    try:
+        transactions = panel.get_transactions()
+        publisher.publish_data('transactions', transactions)
+        logger.info(f"Transacciones sincronizadas: {len(transactions)}")
+    except Exception as e:
+        logger.error(f"Error sincronizando transacciones: {e}")
+
+    # Heartbeat
+    publisher.publish_heartbeat(True, {'serial': serial, 'mode': 'sync'})
+
+    # Esperar que los mensajes se envien
+    time.sleep(2)
+
+    # Cleanup
+    panel.disconnect()
+    publisher.disconnect()
+    logger.info("Sync completado")
+    return True
+
+
 def run_bridge(config: dict):
-    """Loop principal del bridge."""
+    """Loop principal del bridge (modo continuo)."""
     global running
     logger = logging.getLogger('bridge')
 
@@ -352,17 +431,21 @@ def main():
                         help='Ruta al archivo de configuracion YAML')
     parser.add_argument('--test', action='store_true',
                         help='Solo probar conexiones y salir')
+    parser.add_argument('--sync', action='store_true',
+                        help='Modo batch: sincronizar una vez y salir')
     args = parser.parse_args()
 
     config = load_config(args.config)
     setup_logging(config)
 
     signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, signal_handler)
 
     logger = logging.getLogger('main')
+    mode = 'sync' if args.sync else ('test' if args.test else 'bridge')
     logger.info("=" * 50)
-    logger.info(f"ZK C3-400 MQTT Bridge v1.0")
+    logger.info(f"ZK C3-400 MQTT Bridge v1.0 [{mode}]")
     logger.info(f"Site: {config.get('site_id', 'default')}")
     logger.info(f"Panel: {config['zk_panel']['ip']}:{config['zk_panel']['port']}")
     logger.info(f"MQTT:  {config['mqtt']['broker']}:{config['mqtt']['port']}")
@@ -370,6 +453,10 @@ def main():
 
     if args.test:
         ok = test_connections(config)
+        sys.exit(0 if ok else 1)
+
+    if args.sync:
+        ok = run_sync(config)
         sys.exit(0 if ok else 1)
 
     run_bridge(config)
