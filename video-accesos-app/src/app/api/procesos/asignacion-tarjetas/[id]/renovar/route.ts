@@ -85,16 +85,50 @@ export async function POST(
 
     const fechaHoy = hoy.toISOString().split("T")[0];
 
-    // 1. Marcar asignacion anterior como RENOVADA (estatus_id=3)
-    await prisma.$executeRawUnsafe(
-      `UPDATE residencias_residentes_tarjetas
-       SET estatus_id = 3, fecha_modificacion = ?
-       WHERE asignacion_id = ?`,
-      fechaHoy,
-      asignacionId
-    );
+    // 1. Determinar qué tarjeta renovar
+    const tarjetaIdRenovar = body.tarjetaId
+      ? String(body.tarjetaId)
+      : toStr(existente.tarjeta_id) || "";
 
-    // 2. Crear nueva asignacion con los MISMOS datos de tarjeta y residente
+    // 2. Contar cuántas tarjetas tiene la asignación actual
+    const slots = [
+      toStr(existente.tarjeta_id),
+      toStr(existente.tarjeta_id2),
+      toStr(existente.tarjeta_id3),
+      toStr(existente.tarjeta_id4),
+      toStr(existente.tarjeta_id5),
+    ];
+    const tarjetasActivas = slots.filter((s) => s && s.trim() !== "" && s !== "0");
+    const tieneMultiples = tarjetasActivas.length > 1;
+
+    if (tieneMultiples) {
+      // Tiene varias tarjetas: solo quitar la tarjeta renovada del folio anterior
+      // Determinar en qué slot está la tarjeta a renovar y limpiarlo
+      const slotCols = ["tarjeta_id", "tarjeta_id2", "tarjeta_id3", "tarjeta_id4", "tarjeta_id5"];
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] === tarjetaIdRenovar) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE residencias_residentes_tarjetas
+             SET ${slotCols[i]} = '', fecha_modificacion = ?
+             WHERE asignacion_id = ?`,
+            fechaHoy,
+            asignacionId
+          );
+          break;
+        }
+      }
+    } else {
+      // Solo una tarjeta: marcar toda la asignación como RENOVADA
+      await prisma.$executeRawUnsafe(
+        `UPDATE residencias_residentes_tarjetas
+         SET estatus_id = 3, fecha_modificacion = ?
+         WHERE asignacion_id = ?`,
+        fechaHoy,
+        asignacionId
+      );
+    }
+
+    // 3. Crear nueva asignacion SOLO con la tarjeta a renovar
     //    La tarjeta se mantiene en estatus 2 (asignada) - no hay gap
     await prisma.$executeRawUnsafe(
       `INSERT INTO residencias_residentes_tarjetas (
@@ -106,19 +140,18 @@ export async function POST(
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        interfon_extra,
         estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      toStr(existente.tarjeta_id) || "",
-      toStr(existente.tarjeta_id2) || "",
-      toStr(existente.tarjeta_id3) || "",
-      toStr(existente.tarjeta_id4) || "",
-      toStr(existente.tarjeta_id5) || "",
-      toStr(existente.numero_serie) || "",
-      toStr(existente.numero_serie2) || "",
-      toStr(existente.numero_serie3) || "",
-      toStr(existente.numero_serie4) || "",
-      toStr(existente.numero_serie5) || "",
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      tarjetaIdRenovar,
+      "",    // tarjeta_id2 (renovacion individual)
+      "",    // tarjeta_id3
+      "",    // tarjeta_id4
+      "",    // tarjeta_id5
+      "",    // numero_serie
+      "",    // numero_serie2
+      "",    // numero_serie3
+      "",    // numero_serie4
+      "",    // numero_serie5
       toStr(existente.residente_id),
       toNum(existente.privada) || 0,
       fechaHoy,
@@ -126,7 +159,7 @@ export async function POST(
       fechaHoy,
       toNum(existente.lectura_tipo_id) || 0,
       toStr(existente.lectura_epc) || "",
-      toStr(existente.folio_contrato) || "",
+      "",    // folio_contrato (nuevo folio para renovacion)
       precio,
       0,     // descuento
       0,     // IVA
@@ -136,10 +169,9 @@ export async function POST(
       concepto,
       "",    // motivo_descuento
       observaciones
-        ? `Renovacion de asignacion #${asignacionId}. ${observaciones}`
-        : `Renovacion de asignacion #${asignacionId}`,
+        ? `Renovacion de tarjeta ${tarjetaIdRenovar} (asignacion #${asignacionId}). ${observaciones}`
+        : `Renovacion de tarjeta ${tarjetaIdRenovar} (asignacion #${asignacionId})`,
       0, 0, 0, 0, 0, // utilizo_seguro 1-5
-      0,     // interfon_extra
       1,     // estatus_id (activa)
       0      // usuario_id
     );

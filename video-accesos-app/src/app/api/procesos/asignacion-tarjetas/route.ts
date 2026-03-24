@@ -336,9 +336,8 @@ export async function POST(request: NextRequest) {
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        interfon_extra,
         estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
@@ -371,7 +370,6 @@ export async function POST(request: NextRequest) {
       dataComun.utilizoSeguro3,
       dataComun.utilizoSeguro4,
       dataComun.utilizoSeguro5,
-      0,   // interfon_extra
       1,   // estatus_id
       0,   // usuario_id
     );
