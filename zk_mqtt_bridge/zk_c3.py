@@ -9,6 +9,11 @@ Soporta tres modos (en orden de prioridad):
 
 El C3-400 usa protocolo binario propietario sobre TCP puerto 4370.
 Nota: la libreria zkaccess-c3 se importa como 'c3', no 'zkaccess_c3'.
+
+Lectura de tablas (user, transaction, etc):
+  Firmware v18+ responde con data_stat para tablas grandes, indicando que
+  los datos no caben en un solo frame. La estrategia probada es leer
+  campo-por-campo (un GETDATA por campo) y reconstruir registros por indice.
 """
 
 import struct
@@ -217,6 +222,401 @@ class ZKC3Panel:
         elif self._backend == "pyzkaccess":
             return self._open_door_sdk(door_id, duration)
         return self._open_door_raw(door_id, duration)
+
+    def get_users(self) -> list[dict]:
+        """Lee la tabla de usuarios del panel.
+
+        Retorna lista de dicts con: CardNo, Pin, Password, Group,
+        StartTime, EndTime, SuperAuthorize.
+        """
+        return self._read_table("user")
+
+    def get_transactions(self, limit: int = 0) -> list[dict]:
+        """Lee la tabla de transacciones (log de eventos historicos).
+
+        Retorna lista de dicts con: Cardno, Pin, Verified, DoorID,
+        EventType, InOutState, Time_second.
+        """
+        records = self._read_table("transaction")
+        if limit and len(records) > limit:
+            return records[-limit:]
+        return records
+
+    def get_table(self, table_name: str) -> list[dict]:
+        """Lee una tabla arbitraria del panel por nombre.
+
+        Tablas disponibles tipicas: user, userauthorize, holiday,
+        timezone, transaction, firstcard, multimcard, inoutfun.
+        """
+        return self._read_table(table_name)
+
+    def get_door_count(self) -> int:
+        """Obtiene el numero de puertas del panel."""
+        if self._backend == "zkaccess_c3" and self._c3_panel:
+            try:
+                return self._c3_panel.nr_of_locks
+            except Exception:
+                pass
+        return 0
+
+    def get_firmware(self) -> str:
+        """Obtiene la version de firmware del panel."""
+        if self._backend == "zkaccess_c3" and self._c3_panel:
+            try:
+                return self._c3_panel.firmware_version
+            except Exception:
+                pass
+        return ""
+
+    # --- Table reading (field-by-field strategy) ---
+
+    def _read_table(self, table_name: str) -> list[dict]:
+        """Lee una tabla usando la estrategia apropiada al backend."""
+        if self._backend == "zkaccess_c3":
+            return self._read_table_c3(table_name)
+        logger.warning(f"Lectura de tablas solo soportada con backend zkaccess-c3 "
+                       f"(actual: {self._backend})")
+        return []
+
+    def _read_table_c3(self, table_name: str) -> list[dict]:
+        """Lee una tabla del panel via zkaccess-c3 con campo-por-campo."""
+        if not self._c3_panel:
+            logger.error("Panel no conectado")
+            return []
+
+        try:
+            from c3 import consts, crc as c3_crc, utils
+        except ImportError:
+            logger.error("Modulo c3 no disponible para lectura de tablas")
+            return []
+
+        panel = self._c3_panel
+
+        # Aplicar monkey-patch para recv robusto si no se ha hecho
+        self._ensure_patched_receive()
+
+        # Obtener esquema de tablas
+        try:
+            data_cfg = panel._get_device_data_cfg()
+        except Exception as e:
+            logger.error(f"Error obteniendo esquema de tablas: {e}")
+            return []
+
+        # Buscar la tabla solicitada
+        table_cfg = None
+        for cfg in data_cfg:
+            if cfg.name == table_name:
+                table_cfg = cfg
+                break
+
+        if not table_cfg:
+            available = [cfg.name for cfg in data_cfg]
+            logger.error(f"Tabla '{table_name}' no encontrada. "
+                        f"Disponibles: {', '.join(available)}")
+            return []
+
+        fields = [{'index': f.index, 'name': f.name, 'type': f.type}
+                  for f in table_cfg.fields]
+        table_index = table_cfg.index
+
+        # Intentar lectura completa primero
+        field_indexes = sorted(f['index'] for f in fields)
+        parameters = [table_index, len(field_indexes)] + field_indexes + [0, 0]
+
+        try:
+            message, msg_size = panel._send_receive(
+                consts.Command.GETDATA, parameters
+            )
+        except Exception as e:
+            logger.error(f"Error GETDATA tabla {table_name}: {e}")
+            return []
+
+        if not message or len(message) < 2:
+            return []
+
+        # Respuesta directa (tabla pequeña)
+        if message[0] == table_index:
+            logger.debug(f"Tabla {table_name}: respuesta directa")
+            return self._parse_table_records(message, fields, table_index)
+
+        # data_stat (tabla grande) -> campo-por-campo
+        if message[0] == 0x00 and len(message) >= 9:
+            total_size = struct.unpack_from('<I', message, 1)[0]
+            logger.info(f"Tabla {table_name}: {total_size} bytes, "
+                       f"usando lectura campo-por-campo")
+            self._send_free_data_c3(panel)
+            return self._read_table_field_by_field(
+                panel, table_name, fields, table_index
+            )
+
+        logger.warning(f"Tabla {table_name}: formato respuesta desconocido")
+        return self._parse_table_records(message, fields, table_index)
+
+    def _read_table_field_by_field(self, panel, table_name, fields, table_index):
+        """Lee tabla campo-por-campo y reconstruye registros por indice."""
+        from c3 import consts
+
+        all_field_values = {}  # field_name -> [val0, val1, ...]
+        record_count = None
+
+        for field in fields:
+            fidx = field['index']
+            fname = field['name']
+            parameters = [table_index, 1, fidx, 0, 0]
+
+            try:
+                message, msg_size = panel._send_receive(
+                    consts.Command.GETDATA, parameters
+                )
+            except Exception as e:
+                logger.warning(f"Error leyendo campo {fname}: {e}")
+                if not panel.is_connected():
+                    return []
+                continue
+
+            if not message or len(message) < 3:
+                continue
+
+            # Si aun devuelve data_stat para un solo campo, liberar y saltar
+            if message[0] == 0x00 and len(message) >= 9:
+                self._send_free_data_c3(panel)
+                logger.warning(f"Campo {fname} demasiado grande incluso solo")
+                continue
+
+            if message[0] != table_index:
+                logger.debug(f"Campo {fname}: byte0={message[0]:#04x} "
+                            f"inesperado (esperado {table_index:#04x})")
+                continue
+
+            # Parsear: [table_idx] [field_cnt=1] [field_idx] [records...]
+            record_data = message[3:]
+            values = []
+            pos = 0
+            while pos < len(record_data):
+                field_size = record_data[pos]
+                pos += 1
+                if field_size > len(record_data) - pos or field_size > 200:
+                    break
+                raw = record_data[pos:pos + field_size]
+                if field['type'] == 'i':
+                    values.append(
+                        int.from_bytes(raw, 'little') if raw else 0
+                    )
+                else:
+                    values.append(
+                        raw.decode('ascii', errors='ignore').rstrip('\x00')
+                    )
+                pos += field_size
+
+            all_field_values[fname] = values
+            if record_count is None:
+                record_count = len(values)
+            logger.debug(f"Campo {fname}: {len(values)} valores")
+
+        if not all_field_values or record_count is None:
+            return []
+
+        # Reconstruir registros combinando campos por indice
+        records = []
+        for i in range(record_count):
+            rec = {}
+            for field in fields:
+                fname = field['name']
+                if fname in all_field_values:
+                    vals = all_field_values[fname]
+                    if i < len(vals):
+                        rec[fname] = vals[i]
+            if rec:
+                records.append(rec)
+
+        logger.info(f"Tabla {table_name}: {len(records)} registros leidos")
+        return records
+
+    def _send_free_data_c3(self, panel):
+        """Envia FREE_DATA (cmd 0x0A) para liberar buffer del panel."""
+        try:
+            from c3 import consts, crc as c3_crc, utils
+        except ImportError:
+            return
+
+        for cmd_byte in [0x0A, 0x0C, 0x0D, 0x0E]:
+            try:
+                payload_len = 4 if not panel._session_less else 0
+                msg = bytearray([
+                    consts.C3_PROTOCOL_VERSION,
+                    cmd_byte,
+                    utils.lsb(payload_len),
+                    utils.msb(payload_len),
+                ])
+                if not panel._session_less:
+                    msg.append(utils.lsb(panel._session_id))
+                    msg.append(utils.msb(panel._session_id))
+                    msg.append(utils.lsb(panel._request_nr))
+                    msg.append(utils.msb(panel._request_nr))
+                panel._request_nr += 1
+                checksum = c3_crc.crc16(msg)
+                msg.append(utils.lsb(checksum))
+                msg.append(utils.msb(checksum))
+                msg.insert(0, consts.C3_MESSAGE_START)
+                msg.append(consts.C3_MESSAGE_END)
+
+                panel._sock.send(bytes(msg))
+
+                # Leer respuesta
+                panel._sock.settimeout(3)
+                header = self._recv_exact_bytes(panel._sock, 5, 3)
+                if header and len(header) == 5 and header[0] == consts.C3_MESSAGE_START:
+                    cmd_resp = header[2]
+                    data_size = header[3] + (header[4] * 256)
+                    rest = self._recv_exact_bytes(panel._sock, data_size + 3, 3)
+                    if cmd_resp == 0xC8:  # REPLY_OK
+                        return True
+            except Exception:
+                pass
+        return False
+
+    @staticmethod
+    def _recv_exact_bytes(sock, n, timeout=10):
+        """Recibe exactamente n bytes del socket."""
+        sock.settimeout(timeout)
+        data = bytearray()
+        deadline = time.time() + timeout
+        while len(data) < n:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            sock.settimeout(max(remaining, 0.5))
+            try:
+                chunk = sock.recv(n - len(data))
+                if not chunk:
+                    break
+                data.extend(chunk)
+            except socket.timeout:
+                if data:
+                    continue
+                break
+        return bytes(data)
+
+    def _ensure_patched_receive(self):
+        """Aplica monkey-patch al metodo _receive de la libreria c3 para
+        manejar fragmentacion TCP correctamente."""
+        if getattr(self, '_receive_patched', False):
+            return
+
+        try:
+            from c3 import C3 as C3Class, consts, utils
+        except ImportError:
+            return
+
+        original_receive = C3Class._receive
+
+        def patched_receive(panel_self):
+            panel_self._sock.settimeout(panel_self.receive_timeout)
+
+            header = bytes()
+            for _ in range(panel_self.receive_retries):
+                try:
+                    header = ZKC3Panel._recv_exact_bytes(
+                        panel_self._sock, 5, panel_self.receive_timeout
+                    )
+                    if len(header) == 5:
+                        break
+                except socket.timeout:
+                    pass
+
+            if len(header) != 5:
+                raise ConnectionError(
+                    f"Invalid response header; expected 5 bytes, received {header}"
+                )
+
+            message = bytearray()
+            received_command, data_size, protocol_version = (
+                panel_self._get_message_header(header)
+            )
+
+            payload = ZKC3Panel._recv_exact_bytes(
+                panel_self._sock, data_size + 3, panel_self.receive_timeout
+            )
+
+            if data_size > 0:
+                full_msg = header + payload
+                message = panel_self._get_message(full_msg)
+
+            if len(message) != data_size:
+                raise ValueError(
+                    f"Message length ({len(message)}) != specified ({data_size})"
+                )
+
+            if received_command == 0xC8:  # REPLY_OK
+                pass
+            elif received_command == 0xC9:  # REPLY_ERROR
+                error = utils.byte_to_signed_int(message[-1])
+                raise ConnectionError(
+                    f"Error {error}: {consts.Errors.get(error, 'Unknown')}"
+                )
+
+            return message, data_size, protocol_version
+
+        C3Class._receive = patched_receive
+        self._receive_patched = True
+        logger.debug("Monkey-patch _receive aplicado para TCP robusto")
+
+    @staticmethod
+    def _parse_table_records(data, fields, expected_table_idx):
+        """Parsea registros de una respuesta GETDATA directa (tabla pequena)."""
+        if not data or len(data) < 3:
+            return []
+
+        resp_table = data[0]
+        resp_field_cnt = data[1]
+        if resp_field_cnt == 0 or resp_field_cnt > 30:
+            return []
+
+        resp_field_indexes = list(data[2:2 + resp_field_cnt])
+        record_data = data[2 + resp_field_cnt:]
+
+        records = []
+        pos = 0
+        while pos < len(record_data):
+            record = {}
+            valid = True
+            start_pos = pos
+
+            for fidx in resp_field_indexes:
+                if pos >= len(record_data):
+                    valid = False
+                    break
+                field_size = record_data[pos]
+                pos += 1
+                if field_size > len(record_data) - pos or field_size > 200:
+                    valid = False
+                    pos = start_pos + 1
+                    break
+                field_info = next(
+                    (f for f in fields if f['index'] == fidx), None
+                )
+                if field_info:
+                    raw = record_data[pos:pos + field_size]
+                    if field_info['type'] == 'i':
+                        record[field_info['name']] = (
+                            int.from_bytes(raw, 'little') if raw else 0
+                        )
+                    else:
+                        record[field_info['name']] = (
+                            raw.decode('ascii', errors='ignore').rstrip('\x00')
+                        )
+                pos += field_size
+
+            if valid and record:
+                records.append(record)
+            elif not valid and records:
+                break
+            elif not valid and not records and pos < len(record_data):
+                continue
+            else:
+                break
+
+        return records
 
     # === Backend: zkaccess-c3 (Python puro) ===
 
