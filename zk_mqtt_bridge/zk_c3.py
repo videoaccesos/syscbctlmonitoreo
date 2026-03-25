@@ -270,6 +270,17 @@ class ZKC3Panel:
         """
         return self._read_table("user")
 
+    def get_user_authorizations(self) -> list[dict]:
+        """Lee la tabla de autorizaciones por usuario.
+
+        Retorna lista de dicts con: Pin, AuthorizeTimezoneId, AuthorizeDoorId.
+        """
+        return self._read_table("userauthorize")
+
+    def get_timezones(self) -> list[dict]:
+        """Lee la tabla de zonas horarias del panel."""
+        return self._read_table("timezone")
+
     def get_transactions(self, limit: int = 0) -> list[dict]:
         """Lee la tabla de transacciones (log de eventos historicos).
 
@@ -374,8 +385,13 @@ class ZKC3Panel:
     def is_card_valid(self, card_no: str) -> dict:
         """Verifica si una tarjeta esta activa y su validez.
 
+        En el C3-400:
+        - StartTime=0 y EndTime=0 significa SIN RESTRICCION (siempre valida)
+        - StartTime>0 y/o EndTime>0 define ventana de validez
+
         Returns:
-            Dict con: found, active, start_time, end_time, group, pin
+            Dict con: found, active, start_time, end_time, group, pin,
+                      doors, timezone_ids
         """
         users = self.get_users()
         user = next((u for u in users
@@ -387,37 +403,70 @@ class ZKC3Panel:
         start_raw = user.get("StartTime", 0)
         end_raw = user.get("EndTime", 0)
 
-        # Las fechas en el C3 son enteros codificados
+        # Decodificar fechas C3 (enteros)
         if isinstance(start_raw, int):
+            start_int = start_raw
             start_str = c3_datetime_decode(start_raw)
         else:
             start_str = str(start_raw) if start_raw else "2000-01-01 00:00:00"
+            start_int = c3_datetime_encode(start_str)
 
         if isinstance(end_raw, int):
+            end_int = end_raw
             end_str = c3_datetime_decode(end_raw)
         else:
             end_str = str(end_raw) if end_raw else "2099-12-31 23:59:59"
+            end_int = c3_datetime_encode(end_str)
 
-        active = True
+        # Logica de validez del C3:
+        # Si ambos son 0, la tarjeta NO tiene restriccion de tiempo = ACTIVA
+        if start_int == 0 and end_int == 0:
+            active = True
+            time_restricted = False
+        else:
+            time_restricted = True
+            active = True
+            try:
+                if end_int > 0:
+                    end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+                    if end_dt < now:
+                        active = False
+                if start_int > 0:
+                    start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+                    if start_dt > now:
+                        active = False
+            except ValueError:
+                pass
+
+        # Obtener autorizaciones de puertas/horarios
+        pin = str(user.get("Pin", ""))
+        doors = []
+        timezone_ids = []
         try:
-            end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
-            if end_dt < now:
-                active = False
-            start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
-            if start_dt > now:
-                active = False
-        except ValueError:
-            pass
+            auths = self.get_user_authorizations()
+            for auth in auths:
+                if str(auth.get("Pin", "")) == pin:
+                    door = auth.get("AuthorizeDoorId", 0)
+                    tz = auth.get("AuthorizeTimezoneId", 0)
+                    if door:
+                        doors.append(int(door))
+                    if tz:
+                        timezone_ids.append(int(tz))
+        except Exception as e:
+            logger.debug(f"No se pudo leer userauthorize: {e}")
 
         return {
             "found": True,
             "active": active,
+            "time_restricted": time_restricted,
             "card_no": str(card_no),
-            "pin": str(user.get("Pin", "")),
+            "pin": pin,
             "group": int(user.get("Group", 0)),
-            "start_time": start_str,
-            "end_time": end_str,
+            "start_time": start_str if time_restricted else "Sin restriccion",
+            "end_time": end_str if time_restricted else "Sin restriccion",
             "super_authorize": int(user.get("SuperAuthorize", 0)),
+            "doors": doors,
+            "timezone_ids": timezone_ids,
         }
 
     def get_door_count(self) -> int:
@@ -872,34 +921,17 @@ class ZKC3Panel:
 
     def _set_user_c3(self, card_no, pin, password, group,
                      start_time, end_time, super_authorize, doors) -> bool:
-        """Escribe un usuario al panel via comando SETDATA (0x09)."""
+        """Escribe un usuario al panel via comando SETDATA (0x07).
+
+        El protocolo C3 usa formato key=value separado por tabs para SETDATA.
+        Las fechas se codifican como enteros C3.
+        """
         if not self._c3_panel:
             logger.error("Panel no conectado")
             return False
 
-        try:
-            from c3 import consts, crc as c3_crc, utils
-        except ImportError:
-            logger.error("Modulo c3 no disponible")
-            return False
-
         panel = self._c3_panel
         self._ensure_patched_receive()
-
-        # Obtener esquema de tabla user
-        try:
-            data_cfg = panel._get_device_data_cfg()
-        except Exception as e:
-            logger.error(f"Error obteniendo esquema: {e}")
-            return False
-
-        user_cfg = next((cfg for cfg in data_cfg if cfg.name == "user"), None)
-        if not user_cfg:
-            logger.error("Tabla 'user' no encontrada en el panel")
-            return False
-
-        table_index = user_cfg.index
-        fields = {f.name: f for f in user_cfg.fields}
 
         # Codificar fechas como enteros C3
         start_int = c3_datetime_encode(start_time)
@@ -908,50 +940,23 @@ class ZKC3Panel:
         logger.debug(f"Fechas codificadas: start={start_time}->{start_int}, "
                      f"end={end_time}->{end_int}")
 
-        # Mapeo de valores a escribir (ya con tipos correctos)
-        user_data = {
-            "CardNo": int(card_no),
-            "Pin": int(pin) if str(pin).isdigit() else pin,
-            "Password": str(password),
-            "Group": int(group),
-            "StartTime": start_int,
-            "EndTime": end_int,
-            "SuperAuthorize": int(super_authorize),
-        }
+        # Formato SETDATA del C3: key=value separados por tabs
+        data_str = (
+            f"CardNo={card_no}\t"
+            f"Pin={pin}\t"
+            f"Password={password}\t"
+            f"Group={group}\t"
+            f"StartTime={start_int}\t"
+            f"EndTime={end_int}\t"
+            f"SuperAuthorize={super_authorize}"
+        )
 
-        # Construir payload SETDATA
-        # Formato: [table_idx] [field_cnt] [field_indexes...] [record_data...]
-        # record_data: [size][bytes] por cada campo
-        field_list = []
-        for fname, fobj in fields.items():
-            if fname in user_data:
-                field_list.append((fobj.index, fobj.type, fname,
-                                   user_data[fname]))
+        payload = data_str.encode('ascii')
 
-        field_list.sort(key=lambda x: x[0])
-        field_indexes = [f[0] for f in field_list]
-
-        # Construir datos del registro
-        record_bytes = bytearray()
-        for fidx, ftype, fname, fvalue in field_list:
-            if ftype == 'i':
-                int_val = int(fvalue) if isinstance(fvalue, (int, float)) else 0
-                # Usar 4 bytes para enteros (formato estandar C3)
-                raw = int_val.to_bytes(4, 'little')
-            else:
-                raw = str(fvalue).encode('ascii')
-
-            record_bytes.append(len(raw))
-            record_bytes.extend(raw)
-
-        # Parametros: [table_idx, field_count, field_indexes..., record_data...]
-        parameters = [table_index, len(field_indexes)] + field_indexes
-        parameters.extend(record_bytes)
-
-        # Enviar SETDATA (command 0x09)
-        SETDATA = 0x09
+        # SETDATA = 0x07 (confirmado en protocolo C3)
+        SETDATA = 0x07
         try:
-            message, msg_size = panel._send_receive(SETDATA, parameters)
+            message, msg_size = panel._send_receive(SETDATA, payload)
             logger.info(f"Usuario {card_no} (pin={pin}) escrito al panel "
                         f"[start={start_time}, end={end_time}]")
             return True
@@ -960,37 +965,17 @@ class ZKC3Panel:
             return False
 
     def _delete_user_c3(self, card_no: str = "", pin: str = "") -> bool:
-        """Elimina un usuario del panel via comando DELETEDATA (0x0D)."""
+        """Elimina un usuario del panel via comando DELETEDATA (0x09).
+
+        El C3 usa Pin como clave primaria. Formato key=value.
+        """
         if not self._c3_panel:
             logger.error("Panel no conectado")
-            return False
-
-        try:
-            from c3 import consts
-        except ImportError:
-            logger.error("Modulo c3 no disponible")
             return False
 
         panel = self._c3_panel
         self._ensure_patched_receive()
 
-        # Obtener esquema
-        try:
-            data_cfg = panel._get_device_data_cfg()
-        except Exception as e:
-            logger.error(f"Error obteniendo esquema: {e}")
-            return False
-
-        user_cfg = next((cfg for cfg in data_cfg if cfg.name == "user"), None)
-        if not user_cfg:
-            logger.error("Tabla 'user' no encontrada")
-            return False
-
-        table_index = user_cfg.index
-        fields = {f.name: f for f in user_cfg.fields}
-
-        # Para eliminar, necesitamos identificar el registro.
-        # El C3 usa Pin como clave primaria de la tabla user.
         # Si solo tenemos card_no, buscamos el pin correspondiente.
         if not pin and card_no:
             users = self.get_users()
@@ -1005,19 +990,12 @@ class ZKC3Panel:
             logger.error("Se requiere card_no o pin para eliminar")
             return False
 
-        # DELETEDATA (0x0D): [table_idx] [field_cnt=1] [pin_field_idx] [size] [pin_bytes]
-        DELETEDATA = 0x0D
-        pin_field = fields.get("Pin")
-        if not pin_field:
-            logger.error("Campo 'Pin' no encontrado en esquema")
-            return False
-
-        pin_bytes = pin.encode('ascii')
-        parameters = [table_index, 1, pin_field.index, len(pin_bytes)]
-        parameters.extend(pin_bytes)
+        # DELETEDATA = 0x09, formato key=value
+        DELETEDATA = 0x09
+        payload = f"Pin={pin}".encode('ascii')
 
         try:
-            message, msg_size = panel._send_receive(DELETEDATA, parameters)
+            message, msg_size = panel._send_receive(DELETEDATA, payload)
             logger.info(f"Usuario pin={pin} (card={card_no}) eliminado del panel")
             return True
         except Exception as e:

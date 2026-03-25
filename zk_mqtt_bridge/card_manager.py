@@ -74,17 +74,30 @@ def cmd_list(panel, args):
         start = c3_datetime_decode(start_raw) if isinstance(start_raw, int) else str(start_raw)
         end = c3_datetime_decode(end_raw) if isinstance(end_raw, int) else str(end_raw)
 
-        # Determinar estado
-        status = "ACTIVA"
-        try:
-            end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
-            if end_dt < now:
-                status = "EXPIRADA"
-                expired_count += 1
-            else:
-                active_count += 1
-        except ValueError:
+        # Determinar estado:
+        # StartTime=0 y EndTime=0 en el C3 = SIN RESTRICCION = siempre activa
+        start_int = start_raw if isinstance(start_raw, int) else 0
+        end_int = end_raw if isinstance(end_raw, int) else 0
+
+        if start_int == 0 and end_int == 0:
+            status = "ACTIVA"
+            start = "Sin restriccion"
+            end = "Sin restriccion"
             active_count += 1
+        else:
+            status = "ACTIVA"
+            try:
+                if end_int > 0:
+                    end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+                    if end_dt < now:
+                        status = "EXPIRADA"
+                        expired_count += 1
+                    else:
+                        active_count += 1
+                else:
+                    active_count += 1
+            except ValueError:
+                active_count += 1
 
         if sa:
             status += " [S]"
@@ -116,6 +129,23 @@ def cmd_check(panel, args):
     print(f"  Inicio:       {result['start_time']}")
     print(f"  Fin:          {result['end_time']}")
     print(f"  Super:        {'SI' if result['super_authorize'] else 'NO'}")
+
+    # Puertas y horarios autorizados
+    doors = result.get("doors", [])
+    tz_ids = result.get("timezone_ids", [])
+    time_restricted = result.get("time_restricted", False)
+
+    if doors:
+        print(f"  Puertas:      {', '.join(str(d) for d in doors)}")
+    else:
+        print(f"  Puertas:      (sin asignacion especifica)")
+
+    if tz_ids:
+        print(f"  Zonas hora:   {', '.join(str(t) for t in tz_ids)}")
+    else:
+        print(f"  Zonas hora:   (sin restriccion horaria)")
+
+    print(f"  Restriccion:  {'SI - ventana de tiempo definida' if time_restricted else 'NO - acceso sin limite de tiempo'}")
     print()
 
     if result["active"]:
@@ -208,12 +238,21 @@ def cmd_expired(panel, args):
     expired = []
 
     for user in users:
+        start_raw = user.get("StartTime", 0)
         end_raw = user.get("EndTime", 0)
+        start_int = start_raw if isinstance(start_raw, int) else 0
+        end_int = end_raw if isinstance(end_raw, int) else 0
+
+        # Si ambos son 0, la tarjeta NO tiene restriccion = siempre valida
+        if start_int == 0 and end_int == 0:
+            continue
+
         end = c3_datetime_decode(end_raw) if isinstance(end_raw, int) else str(end_raw)
         try:
-            end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
-            if end_dt < now:
-                expired.append((user, end))
+            if end_int > 0:
+                end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+                if end_dt < now:
+                    expired.append((user, end))
         except ValueError:
             pass
 
