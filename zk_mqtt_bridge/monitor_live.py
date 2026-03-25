@@ -62,7 +62,7 @@ def connect_panel(host, port=4370, timeout=5):
     return p
 
 
-    # Eventos que indican acceso autorizado (el panel abrio la puerta)
+# Eventos que indican acceso autorizado (el panel abrio la puerta)
 AUTHORIZED_EVENTS = {0, 1, 2, 3, 4, 6, 20, 23}
 # Eventos que indican acceso denegado
 DENIED_EVENTS = {204, 205, 206, 207, 208, 209}

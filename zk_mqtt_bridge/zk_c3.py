@@ -16,6 +16,7 @@ Lectura de tablas (user, transaction, etc):
   campo-por-campo (un GETDATA por campo) y reconstruir registros por indice.
 """
 
+import math
 import struct
 import socket
 import logging
@@ -24,6 +25,44 @@ from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def c3_datetime_encode(dt_str: str) -> int:
+    """Convierte fecha string 'YYYY-MM-DD HH:MM:SS' a entero C3.
+
+    Formula ZK: ((Year-2000)*12*31 + (Month-1)*31 + (Day-1)) * 86400
+                + Hour*3600 + Minute*60 + Second
+    """
+    try:
+        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return 0
+    return (
+        ((dt.year - 2000) * 12 * 31 + (dt.month - 1) * 31 + (dt.day - 1))
+        * 86400
+        + dt.hour * 3600
+        + dt.minute * 60
+        + dt.second
+    )
+
+
+def c3_datetime_decode(value: int) -> str:
+    """Convierte entero C3 a fecha string 'YYYY-MM-DD HH:MM:SS'.
+
+    Inversa: Second = value % 60, Minute = (value/60) % 60, etc.
+    """
+    if not value or value <= 0:
+        return "2000-01-01 00:00:00"
+    try:
+        year = math.floor(value / 32140800) + 2000
+        month = math.floor(value / 2678400) % 12 + 1
+        day = math.floor(value / 86400) % 31 + 1
+        hour = math.floor(value / 3600) % 24
+        minute = math.floor(value / 60) % 60
+        second = value % 60
+        return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+    except Exception:
+        return "2000-01-01 00:00:00"
 
 # Constantes del protocolo ZK (para modo raw TCP)
 ZK_CMD_CONNECT = 1000
@@ -345,19 +384,28 @@ class ZKC3Panel:
             return {"found": False, "active": False}
 
         now = datetime.now()
-        start = user.get("StartTime", "")
-        end = user.get("EndTime", "")
+        start_raw = user.get("StartTime", 0)
+        end_raw = user.get("EndTime", 0)
+
+        # Las fechas en el C3 son enteros codificados
+        if isinstance(start_raw, int):
+            start_str = c3_datetime_decode(start_raw)
+        else:
+            start_str = str(start_raw) if start_raw else "2000-01-01 00:00:00"
+
+        if isinstance(end_raw, int):
+            end_str = c3_datetime_decode(end_raw)
+        else:
+            end_str = str(end_raw) if end_raw else "2099-12-31 23:59:59"
 
         active = True
         try:
-            if end:
-                end_dt = datetime.strptime(str(end), "%Y-%m-%d %H:%M:%S")
-                if end_dt < now:
-                    active = False
-            if start:
-                start_dt = datetime.strptime(str(start), "%Y-%m-%d %H:%M:%S")
-                if start_dt > now:
-                    active = False
+            end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+            if end_dt < now:
+                active = False
+            start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            if start_dt > now:
+                active = False
         except ValueError:
             pass
 
@@ -367,8 +415,8 @@ class ZKC3Panel:
             "card_no": str(card_no),
             "pin": str(user.get("Pin", "")),
             "group": int(user.get("Group", 0)),
-            "start_time": str(start),
-            "end_time": str(end),
+            "start_time": start_str,
+            "end_time": end_str,
             "super_authorize": int(user.get("SuperAuthorize", 0)),
         }
 
@@ -853,15 +901,22 @@ class ZKC3Panel:
         table_index = user_cfg.index
         fields = {f.name: f for f in user_cfg.fields}
 
-        # Mapeo de valores a escribir
+        # Codificar fechas como enteros C3
+        start_int = c3_datetime_encode(start_time)
+        end_int = c3_datetime_encode(end_time)
+
+        logger.debug(f"Fechas codificadas: start={start_time}->{start_int}, "
+                     f"end={end_time}->{end_int}")
+
+        # Mapeo de valores a escribir (ya con tipos correctos)
         user_data = {
-            "CardNo": str(card_no),
-            "Pin": str(pin),
+            "CardNo": int(card_no),
+            "Pin": int(pin) if str(pin).isdigit() else pin,
             "Password": str(password),
-            "Group": str(group),
-            "StartTime": str(start_time),
-            "EndTime": str(end_time),
-            "SuperAuthorize": str(super_authorize),
+            "Group": int(group),
+            "StartTime": start_int,
+            "EndTime": end_int,
+            "SuperAuthorize": int(super_authorize),
         }
 
         # Construir payload SETDATA
@@ -870,30 +925,21 @@ class ZKC3Panel:
         field_list = []
         for fname, fobj in fields.items():
             if fname in user_data:
-                field_list.append((fobj.index, fobj.type, user_data[fname]))
+                field_list.append((fobj.index, fobj.type, fname,
+                                   user_data[fname]))
 
         field_list.sort(key=lambda x: x[0])
         field_indexes = [f[0] for f in field_list]
 
         # Construir datos del registro
         record_bytes = bytearray()
-        for fidx, ftype, fvalue in field_list:
+        for fidx, ftype, fname, fvalue in field_list:
             if ftype == 'i':
-                try:
-                    int_val = int(fvalue)
-                except ValueError:
-                    int_val = 0
-                # Determinar tamaño necesario
-                if int_val == 0:
-                    raw = b'\x00'
-                elif int_val < 256:
-                    raw = int_val.to_bytes(1, 'little')
-                elif int_val < 65536:
-                    raw = int_val.to_bytes(2, 'little')
-                else:
-                    raw = int_val.to_bytes(4, 'little')
+                int_val = int(fvalue) if isinstance(fvalue, (int, float)) else 0
+                # Usar 4 bytes para enteros (formato estandar C3)
+                raw = int_val.to_bytes(4, 'little')
             else:
-                raw = fvalue.encode('ascii')
+                raw = str(fvalue).encode('ascii')
 
             record_bytes.append(len(raw))
             record_bytes.extend(raw)
@@ -906,7 +952,8 @@ class ZKC3Panel:
         SETDATA = 0x09
         try:
             message, msg_size = panel._send_receive(SETDATA, parameters)
-            logger.info(f"Usuario {card_no} (pin={pin}) escrito al panel")
+            logger.info(f"Usuario {card_no} (pin={pin}) escrito al panel "
+                        f"[start={start_time}, end={end_time}]")
             return True
         except Exception as e:
             logger.error(f"Error SETDATA usuario {card_no}: {e}")

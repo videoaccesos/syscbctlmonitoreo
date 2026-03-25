@@ -25,7 +25,7 @@ import sys
 import argparse
 import logging
 from datetime import datetime
-from zk_c3 import ZKC3Panel
+from zk_c3 import ZKC3Panel, c3_datetime_decode
 
 logger = logging.getLogger("card_manager")
 
@@ -66,20 +66,21 @@ def cmd_list(panel, args):
         card = str(user.get("CardNo", ""))
         pin = str(user.get("Pin", ""))
         group = str(user.get("Group", ""))
-        start = str(user.get("StartTime", ""))
-        end = str(user.get("EndTime", ""))
+        start_raw = user.get("StartTime", 0)
+        end_raw = user.get("EndTime", 0)
         sa = int(user.get("SuperAuthorize", 0))
+
+        # Decodificar fechas C3 (enteros)
+        start = c3_datetime_decode(start_raw) if isinstance(start_raw, int) else str(start_raw)
+        end = c3_datetime_decode(end_raw) if isinstance(end_raw, int) else str(end_raw)
 
         # Determinar estado
         status = "ACTIVA"
         try:
-            if end:
-                end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
-                if end_dt < now:
-                    status = "EXPIRADA"
-                    expired_count += 1
-                else:
-                    active_count += 1
+            end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+            if end_dt < now:
+                status = "EXPIRADA"
+                expired_count += 1
             else:
                 active_count += 1
         except ValueError:
@@ -207,12 +208,12 @@ def cmd_expired(panel, args):
     expired = []
 
     for user in users:
-        end = str(user.get("EndTime", ""))
+        end_raw = user.get("EndTime", 0)
+        end = c3_datetime_decode(end_raw) if isinstance(end_raw, int) else str(end_raw)
         try:
-            if end:
-                end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
-                if end_dt < now:
-                    expired.append(user)
+            end_dt = datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
+            if end_dt < now:
+                expired.append((user, end))
         except ValueError:
             pass
 
@@ -223,10 +224,9 @@ def cmd_expired(panel, args):
     print(f"  {'#':>3}  {'Tarjeta':<12} {'Pin':<8} {'Expiro':<20}")
     print("  " + "-" * 46)
 
-    for i, user in enumerate(expired, 1):
+    for i, (user, end) in enumerate(expired, 1):
         card = str(user.get("CardNo", ""))
         pin = str(user.get("Pin", ""))
-        end = str(user.get("EndTime", ""))
         print(f"  {i:>3}  {card:<12} {pin:<8} {end:<20}")
 
     print()
