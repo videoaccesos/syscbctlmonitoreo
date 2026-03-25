@@ -212,7 +212,13 @@ def send_free_data(panel, debug=False):
 # Conexion
 # ============================================================
 def create_connection(host, timeout=15):
-    """Crea una conexion fresca al panel via ZKC3Panel."""
+    """Crea una conexion fresca al panel via ZKC3Panel.
+
+    Aplica el patch TCP ANTES de conectar para que _get_device_data_cfg()
+    funcione correctamente desde la primera llamada.
+    """
+    # Parchear ANTES de crear la conexion
+    C3._receive = patched_receive
     panel = ZKC3Panel(host, 4370, timeout)
     if not panel.connect():
         raise ConnectionError(f"No se pudo conectar a {host}")
