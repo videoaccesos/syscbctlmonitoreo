@@ -152,11 +152,20 @@ export async function GET(request: NextRequest) {
     const privadas = serialize(privadasRaw);
 
     // Clasificar vencidas como renovadas o pendientes
+    // Crear set de asignacion_ids que aparecen como ventas en el periodo
+    // para evitar que una tarjeta vendida/renovada en el periodo tambien
+    // aparezca como "pendiente de renovar"
+    const ventasAsignacionIds = new Set(
+      ventas.map((v) => Number(v.asignacion_id))
+    );
+
     const renovadas = vencidas.filter(
-      (v) => v.renovacion_asignacion_h || v.renovacion_asignacion_b
+      (v) => v.renovacion_asignacion_h || v.renovacion_asignacion_b ||
+             ventasAsignacionIds.has(Number(v.asignacion_id))
     );
     const pendientes = vencidas.filter(
-      (v) => !v.renovacion_asignacion_h && !v.renovacion_asignacion_b
+      (v) => !v.renovacion_asignacion_h && !v.renovacion_asignacion_b &&
+             !ventasAsignacionIds.has(Number(v.asignacion_id))
     );
 
     // Clasificar ventas como "renovación" o "venta nueva" basado en concepto
