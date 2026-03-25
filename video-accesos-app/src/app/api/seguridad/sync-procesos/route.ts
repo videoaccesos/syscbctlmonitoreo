@@ -11,7 +11,10 @@ import { prisma } from "@/lib/prisma";
  * y que no corresponden al catálogo actual, luego crea los faltantes.
  */
 
-// Catalogo de ramas del sistema que deben existir en la BD
+// Catalogo de ramas del sistema que deben existir en la BD.
+// Cada subproceso.funcion corresponde a una ruta del sidebar y se usa
+// como identificador de permiso.  Al agregar nuevas pantallas, agregarlas
+// aquí y ejecutar POST /api/seguridad/sync-procesos para sincronizar la BD.
 const CATALOGO_RAMAS = [
   {
     nombre: "Catálogos",
@@ -25,6 +28,7 @@ const CATALOGO_RAMAS = [
       { nombre: "Turnos", funcion: "/catalogos/turnos" },
       { nombre: "Fallas", funcion: "/catalogos/fallas" },
       { nombre: "Materiales", funcion: "/catalogos/materiales" },
+      { nombre: "Cuentas de Gasto", funcion: "/catalogos/cuentas-gasto" },
     ],
   },
   {
@@ -37,6 +41,16 @@ const CATALOGO_RAMAS = [
       { nombre: "Órdenes de Servicio", funcion: "/procesos/ordenes-servicio" },
       { nombre: "Supervisión de Llamadas", funcion: "/procesos/supervision-llamadas" },
       { nombre: "Gastos", funcion: "/procesos/gastos" },
+      { nombre: "Pago de Mensualidades", funcion: "/procesos/mensualidades" },
+    ],
+  },
+  {
+    nombre: "Herramientas",
+    rutaAcceso: null,
+    subprocesos: [
+      { nombre: "Corrección Vencimientos", funcion: "/procesos/correccion-vencimientos" },
+      { nombre: "Conciliación de Tarjetas", funcion: "/herramientas/conciliacion" },
+      { nombre: "Prenomina Quincenal", funcion: "/procesos/prenomina" },
     ],
   },
   {
@@ -47,6 +61,8 @@ const CATALOGO_RAMAS = [
       { nombre: "Accesos Gráficas", funcion: "/reportes/accesos-graficas" },
       { nombre: "Supervisión Llamadas", funcion: "/reportes/supervision-llamadas" },
       { nombre: "Reporte de Ventas", funcion: "/reportes/reporte-ventas" },
+      { nombre: "Tarjetas por Vencer", funcion: "/reportes/tarjetas-vencimientos" },
+      { nombre: "Listado de Tarjetas", funcion: "/reportes/catalogo-tarjetas" },
     ],
   },
   {

@@ -98,7 +98,9 @@ export const authOptions: NextAuthOptions = {
           console.error("[AUTH] Error en bitácora/update (login continúa):", err);
         }
 
-        // Registrar en log las ramas autorizadas del usuario
+        // Cargar permisos del usuario para guardarlos en el JWT
+        let isAdmin = false;
+        let rutasAutorizadas: string[] = [];
         try {
           const gruposDetalles = await prisma.grupoUsuarioDetalle.findMany({
             where: { usuarioId: usuario.id },
@@ -118,7 +120,7 @@ export const authOptions: NextAuthOptions = {
           });
 
           const grupos = gruposDetalles.map((d) => d.grupo.nombre);
-          const isAdmin = gruposDetalles.some(
+          isAdmin = gruposDetalles.some(
             (d) => d.grupo.nombre.toLowerCase() === "admin" && d.grupo.estatusId === 1
           );
 
@@ -127,20 +129,20 @@ export const authOptions: NextAuthOptions = {
               `[AUTH] LOGIN OK - Usuario: ${usuario.usuario} (ID=${usuario.id}) - ADMIN - Acceso total a todas las ramas. Grupos: [${grupos.join(", ")}]`
             );
           } else {
-            const ramasSet = new Set<string>();
+            const rutasSet = new Set<string>();
             gruposDetalles.forEach((d) => {
               if (d.grupo.estatusId !== 1) return;
               d.grupo.permisos.forEach((p) => {
-                ramasSet.add(p.subproceso.proceso.nombre);
+                if (p.subproceso.funcion) rutasSet.add(p.subproceso.funcion);
               });
             });
-            const ramas = Array.from(ramasSet);
+            rutasAutorizadas = Array.from(rutasSet);
             console.log(
-              `[AUTH] LOGIN OK - Usuario: ${usuario.usuario} (ID=${usuario.id}) - Grupos: [${grupos.join(", ")}] - Ramas autorizadas: [${ramas.join(", ")}]`
+              `[AUTH] LOGIN OK - Usuario: ${usuario.usuario} (ID=${usuario.id}) - Grupos: [${grupos.join(", ")}] - Rutas autorizadas: [${rutasAutorizadas.join(", ")}]`
             );
           }
         } catch (err) {
-          console.error("[AUTH] Error al registrar ramas autorizadas (login continúa):", err);
+          console.error("[AUTH] Error al cargar permisos (login continúa):", err);
         }
 
         return {
@@ -156,6 +158,8 @@ export const authOptions: NextAuthOptions = {
           nroOperador: usuario.empleado?.nroOperador,
           modificarFechas: usuario.modificarFechas,
           privadaId: usuario.privadaId,
+          isAdmin,
+          rutasAutorizadas,
         };
       },
     }),
@@ -170,6 +174,8 @@ export const authOptions: NextAuthOptions = {
         token.nroOperador = u.nroOperador as string | undefined;
         token.modificarFechas = u.modificarFechas as string;
         token.privadaId = u.privadaId as number | null;
+        token.isAdmin = u.isAdmin as boolean;
+        token.rutasAutorizadas = u.rutasAutorizadas as string[];
       }
       return token;
     },
@@ -181,6 +187,8 @@ export const authOptions: NextAuthOptions = {
         session.user.nroOperador = token.nroOperador as string | undefined;
         session.user.modificarFechas = token.modificarFechas as string;
         session.user.privadaId = token.privadaId as number | null;
+        session.user.isAdmin = token.isAdmin as boolean;
+        session.user.rutasAutorizadas = token.rutasAutorizadas as string[];
       }
       return session;
     },

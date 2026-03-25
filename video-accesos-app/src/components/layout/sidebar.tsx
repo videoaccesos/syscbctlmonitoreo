@@ -13,8 +13,8 @@ import {
   Monitor,
   Wrench,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { signOut, useSession } from "next-auth/react";
+import { useState } from "react";
 
 interface NavItem {
   label: string;
@@ -95,46 +95,27 @@ const fullNavigation: NavItem[] = [
   },
 ];
 
-interface PermisosResponse {
-  isAdmin: boolean;
-  grupos: { id: number; nombre: string; estatusId: number }[];
-  rutasAutorizadas: string[];
-  ramaNombres: string[];
-}
-
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
-  const [permisos, setPermisos] = useState<PermisosResponse | null>(null);
 
-  useEffect(() => {
-    fetch("/api/seguridad/mis-permisos")
-      .then((res) => res.ok ? res.json() : null)
-      .then((data: PermisosResponse | null) => {
-        if (data) {
-          setPermisos(data);
-          console.log(
-            `[Sidebar] Permisos cargados - Admin: ${data.isAdmin}, Grupos: [${data.grupos.map((g) => g.nombre).join(", ")}], Ramas: [${data.ramaNombres.join(", ")}]`
-          );
-        }
-      })
-      .catch(() => console.error("[Sidebar] Error al cargar permisos"));
-  }, []);
-
-  // Filtrar navegacion segun permisos
+  // Filtrar navegacion segun permisos almacenados en la sesión (JWT)
   const navigation = (() => {
-    // Mientras cargan los permisos, solo mostrar Inicio
-    if (!permisos) {
+    // Mientras carga la sesión, solo mostrar Inicio
+    if (status === "loading" || !session?.user) {
       return fullNavigation.filter((item) => item.label === "Inicio");
     }
 
+    const { isAdmin, rutasAutorizadas } = session.user;
+
     // Admin ve todo
-    if (permisos.isAdmin) {
+    if (isAdmin) {
       return fullNavigation;
     }
 
     // Construir set de rutas autorizadas
-    const rutasAuth = new Set(permisos.rutasAutorizadas);
+    const rutasAuth = new Set(rutasAutorizadas || []);
 
     return fullNavigation
       .map((item) => {

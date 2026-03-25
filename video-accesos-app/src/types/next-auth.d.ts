@@ -9,6 +9,8 @@ declare module "next-auth" {
       nroOperador: string | undefined;
       modificarFechas: string; // "S" o "N" (char 1 en BD)
       privadaId: number | null;
+      isAdmin: boolean;
+      rutasAutorizadas: string[];
     };
   }
 
@@ -19,6 +21,8 @@ declare module "next-auth" {
     nroOperador: string | undefined;
     modificarFechas: string;
     privadaId: number | null;
+    isAdmin: boolean;
+    rutasAutorizadas: string[];
   }
 }
 
@@ -30,5 +34,7 @@ declare module "next-auth/jwt" {
     nroOperador: string | undefined;
     modificarFechas: string;
     privadaId: number | null;
+    isAdmin: boolean;
+    rutasAutorizadas: string[];
   }
 }
