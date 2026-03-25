@@ -225,18 +225,51 @@ def get_raw_panel(zk_panel):
 
 
 def get_table_info(panel, table_name):
-    """Obtiene esquema de una tabla via ZKC3Panel.get_table_schema()."""
-    schema = panel.get_table_schema()
-    if not schema:
-        print("  ERROR: get_table_schema() retorno vacio")
+    """Obtiene esquema de una tabla.
+
+    Usa get_users() primero para forzar el patching TCP,
+    luego obtiene el esquema directamente del panel interno.
+    """
+    # Forzar patching TCP haciendo una lectura liviana
+    raw_panel = get_raw_panel(panel)
+    if not raw_panel:
+        print("  ERROR: no hay panel C3 interno")
         return None, None
 
-    available = [t['name'] for t in schema]
+    # Obtener esquema directamente del panel C3 interno
+    try:
+        panel._ensure_patched_receive()
+        data_cfg = raw_panel._get_device_data_cfg()
+    except Exception as e:
+        print(f"  ERROR obteniendo esquema: {e}")
+        return None, None
+
+    if not data_cfg:
+        # Segundo intento: forzar patch leyendo users primero
+        print("  Esquema vacio, forzando patch via get_users()...")
+        try:
+            users = panel.get_users()
+            print(f"  get_users() OK: {len(users)} registros")
+            data_cfg = raw_panel._get_device_data_cfg()
+        except Exception as e:
+            print(f"  ERROR en segundo intento: {e}")
+            return None, None
+
+    if not data_cfg:
+        print("  ERROR: data_cfg sigue vacio despues de retry")
+        return None, None
+
+    available = []
+    for cfg in data_cfg:
+        available.append(cfg.name)
+
     print(f"  Tablas encontradas: {', '.join(available)}")
 
-    for tbl in schema:
-        if tbl['name'] == table_name:
-            return tbl['index'], tbl['fields']
+    for cfg in data_cfg:
+        if cfg.name == table_name:
+            fields = [{'index': f.index, 'name': f.name, 'type': f.type}
+                      for f in cfg.fields]
+            return cfg.index, fields
 
     return None, None
 
