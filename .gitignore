@@ -17,3 +17,4 @@ _index.php
 .DS_Store
 Thumbs.db
 application/config/database.php
+__pycache__/
