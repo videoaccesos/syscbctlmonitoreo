@@ -214,11 +214,9 @@ def send_free_data(panel, debug=False):
 def create_connection(host, timeout=15):
     """Crea una conexion fresca al panel via ZKC3Panel.
 
-    Aplica el patch TCP ANTES de conectar para que _get_device_data_cfg()
-    funcione correctamente desde la primera llamada.
+    NO parchea _receive antes de connect - replica el flujo exacto
+    de card_manager.py que funciona correctamente.
     """
-    # Parchear ANTES de crear la conexion
-    C3._receive = patched_receive
     panel = ZKC3Panel(host, 4370, timeout)
     if not panel.connect():
         raise ConnectionError(f"No se pudo conectar a {host}")
@@ -233,42 +231,27 @@ def get_raw_panel(zk_panel):
 def get_table_info(panel, table_name):
     """Obtiene esquema de una tabla.
 
-    Usa DATATABLE_CFG directo con debug para diagnosticar problemas.
+    Replica el flujo exacto de card_manager.py:
+    1. _ensure_patched_receive() (aplica patch TCP DESPUES de connect)
+    2. _get_device_data_cfg()
     """
+    # Paso 1: aplicar patch TCP (exacto como card_manager.py)
+    panel._ensure_patched_receive()
+
     raw_panel = get_raw_panel(panel)
     if not raw_panel:
         print("  ERROR: no hay panel C3 interno")
         return None, None
 
-    # Debug: enviar DATATABLE_CFG manualmente y ver respuesta raw
-    try:
-        message, msg_size = raw_panel._send_receive(consts.Command.DATATABLE_CFG)
-        print(f"  DATATABLE_CFG: {msg_size} bytes recibidos")
-        if message:
-            # Mostrar primeros bytes para debug
-            preview = bytes(message[:200])
-            print(f"  Preview: {preview[:100]}")
-        else:
-            print(f"  DATATABLE_CFG: respuesta vacia!")
-            return None, None
-    except Exception as e:
-        print(f"  ERROR DATATABLE_CFG: {e}")
-        return None, None
-
-    # Parsear el esquema
+    # Paso 2: obtener esquema (exacto como get_table_schema)
     try:
         data_cfg = raw_panel._get_device_data_cfg()
     except Exception as e:
-        print(f"  ERROR parseando esquema: {e}")
+        print(f"  ERROR obteniendo esquema: {e}")
         return None, None
 
     if not data_cfg:
-        print("  data_cfg vacio despues de parsear")
-        # Intentar parsear manualmente desde la respuesta raw
-        print(f"  Respuesta raw ({msg_size} bytes):")
-        for line in bytes(message).split(b'\x0a'):
-            if line.strip():
-                print(f"    {line}")
+        print("  ERROR: data_cfg vacio")
         return None, None
 
     available = [cfg.name for cfg in data_cfg]
