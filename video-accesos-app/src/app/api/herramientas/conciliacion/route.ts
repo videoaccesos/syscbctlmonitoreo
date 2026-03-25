@@ -151,31 +151,63 @@ export async function GET(request: NextRequest) {
     const ventas = serialize(ventasRaw);
     const privadas = serialize(privadasRaw);
 
+    // Normalizar lecturas: quitar prefijo R/RR/RRR para comparación
+    const normalizarLectura = (lec: unknown): string =>
+      String(lec || "").replace(/^R+/i, "");
+
+    // Normalizar lecturas en vencidas y ventas para display y comparación
+    for (const v of vencidas) {
+      v.lectura_original = v.lectura;
+      v.lectura = normalizarLectura(v.lectura);
+    }
+    for (const v of ventas) {
+      v.lectura_original = v.lectura;
+      v.lectura = normalizarLectura(v.lectura);
+    }
+
     // Clasificar vencidas como renovadas o pendientes
-    // Crear set de asignacion_ids que aparecen como ventas en el periodo
-    // para evitar que una tarjeta vendida/renovada en el periodo tambien
-    // aparezca como "pendiente de renovar"
     const ventasAsignacionIds = new Set(
       ventas.map((v) => Number(v.asignacion_id))
     );
 
-    // Crear set de lecturas de ventas (sin prefijo R) para detectar
-    // renovaciones de tarjetas con prefijo RR/RRR del sistema viejo.
-    // Ejemplo: tarjeta vencida "RR15473920" fue renovada como "15473920"
-    const ventasLecturas = new Set(
-      ventas.map((v) => String(v.lectura || "").replace(/^R+/i, ""))
-    );
+    // Buscar renovaciones por lectura normalizada contra TODAS las
+    // asignaciones activas (no solo ventas del periodo).
+    // Recoge lecturas con prefijo R de las vencidas para buscar en BD.
+    const lecturasConR = vencidas
+      .filter((v) => /^R+/i.test(String(v.lectura_original || "")))
+      .map((v) => String(v.lectura));  // ya normalizada (sin R)
+    const lecturasConRUnicas = [...new Set(lecturasConR)].filter(Boolean);
+
+    let lecturasRenovadasEnBD = new Set<string>();
+    if (lecturasConRUnicas.length > 0) {
+      // Buscar en AMBAS tablas si existe una asignación activa con esa lectura (sin R)
+      const placeholders = lecturasConRUnicas.map(() => "?").join(",");
+      const sqlBuscarRenov = `
+        SELECT DISTINCT t.lectura
+        FROM (
+          SELECT tarjeta_id, estatus_id FROM residencias_residentes_tarjetas WHERE estatus_id = 1
+          UNION ALL
+          SELECT tarjeta_id, estatus_id FROM residencias_residentes_tarjetas_no_renovacion WHERE estatus_id = 1
+        ) a
+        INNER JOIN tarjetas t ON a.tarjeta_id = t.tarjeta_id
+        WHERE t.lectura IN (${placeholders})
+      `;
+      const renovPorLectura = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        sqlBuscarRenov, ...lecturasConRUnicas
+      );
+      lecturasRenovadasEnBD = new Set(
+        serialize(renovPorLectura).map((r) => String(r.lectura))
+      );
+    }
 
     const esRenovada = (v: Record<string, unknown>): boolean => {
       // 1. Subquery encontró asignación posterior en tabla H o B
       if (v.renovacion_asignacion_h || v.renovacion_asignacion_b) return true;
       // 2. La misma asignación aparece como venta en el periodo
       if (ventasAsignacionIds.has(Number(v.asignacion_id))) return true;
-      // 3. Tarjeta con prefijo R: su lectura sin R aparece en las ventas
-      const lectura = String(v.lectura || "");
-      if (/^R+/i.test(lectura)) {
-        const lecturaSinR = lectura.replace(/^R+/i, "");
-        if (lecturaSinR && ventasLecturas.has(lecturaSinR)) return true;
+      // 3. Tarjeta con prefijo R: existe asignación activa con la lectura sin R
+      if (/^R+/i.test(String(v.lectura_original || ""))) {
+        if (lecturasRenovadasEnBD.has(String(v.lectura))) return true;
       }
       return false;
     };
