@@ -645,6 +645,7 @@ function TabVentas({ ventas }: { ventas: Array<Record<string, unknown>> }) {
             <th className="text-left px-3 py-2 font-medium">Casa</th>
             <th className="text-left px-3 py-2 font-medium">Residente</th>
             <th className="text-center px-3 py-2 font-medium">Tipo</th>
+            <th className="text-left px-3 py-2 font-medium">Tarjeta</th>
             <th className="text-left px-3 py-2 font-medium">Concepto</th>
             <th className="text-right px-3 py-2 font-medium">Precio</th>
             <th className="text-right px-3 py-2 font-medium">Desc.</th>
@@ -674,6 +675,7 @@ function TabVentas({ ventas }: { ventas: Array<Record<string, unknown>> }) {
                   {Number(row.tipo_id) === 2 ? "VEH" : "PEA"}
                 </span>
               </td>
+              <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{String(row.lectura || row.tarjeta_id || "-")}</td>
               <td className="px-3 py-1.5 text-gray-600 text-xs">{String(row.concepto || "-")}</td>
               <td className="px-3 py-1.5 text-right text-gray-600">{fmtMoney(row.precio)}</td>
               <td className="px-3 py-1.5 text-right text-red-600">{Number(row.descuento) ? fmtMoney(row.descuento) : "-"}</td>
@@ -683,19 +685,19 @@ function TabVentas({ ventas }: { ventas: Array<Record<string, unknown>> }) {
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-400 bg-gray-100">
-            <td colSpan={8} />
+            <td colSpan={9} />
             <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">PEA</td>
             <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numPea} tarjeta(s)</td>
             <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalPea)}</td>
           </tr>
           <tr className="bg-gray-100">
-            <td colSpan={8} />
+            <td colSpan={9} />
             <td className="px-3 py-2 text-center text-xs font-medium text-gray-500">VEH</td>
             <td className="px-3 py-2 text-right text-sm font-medium text-gray-600">{numVeh} tarjeta(s)</td>
             <td className="px-3 py-2 text-right font-bold text-gray-800">{fmtMoney(totalVeh)}</td>
           </tr>
           <tr className="bg-slate-700 text-white">
-            <td colSpan={8} />
+            <td colSpan={9} />
             <td className="px-3 py-2 text-center text-sm font-bold">TOTAL</td>
             <td className="px-3 py-2 text-right text-sm font-bold">{numPea + numVeh} tarjeta(s)</td>
             <td className="px-3 py-2 text-right text-lg font-bold">{fmtMoney(totalPea + totalVeh)}</td>

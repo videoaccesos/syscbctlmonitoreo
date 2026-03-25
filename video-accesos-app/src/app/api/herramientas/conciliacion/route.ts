@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
         a.folio_tipo,
         CAST(NULLIF(a.fecha, '0000-00-00') AS CHAR) AS fecha,
         a.tarjeta_id,
+        t.lectura,
         t.tipo_id,
         (CASE t.tipo_id WHEN 2 THEN 'VEHICULAR' WHEN 1 THEN 'PEATONAL' END) AS tipo,
         a.precio, a.descuento,
