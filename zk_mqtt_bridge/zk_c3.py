@@ -329,7 +329,6 @@ class ZKC3Panel:
         if self._backend != "zkaccess_c3" or not self._c3_panel:
             return []
         try:
-            self._ensure_patched_receive()
             data_cfg = self._c3_panel._get_device_data_cfg()
             result = []
             for cfg in data_cfg:
