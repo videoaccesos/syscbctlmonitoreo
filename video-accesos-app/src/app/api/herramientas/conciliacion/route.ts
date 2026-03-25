@@ -245,7 +245,8 @@ export async function GET(request: NextRequest) {
       if (Number(v.tipo_id) === 2) concentradoMap[key].vencidasVeh++;
       else concentradoMap[key].vencidasPea++;
 
-      const esRenovada = v.renovacion_asignacion_h || v.renovacion_asignacion_b;
+      const esRenovada = v.renovacion_asignacion_h || v.renovacion_asignacion_b ||
+                         ventasAsignacionIds.has(Number(v.asignacion_id));
       if (esRenovada) {
         concentradoMap[key].renovadas++;
         concentradoMap[key].ingresoRenovacion += Number(v.precio_renovacion) || 0;
