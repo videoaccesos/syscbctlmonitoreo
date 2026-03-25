@@ -219,14 +219,31 @@ def create_connection(host, timeout=15):
     return panel
 
 
-def get_table_info(panel, table_name):
-    """Obtiene esquema de una tabla."""
-    data_cfg = panel._get_device_data_cfg()
-    for cfg in data_cfg:
-        if cfg.name == table_name:
-            fields = [{'index': f.index, 'name': f.name, 'type': f.type}
-                      for f in cfg.fields]
-            return cfg.index, fields
+def get_table_info(panel, table_name, retries=3):
+    """Obtiene esquema de una tabla con reintentos."""
+    for attempt in range(retries):
+        try:
+            data_cfg = panel._get_device_data_cfg()
+            if not data_cfg:
+                print(f"  Intento {attempt+1}: data_cfg vacio, reintentando...")
+                time.sleep(1)
+                continue
+
+            available = []
+            for cfg in data_cfg:
+                available.append(cfg.name)
+                if cfg.name == table_name:
+                    fields = [{'index': f.index, 'name': f.name, 'type': f.type}
+                              for f in cfg.fields]
+                    print(f"  Tablas encontradas: {', '.join(available)}")
+                    return cfg.index, fields
+
+            print(f"  Tablas encontradas: {', '.join(available)}")
+            return None, None
+        except Exception as e:
+            print(f"  Intento {attempt+1}: error obteniendo esquema: {e}")
+            time.sleep(1)
+
     return None, None
 
 
