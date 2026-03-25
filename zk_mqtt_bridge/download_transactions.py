@@ -234,7 +234,7 @@ def get_table_info(panel, table_name):
 # Lectura two-phase por campo
 # ============================================================
 def read_field_twophase(panel, table_index, field, debug=False):
-    """Lee un campo con soporte two-phase: DATA_RDY + streaming."""
+    """Lee un campo con soporte two-phase y estrategias multiples."""
     fidx = field['index']
     fname = field['name']
 
@@ -256,17 +256,41 @@ def read_field_twophase(panel, table_index, field, debug=False):
     if message[0] == table_index:
         return parse_field_values(message[3:], field)
 
-    # data_stat: tabla demasiado grande para un frame
+    # data_stat: demasiado grande para un frame
     if message[0] == 0x00 and len(message) >= 9:
         total_size = struct.unpack_from('<I', message, 1)[0]
         if debug:
-            print(f"    DEBUG: {fname}: data_stat, {total_size} bytes")
+            stat2 = struct.unpack_from('<I', message, 5)[0] if len(message) >= 9 else 0
+            stat3 = struct.unpack_from('<I', message, 9)[0] if len(message) >= 13 else 0
+            stat4 = struct.unpack_from('<I', message, 13)[0] if len(message) >= 17 else 0
+            print(f"    DEBUG: {fname}: data_stat header: "
+                  f"size={total_size}, confirm={stat2}, hash={stat3}, extra={stat4}")
+            print(f"    DEBUG: {fname}: data_stat hex: {message.hex(' ')}")
 
-        # Intentar DATA_RDY con cada candidato
         session_offset = 4 if not panel._session_less else 0
 
+        # -------------------------------------------------------
+        # Estrategia 1: Esperar datos automaticos despues de data_stat
+        # Algunos firmwares envian datos con delay
+        # -------------------------------------------------------
+        if debug:
+            print(f"    DEBUG: {fname}: Estrategia 1: esperar auto-stream (15s)...")
+        raw = recv_all_available(panel._sock, timeout=15)
+        if raw and len(raw) > 20:
+            if debug:
+                print(f"    DEBUG: {fname}: auto-stream: {len(raw)} bytes")
+                print(f"    DEBUG: inicio: {raw[:80].hex(' ')}")
+            result = _try_parse_response(raw, table_index, field, session_offset, total_size, debug)
+            if result:
+                return result
+
+        # -------------------------------------------------------
+        # Estrategia 2: DATA_RDY + espera larga
+        # Enviar ACK y esperar mas tiempo por datos
+        # -------------------------------------------------------
+        if debug:
+            print(f"    DEBUG: {fname}: Estrategia 2: DATA_RDY + espera larga...")
         for data_rdy_cmd in CMD_DATA_RDY_CANDIDATES:
-            # Enviar DATA_RDY con total_size como parametro
             size_data = struct.pack('<I', total_size)
             frame = build_c3_frame(
                 panel._session_id, panel._request_nr,
@@ -279,41 +303,159 @@ def read_field_twophase(panel, table_index, field, debug=False):
             except Exception:
                 continue
 
-            # Esperar datos (frames C3 o raw)
-            raw = recv_all_available(panel._sock, timeout=8)
-
-            if raw and len(raw) > 20:
-                if debug:
-                    print(f"    DEBUG: {fname}: DATA_RDY cmd={data_rdy_cmd:#04x} "
-                          f"-> {len(raw)} bytes")
-                    print(f"    DEBUG: inicio: {raw[:60].hex(' ')}")
-
-                # Parsear frames C3 del stream
-                if raw[0] == consts.C3_MESSAGE_START:
-                    all_data = parse_stream_frames(
-                        raw, total_size, session_offset, debug
-                    )
-                    if all_data and len(all_data) > 10:
-                        # Los datos del campo vienen como: [table_idx][1][field_idx][records...]
-                        if len(all_data) > 3 and all_data[0] == table_index:
-                            return parse_field_values(all_data[3:], field)
-                        else:
-                            return parse_field_values(all_data, field)
-                else:
-                    # Datos raw sin framing C3
-                    if len(raw) > 3 and raw[0] == table_index:
-                        return parse_field_values(raw[3:], field)
-                    else:
-                        return parse_field_values(raw, field)
-
+            # Leer respuesta ACK primero
+            ack_cmd, ack_resp = recv_c3_frame(panel._sock, timeout=5)
             if debug:
-                print(f"    DEBUG: {fname}: DATA_RDY cmd={data_rdy_cmd:#04x} "
-                      f"-> sin datos ({len(raw) if raw else 0})")
+                print(f"    DEBUG: {fname}: DATA_RDY {data_rdy_cmd:#04x} "
+                      f"ACK: cmd={ack_cmd}, {len(ack_resp)} bytes "
+                      f"hex={ack_resp.hex(' ') if ack_resp else 'vacio'}")
 
-        # Ninguna estrategia funciono, liberar buffer
+            # Despues del ACK, esperar datos con timeout largo
+            if ack_cmd is not None:
+                raw = recv_all_available(panel._sock, timeout=20)
+                if raw and len(raw) > 20:
+                    if debug:
+                        print(f"    DEBUG: {fname}: post-ACK data: {len(raw)} bytes")
+                    result = _try_parse_response(raw, table_index, field, session_offset, total_size, debug)
+                    if result:
+                        return result
+                elif debug:
+                    print(f"    DEBUG: {fname}: post-ACK: sin datos extra "
+                          f"({len(raw) if raw else 0})")
+
+        # Liberar buffer antes de siguiente estrategia
         send_free_data(panel, debug)
         return None
 
+    return None
+
+
+def read_field_paginated(host, table_index, field, page_size=200, debug=False):
+    """Lee un campo intentando paginacion con diferentes offsets.
+
+    Prueba GETDATA con los trailing bytes como [offset_lo, offset_hi]
+    para leer subconjuntos de registros.
+    """
+    fidx = field['index']
+    fname = field['name']
+    all_values = []
+    offset = 0
+
+    while True:
+        # Conexion fresca para cada pagina
+        try:
+            panel = create_connection(host, timeout=15)
+        except Exception as e:
+            if debug:
+                print(f"    DEBUG: {fname}: error conectando: {e}")
+            break
+
+        # GETDATA con offset en trailing bytes
+        offset_lo = offset & 0xFF
+        offset_hi = (offset >> 8) & 0xFF
+        parameters = [table_index, 1, fidx, offset_lo, offset_hi]
+
+        if debug:
+            print(f"    DEBUG: {fname}: GETDATA offset={offset} "
+                  f"params={parameters}")
+
+        try:
+            message, msg_size = panel._send_receive(
+                consts.Command.GETDATA, parameters
+            )
+        except Exception as e:
+            if debug:
+                print(f"    DEBUG: {fname}: GETDATA error: {e}")
+            try:
+                panel.disconnect()
+            except Exception:
+                pass
+            break
+
+        if not message or len(message) < 3:
+            try:
+                panel.disconnect()
+            except Exception:
+                pass
+            break
+
+        if message[0] == table_index:
+            # Respuesta directa - parsear valores
+            values = parse_field_values(message[3:], field)
+            if debug:
+                print(f"    DEBUG: {fname}: offset={offset} -> {len(values)} valores")
+            if not values:
+                try:
+                    panel.disconnect()
+                except Exception:
+                    pass
+                break
+            all_values.extend(values)
+            offset += len(values)
+
+            # Si obtenemos menos de lo que pediriamos, hemos terminado
+            if len(values) < page_size:
+                try:
+                    panel.disconnect()
+                except Exception:
+                    pass
+                break
+        elif message[0] == 0x00:
+            # Sigue siendo data_stat - offset no funciona como paginacion
+            if debug:
+                total = struct.unpack_from('<I', message, 1)[0]
+                print(f"    DEBUG: {fname}: offset={offset} -> "
+                      f"data_stat ({total} bytes), paginacion no soportada")
+            send_free_data(panel, debug)
+            try:
+                panel.disconnect()
+            except Exception:
+                pass
+
+            if offset == 0:
+                # Si la primera pagina falla, abortar
+                return None
+            break
+        else:
+            if debug:
+                print(f"    DEBUG: {fname}: respuesta inesperada byte0={message[0]:#04x}")
+            try:
+                panel.disconnect()
+            except Exception:
+                pass
+            break
+
+        try:
+            panel.disconnect()
+        except Exception:
+            pass
+
+    return all_values if all_values else None
+
+
+def _try_parse_response(raw, table_index, field, session_offset, total_size, debug):
+    """Intenta parsear datos de respuesta como field values."""
+    if not raw or len(raw) < 10:
+        return None
+
+    # Si son frames C3
+    if raw[0] == consts.C3_MESSAGE_START:
+        all_data = parse_stream_frames(raw, total_size, session_offset, debug)
+        if all_data and len(all_data) > 10:
+            if len(all_data) > 3 and all_data[0] == table_index:
+                values = parse_field_values(all_data[3:], field)
+            else:
+                values = parse_field_values(all_data, field)
+            if values:
+                return values
+    else:
+        # Datos raw sin framing
+        if raw[0] == table_index and len(raw) > 3:
+            values = parse_field_values(raw[3:], field)
+        else:
+            values = parse_field_values(raw, field)
+        if values:
+            return values
     return None
 
 
@@ -429,7 +571,7 @@ def decode_time_second(value):
 # Descarga principal
 # ============================================================
 def download_transactions(host, debug=False, timeout=15):
-    """Descarga transacciones reconectando por cada campo."""
+    """Descarga transacciones con multiples estrategias."""
 
     print(f"  Conectando a {host}...")
     panel = create_connection(host, timeout)
@@ -446,14 +588,18 @@ def download_transactions(host, debug=False, timeout=15):
     print(f"  Campos: {', '.join(f['name'] for f in fields)}")
     print()
 
+    # ============================================================
+    # Estrategia 1: Two-phase con reconexion por campo
+    # ============================================================
+    print("  --- Estrategia 1: Two-phase con reconexion ---")
     all_field_values = {}
     record_count = None
+    strategy1_failed = False
 
     for field in fields:
         fname = field['name']
-        print(f"  Leyendo campo '{fname}'...", end=' ', flush=True)
+        print(f"  [{fname}]", end=' ', flush=True)
 
-        # Reconectar para cada campo (conexion limpia)
         try:
             panel.disconnect()
         except Exception:
@@ -467,7 +613,8 @@ def download_transactions(host, debug=False, timeout=15):
             try:
                 panel = create_connection(host, timeout)
             except Exception:
-                print(f"FALLO definitivo")
+                print(f"FALLO")
+                strategy1_failed = True
                 continue
 
         values = read_field_twophase(panel, table_index, field, debug)
@@ -478,16 +625,48 @@ def download_transactions(host, debug=False, timeout=15):
                 record_count = len(values)
             print(f"{len(values)} registros OK")
         else:
-            print(f"FALLO (two-phase no soportado o tabla vacia)")
+            print(f"FALLO")
+            strategy1_failed = True
+            # Seguir intentando otros campos - quizas algunos funcionan
+            continue
 
-    # Desconectar
     try:
         panel.disconnect()
     except Exception:
         pass
 
+    # Si estrategia 1 no obtuvo nada, intentar paginacion
     if not all_field_values or record_count is None:
-        print("\n  No se pudo leer ningun campo.")
+        # ============================================================
+        # Estrategia 2: GETDATA paginado con offset en trailing bytes
+        # ============================================================
+        print("\n  --- Estrategia 2: GETDATA paginado ---")
+        all_field_values = {}
+        record_count = None
+
+        for field in fields:
+            fname = field['name']
+            print(f"  [{fname}]", end=' ', flush=True)
+
+            values = read_field_paginated(
+                host, table_index, field,
+                page_size=200, debug=debug
+            )
+
+            if values:
+                all_field_values[fname] = values
+                if record_count is None:
+                    record_count = len(values)
+                print(f"{len(values)} registros OK")
+            else:
+                print(f"FALLO")
+                # Si primer campo con paginacion falla, abortar esta estrategia
+                if not all_field_values:
+                    print("  Paginacion no soportada por este firmware.")
+                    break
+
+    if not all_field_values or record_count is None:
+        print("\n  No se pudo leer ningun campo con ninguna estrategia.")
         return []
 
     # Reconstruir registros
