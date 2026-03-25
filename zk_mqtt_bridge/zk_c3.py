@@ -250,6 +250,128 @@ class ZKC3Panel:
         """
         return self._read_table(table_name)
 
+    def set_user(self, card_no: str, pin: str = "", password: str = "",
+                 group: int = 1, start_time: str = "2000-01-01 00:00:00",
+                 end_time: str = "2099-12-31 23:59:59",
+                 super_authorize: int = 0, doors: str = "1,2,3,4") -> bool:
+        """Agrega o actualiza un usuario/tarjeta en el panel.
+
+        Args:
+            card_no: Numero de tarjeta (obligatorio)
+            pin: ID de usuario (si vacio, usa card_no)
+            password: Contraseña (opcional)
+            group: Grupo de acceso (1-5, default 1)
+            start_time: Inicio de validez "YYYY-MM-DD HH:MM:SS"
+            end_time: Fin de validez "YYYY-MM-DD HH:MM:SS"
+            super_authorize: 0=normal, 1=super usuario
+            doors: Puertas autorizadas separadas por coma "1,2,3,4"
+
+        Returns:
+            True si se escribio exitosamente
+        """
+        if self._backend == "zkaccess_c3":
+            return self._set_user_c3(card_no, pin or card_no, password,
+                                     group, start_time, end_time,
+                                     super_authorize, doors)
+        logger.warning(f"set_user solo soportado con backend zkaccess-c3 "
+                       f"(actual: {self._backend})")
+        return False
+
+    def delete_user(self, card_no: str = "", pin: str = "") -> bool:
+        """Elimina un usuario/tarjeta del panel.
+
+        Args:
+            card_no: Numero de tarjeta a eliminar
+            pin: O bien el PIN/ID del usuario
+
+        Returns:
+            True si se elimino exitosamente
+        """
+        if self._backend == "zkaccess_c3":
+            return self._delete_user_c3(card_no, pin)
+        logger.warning(f"delete_user solo soportado con backend zkaccess-c3 "
+                       f"(actual: {self._backend})")
+        return False
+
+    def enable_card(self, card_no: str,
+                    end_time: str = "2099-12-31 23:59:59") -> bool:
+        """Activa una tarjeta estableciendo fecha de fin futura.
+
+        Args:
+            card_no: Numero de tarjeta
+            end_time: Nueva fecha de fin de validez
+
+        Returns:
+            True si se activo exitosamente
+        """
+        users = self.get_users()
+        user = next((u for u in users
+                     if str(u.get("CardNo", "")) == str(card_no)), None)
+        if not user:
+            logger.error(f"Tarjeta {card_no} no encontrada en el panel")
+            return False
+
+        return self.set_user(
+            card_no=str(card_no),
+            pin=str(user.get("Pin", card_no)),
+            password=str(user.get("Password", "")),
+            group=int(user.get("Group", 1)),
+            start_time=str(user.get("StartTime", "2000-01-01 00:00:00")),
+            end_time=end_time,
+            super_authorize=int(user.get("SuperAuthorize", 0)),
+        )
+
+    def disable_card(self, card_no: str) -> bool:
+        """Desactiva una tarjeta estableciendo fecha de fin en el pasado.
+
+        Args:
+            card_no: Numero de tarjeta a desactivar
+
+        Returns:
+            True si se desactivo exitosamente
+        """
+        return self.enable_card(card_no, end_time="2000-01-01 00:00:00")
+
+    def is_card_valid(self, card_no: str) -> dict:
+        """Verifica si una tarjeta esta activa y su validez.
+
+        Returns:
+            Dict con: found, active, start_time, end_time, group, pin
+        """
+        users = self.get_users()
+        user = next((u for u in users
+                     if str(u.get("CardNo", "")) == str(card_no)), None)
+        if not user:
+            return {"found": False, "active": False}
+
+        now = datetime.now()
+        start = user.get("StartTime", "")
+        end = user.get("EndTime", "")
+
+        active = True
+        try:
+            if end:
+                end_dt = datetime.strptime(str(end), "%Y-%m-%d %H:%M:%S")
+                if end_dt < now:
+                    active = False
+            if start:
+                start_dt = datetime.strptime(str(start), "%Y-%m-%d %H:%M:%S")
+                if start_dt > now:
+                    active = False
+        except ValueError:
+            pass
+
+        return {
+            "found": True,
+            "active": active,
+            "card_no": str(card_no),
+            "pin": str(user.get("Pin", "")),
+            "group": int(user.get("Group", 0)),
+            "start_time": str(start),
+            "end_time": str(end),
+            "super_authorize": int(user.get("SuperAuthorize", 0)),
+        }
+
     def get_door_count(self) -> int:
         """Obtiene el numero de puertas del panel."""
         if self._backend == "zkaccess_c3" and self._c3_panel:
@@ -698,6 +820,161 @@ class ZKC3Panel:
             return True
         except Exception as e:
             logger.error(f"Error abriendo puerta {door_id} via zkaccess-c3: {e}")
+            return False
+
+    def _set_user_c3(self, card_no, pin, password, group,
+                     start_time, end_time, super_authorize, doors) -> bool:
+        """Escribe un usuario al panel via comando SETDATA (0x09)."""
+        if not self._c3_panel:
+            logger.error("Panel no conectado")
+            return False
+
+        try:
+            from c3 import consts, crc as c3_crc, utils
+        except ImportError:
+            logger.error("Modulo c3 no disponible")
+            return False
+
+        panel = self._c3_panel
+        self._ensure_patched_receive()
+
+        # Obtener esquema de tabla user
+        try:
+            data_cfg = panel._get_device_data_cfg()
+        except Exception as e:
+            logger.error(f"Error obteniendo esquema: {e}")
+            return False
+
+        user_cfg = next((cfg for cfg in data_cfg if cfg.name == "user"), None)
+        if not user_cfg:
+            logger.error("Tabla 'user' no encontrada en el panel")
+            return False
+
+        table_index = user_cfg.index
+        fields = {f.name: f for f in user_cfg.fields}
+
+        # Mapeo de valores a escribir
+        user_data = {
+            "CardNo": str(card_no),
+            "Pin": str(pin),
+            "Password": str(password),
+            "Group": str(group),
+            "StartTime": str(start_time),
+            "EndTime": str(end_time),
+            "SuperAuthorize": str(super_authorize),
+        }
+
+        # Construir payload SETDATA
+        # Formato: [table_idx] [field_cnt] [field_indexes...] [record_data...]
+        # record_data: [size][bytes] por cada campo
+        field_list = []
+        for fname, fobj in fields.items():
+            if fname in user_data:
+                field_list.append((fobj.index, fobj.type, user_data[fname]))
+
+        field_list.sort(key=lambda x: x[0])
+        field_indexes = [f[0] for f in field_list]
+
+        # Construir datos del registro
+        record_bytes = bytearray()
+        for fidx, ftype, fvalue in field_list:
+            if ftype == 'i':
+                try:
+                    int_val = int(fvalue)
+                except ValueError:
+                    int_val = 0
+                # Determinar tamaño necesario
+                if int_val == 0:
+                    raw = b'\x00'
+                elif int_val < 256:
+                    raw = int_val.to_bytes(1, 'little')
+                elif int_val < 65536:
+                    raw = int_val.to_bytes(2, 'little')
+                else:
+                    raw = int_val.to_bytes(4, 'little')
+            else:
+                raw = fvalue.encode('ascii')
+
+            record_bytes.append(len(raw))
+            record_bytes.extend(raw)
+
+        # Parametros: [table_idx, field_count, field_indexes..., record_data...]
+        parameters = [table_index, len(field_indexes)] + field_indexes
+        parameters.extend(record_bytes)
+
+        # Enviar SETDATA (command 0x09)
+        SETDATA = 0x09
+        try:
+            message, msg_size = panel._send_receive(SETDATA, parameters)
+            logger.info(f"Usuario {card_no} (pin={pin}) escrito al panel")
+            return True
+        except Exception as e:
+            logger.error(f"Error SETDATA usuario {card_no}: {e}")
+            return False
+
+    def _delete_user_c3(self, card_no: str = "", pin: str = "") -> bool:
+        """Elimina un usuario del panel via comando DELETEDATA (0x0D)."""
+        if not self._c3_panel:
+            logger.error("Panel no conectado")
+            return False
+
+        try:
+            from c3 import consts
+        except ImportError:
+            logger.error("Modulo c3 no disponible")
+            return False
+
+        panel = self._c3_panel
+        self._ensure_patched_receive()
+
+        # Obtener esquema
+        try:
+            data_cfg = panel._get_device_data_cfg()
+        except Exception as e:
+            logger.error(f"Error obteniendo esquema: {e}")
+            return False
+
+        user_cfg = next((cfg for cfg in data_cfg if cfg.name == "user"), None)
+        if not user_cfg:
+            logger.error("Tabla 'user' no encontrada")
+            return False
+
+        table_index = user_cfg.index
+        fields = {f.name: f for f in user_cfg.fields}
+
+        # Para eliminar, necesitamos identificar el registro.
+        # El C3 usa Pin como clave primaria de la tabla user.
+        # Si solo tenemos card_no, buscamos el pin correspondiente.
+        if not pin and card_no:
+            users = self.get_users()
+            user = next((u for u in users
+                         if str(u.get("CardNo", "")) == str(card_no)), None)
+            if not user:
+                logger.error(f"Tarjeta {card_no} no encontrada para eliminar")
+                return False
+            pin = str(user.get("Pin", ""))
+
+        if not pin:
+            logger.error("Se requiere card_no o pin para eliminar")
+            return False
+
+        # DELETEDATA (0x0D): [table_idx] [field_cnt=1] [pin_field_idx] [size] [pin_bytes]
+        DELETEDATA = 0x0D
+        pin_field = fields.get("Pin")
+        if not pin_field:
+            logger.error("Campo 'Pin' no encontrado en esquema")
+            return False
+
+        pin_bytes = pin.encode('ascii')
+        parameters = [table_index, 1, pin_field.index, len(pin_bytes)]
+        parameters.extend(pin_bytes)
+
+        try:
+            message, msg_size = panel._send_receive(DELETEDATA, parameters)
+            logger.info(f"Usuario pin={pin} (card={card_no}) eliminado del panel")
+            return True
+        except Exception as e:
+            logger.error(f"Error DELETEDATA usuario pin={pin}: {e}")
             return False
 
     # === Backend: pyzkaccess (PULL SDK DLL - Windows) ===

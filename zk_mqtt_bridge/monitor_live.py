@@ -62,6 +62,12 @@ def connect_panel(host, port=4370, timeout=5):
     return p
 
 
+    # Eventos que indican acceso autorizado (el panel abrio la puerta)
+AUTHORIZED_EVENTS = {0, 1, 2, 3, 4, 6, 20, 23}
+# Eventos que indican acceso denegado
+DENIED_EVENTS = {204, 205, 206, 207, 208, 209}
+
+
 def format_event(ev, event_num):
     """Formatea un evento para mostrar en consola."""
     # Extraer campos del evento de la libreria c3
@@ -80,16 +86,31 @@ def format_event(ev, event_num):
 
     direction = "ENTRADA" if entry_exit == 0 else "SALIDA" if entry_exit == 1 else f"dir_{entry_exit}"
 
+    # Determinar autorizacion por tipo de evento
+    if event_type in AUTHORIZED_EVENTS:
+        auth_status = "AUTORIZADO"
+        auth_icon = "[+]"
+    elif event_type in DENIED_EVENTS:
+        auth_status = "DENEGADO"
+        auth_icon = "[X]"
+    elif event_type >= 200:
+        auth_status = "SISTEMA"
+        auth_icon = "[~]"
+    else:
+        auth_status = "INFO"
+        auth_icon = "[?]"
+
     # Formato compacto pero informativo
     now = datetime.now().strftime("%H:%M:%S")
     lines = [
-        f"  [{now}] EVENTO #{event_num}",
-        f"    Tarjeta:   {card}",
-        f"    Puerta:    {door}",
-        f"    Tipo:      {event_name} ({event_type})",
-        f"    Direccion: {direction}",
-        f"    Verif:     {verify_name}",
-        f"    Hora panel:{ts}",
+        f"  [{now}] {auth_icon} EVENTO #{event_num} - {auth_status}",
+        f"    Tarjeta:      {card}",
+        f"    Puerta:       {door}",
+        f"    Tipo:         {event_name} ({event_type})",
+        f"    Direccion:    {direction}",
+        f"    Verif:        {verify_name}",
+        f"    Autorizacion: {auth_status}",
+        f"    Hora panel:   {ts}",
     ]
     return "\n".join(lines)
 
