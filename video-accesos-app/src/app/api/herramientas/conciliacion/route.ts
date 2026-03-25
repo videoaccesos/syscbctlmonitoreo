@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
           FROM residencias_residentes_tarjetas_no_renovacion r3
           INNER JOIN residencias_residentes rr3 ON r3.residente_id = rr3.residente_id
           WHERE rr3.residencia_id = res.residencia_id
-            AND r3.asignacion_id > a.asignacion_id
+            AND r3.fecha > a.fecha
             AND r3.estatus_id = 1
         ) AS renovacion_asignacion_b
       FROM residencias_residentes_tarjetas a
