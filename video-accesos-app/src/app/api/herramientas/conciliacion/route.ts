@@ -152,15 +152,23 @@ export async function GET(request: NextRequest) {
     const privadas = serialize(privadasRaw);
 
     // Clasificar vencidas como renovadas o pendientes
-    const ventasAsignacionIds = new Set(
-      ventas.map((v) => Number(v.asignacion_id))
+    // Mapa de ventas por asignacion_id para comparar fechas
+    const ventasMap = new Map(
+      ventas.map((v) => [Number(v.asignacion_id), v])
     );
 
     const esRenovada = (v: Record<string, unknown>): boolean => {
       // 1. Subquery encontró asignación posterior en tabla H o B
       if (v.renovacion_asignacion_h || v.renovacion_asignacion_b) return true;
-      // 2. La misma asignación aparece como venta en el periodo
-      if (ventasAsignacionIds.has(Number(v.asignacion_id))) return true;
+      // 2. La misma asignación aparece como venta en el periodo,
+      //    SOLO si fue vendida en o después de su vencimiento (dato malo del sistema viejo).
+      //    Si fecha < fecha_vencimiento es una venta normal que venció después, NO es renovación.
+      const venta = ventasMap.get(Number(v.asignacion_id));
+      if (venta) {
+        const fechaVenta = String(venta.fecha || "");
+        const fechaVenc = String(v.fecha_vencimiento || "");
+        if (fechaVenta >= fechaVenc) return true;
+      }
       return false;
     };
 
