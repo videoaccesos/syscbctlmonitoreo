@@ -31,8 +31,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Obtener todos los procesos con subprocesos
-    const procesos = await prisma.proceso.findMany({
+    // Funciones válidas del catálogo actual (solo estas se muestran)
+    const FUNCIONES_CATALOGO = new Set([
+      "/catalogos/privadas", "/catalogos/residencias", "/catalogos/empleados",
+      "/catalogos/tarjetas", "/catalogos/puestos", "/catalogos/turnos",
+      "/catalogos/fallas", "/catalogos/materiales", "/catalogos/cuentas-gasto",
+      "/procesos/registro-accesos", "/procesos/monitoristas",
+      "/procesos/asignacion-tarjetas", "/procesos/ordenes-servicio",
+      "/procesos/supervision-llamadas", "/procesos/gastos", "/procesos/mensualidades",
+      "/procesos/correccion-vencimientos", "/herramientas/conciliacion", "/procesos/prenomina",
+      "/reportes/accesos-consultas", "/reportes/accesos-graficas",
+      "/reportes/supervision-llamadas", "/reportes/reporte-ventas",
+      "/reportes/tarjetas-vencimientos", "/reportes/catalogo-tarjetas",
+      "/seguridad/usuarios", "/seguridad/grupos-usuarios", "/seguridad/permisos",
+    ]);
+
+    // Obtener solo procesos que tienen subprocesos válidos del catálogo
+    const todosProc = await prisma.proceso.findMany({
       include: {
         subprocesos: {
           orderBy: { id: "asc" },
@@ -40,6 +55,14 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { id: "asc" },
     });
+
+    // Filtrar: solo subprocesos con funcion en el catálogo, y solo procesos con al menos uno
+    const procesos = todosProc
+      .map((p) => ({
+        ...p,
+        subprocesos: p.subprocesos.filter((s) => s.funcion && FUNCIONES_CATALOGO.has(s.funcion)),
+      }))
+      .filter((p) => p.subprocesos.length > 0);
 
     // Obtener permisos actuales del grupo
     const permisos = await prisma.permisoAcceso.findMany({
