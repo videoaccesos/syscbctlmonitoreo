@@ -320,6 +320,30 @@ class ZKC3Panel:
         """
         return self._read_table(table_name)
 
+    def get_table_schema(self) -> list[dict]:
+        """Retorna esquema de todas las tablas del panel.
+
+        Returns:
+            Lista de dicts con: name, index, fields (lista de campo dicts).
+        """
+        if self._backend != "zkaccess_c3" or not self._c3_panel:
+            return []
+        try:
+            data_cfg = self._c3_panel._get_device_data_cfg()
+            result = []
+            for cfg in data_cfg:
+                fields = [{'index': f.index, 'name': f.name, 'type': f.type}
+                          for f in cfg.fields]
+                result.append({
+                    'name': cfg.name,
+                    'index': cfg.index,
+                    'fields': fields,
+                })
+            return result
+        except Exception as e:
+            logger.error(f"Error obteniendo esquema: {e}")
+            return []
+
     def set_user(self, card_no: str, pin: str = "", password: str = "",
                  group: int = 1, start_time: str = "2000-01-01 00:00:00",
                  end_time: str = "2099-12-31 23:59:59",

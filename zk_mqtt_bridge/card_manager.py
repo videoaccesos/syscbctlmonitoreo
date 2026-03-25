@@ -253,6 +253,77 @@ def cmd_raw(panel, args):
     print()
 
 
+def cmd_tables(panel, args):
+    """Lista todas las tablas del panel y opcionalmente muestra contenido."""
+    table_name = getattr(args, 'table_name', None)
+
+    schema = panel.get_table_schema()
+    if not schema:
+        print("  No se pudo obtener esquema de tablas")
+        return
+
+    if not table_name:
+        # Listar todas las tablas con sus campos
+        print("=" * 70)
+        print("  TABLAS DISPONIBLES EN EL PANEL")
+        print("=" * 70)
+        print()
+        for tbl in schema:
+            field_names = [f"{f['name']}({f['type']})" for f in tbl['fields']]
+            print(f"  [{tbl['index']:>2}] {tbl['name']:<20} "
+                  f"Campos: {', '.join(field_names)}")
+        print()
+        print(f"  Total: {len(schema)} tablas")
+        print()
+        print("  Para ver contenido: python3 card_manager.py <host> tables <nombre>")
+        print()
+        return
+
+    # Mostrar contenido de una tabla especifica
+    tbl_info = next((t for t in schema if t['name'] == table_name), None)
+    if not tbl_info:
+        available = [t['name'] for t in schema]
+        print(f"  Tabla '{table_name}' no encontrada.")
+        print(f"  Disponibles: {', '.join(available)}")
+        return
+
+    print(f"  Leyendo tabla: {table_name}...")
+    records = panel.get_table(table_name)
+    print(f"  Registros: {len(records)}")
+    print()
+
+    if not records:
+        print("  (tabla vacia)")
+        return
+
+    # Mostrar primeros 20 registros (o todos si son pocos)
+    limit = 20
+    show = records[:limit]
+
+    # Obtener todas las claves
+    all_keys = []
+    for r in show:
+        for k in r:
+            if k not in all_keys:
+                all_keys.append(k)
+
+    # Header
+    header = "  " + "  ".join(f"{k:<15}" for k in all_keys)
+    print(header)
+    print("  " + "-" * (len(all_keys) * 17))
+
+    for r in show:
+        vals = []
+        for k in all_keys:
+            v = r.get(k, "")
+            vals.append(f"{str(v):<15}")
+        print("  " + "  ".join(vals))
+
+    if len(records) > limit:
+        print(f"  ... ({len(records) - limit} registros mas)")
+    print()
+
+
 def cmd_expired(panel, args):
     """Lista tarjetas expiradas."""
     print("=" * 70)
@@ -364,6 +435,11 @@ Comandos:
     p_raw = subparsers.add_parser("raw", help="Dump raw de campos de tarjeta")
     p_raw.add_argument("card_no", help="Numero de tarjeta")
 
+    # tables
+    p_tables = subparsers.add_parser("tables", help="Lista tablas del panel")
+    p_tables.add_argument("table_name", nargs="?", default=None,
+                          help="Nombre de tabla para ver contenido")
+
     # expired
     subparsers.add_parser("expired", help="Listar tarjetas expiradas")
 
@@ -389,6 +465,7 @@ Comandos:
         "add": cmd_add,
         "delete": cmd_delete,
         "raw": cmd_raw,
+        "tables": cmd_tables,
         "expired": cmd_expired,
     }
 
