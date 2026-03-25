@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
         precioPeatonal: parseInt(body.precioPeatonal, 10) || 0,
         precioMensualidad: parseInt(body.precioMensualidad, 10) || 0,
         renovacion: body.renovacion !== undefined ? parseInt(body.renovacion, 10) : 0,
-        pagoMensualidad: body.pagoMensualidad !== undefined ? parseInt(body.pagoMensualidad, 10) : 0,
+        pagoMensualidad: (parseInt(body.precioMensualidad, 10) || 0) > 0 ? 1 : 0,
         monitoreo: body.monitoreo !== undefined ? parseInt(body.monitoreo, 10) : 0,
         venceContrato: body.venceContrato ? new Date(body.venceContrato) : null,
         observaciones: body.observaciones?.trim() || "",
