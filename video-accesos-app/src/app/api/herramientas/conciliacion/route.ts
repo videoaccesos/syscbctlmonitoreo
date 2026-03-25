@@ -159,14 +159,29 @@ export async function GET(request: NextRequest) {
       ventas.map((v) => Number(v.asignacion_id))
     );
 
-    const renovadas = vencidas.filter(
-      (v) => v.renovacion_asignacion_h || v.renovacion_asignacion_b ||
-             ventasAsignacionIds.has(Number(v.asignacion_id))
+    // Crear set de lecturas de ventas (sin prefijo R) para detectar
+    // renovaciones de tarjetas con prefijo RR/RRR del sistema viejo.
+    // Ejemplo: tarjeta vencida "RR15473920" fue renovada como "15473920"
+    const ventasLecturas = new Set(
+      ventas.map((v) => String(v.lectura || "").replace(/^R+/i, ""))
     );
-    const pendientes = vencidas.filter(
-      (v) => !v.renovacion_asignacion_h && !v.renovacion_asignacion_b &&
-             !ventasAsignacionIds.has(Number(v.asignacion_id))
-    );
+
+    const esRenovada = (v: Record<string, unknown>): boolean => {
+      // 1. Subquery encontró asignación posterior en tabla H o B
+      if (v.renovacion_asignacion_h || v.renovacion_asignacion_b) return true;
+      // 2. La misma asignación aparece como venta en el periodo
+      if (ventasAsignacionIds.has(Number(v.asignacion_id))) return true;
+      // 3. Tarjeta con prefijo R: su lectura sin R aparece en las ventas
+      const lectura = String(v.lectura || "");
+      if (/^R+/i.test(lectura)) {
+        const lecturaSinR = lectura.replace(/^R+/i, "");
+        if (lecturaSinR && ventasLecturas.has(lecturaSinR)) return true;
+      }
+      return false;
+    };
+
+    const renovadas = vencidas.filter((v) => esRenovada(v));
+    const pendientes = vencidas.filter((v) => !esRenovada(v));
 
     // Clasificar ventas como "renovación" o "venta nueva" basado en concepto
     const ventasRenovacion = ventas.filter(
@@ -245,9 +260,7 @@ export async function GET(request: NextRequest) {
       if (Number(v.tipo_id) === 2) concentradoMap[key].vencidasVeh++;
       else concentradoMap[key].vencidasPea++;
 
-      const esRenovada = v.renovacion_asignacion_h || v.renovacion_asignacion_b ||
-                         ventasAsignacionIds.has(Number(v.asignacion_id));
-      if (esRenovada) {
+      if (esRenovada(v)) {
         concentradoMap[key].renovadas++;
         concentradoMap[key].ingresoRenovacion += Number(v.precio_renovacion) || 0;
         if (Number(v.tipo_id) === 2) concentradoMap[key].renovadasVeh++;
