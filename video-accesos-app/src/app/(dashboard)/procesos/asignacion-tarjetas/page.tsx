@@ -200,6 +200,8 @@ export default function AsignacionTarjetasPage() {
 
   // tarjetas disponibles (para busqueda)
   const [tarjetasDisponibles, setTarjetasDisponibles] = useState<Tarjeta[]>([]);
+  // mapa de tarjetas ya seleccionadas (no se pierde al buscar otra)
+  const [tarjetasSeleccionadas, setTarjetasSeleccionadas] = useState<Record<string, Tarjeta>>({});
   const [loadingTarjetas, setLoadingTarjetas] = useState(false);
   const [tarjetaSearchInputs, setTarjetaSearchInputs] = useState<string[]>([""]);
 
@@ -512,15 +514,16 @@ export default function AsignacionTarjetasPage() {
   const calcularPrecioTarjeta = useCallback(
     (tarjetaId: string): number => {
       if (!precioInfo || !tarjetaId) return 0;
-      const tarjeta = tarjetasDisponibles.find(
-        (t) => String(t.id) === tarjetaId
-      );
+      // Buscar primero en seleccionadas (persistentes), luego en disponibles (búsqueda)
+      const tarjeta =
+        tarjetasSeleccionadas[tarjetaId] ||
+        tarjetasDisponibles.find((t) => String(t.id) === tarjetaId);
       if (!tarjeta) return 0;
       return tarjeta.tipoId === 2
         ? precioInfo.vehicular
         : precioInfo.peatonal;
     },
-    [precioInfo, tarjetasDisponibles]
+    [precioInfo, tarjetasDisponibles, tarjetasSeleccionadas]
   );
 
   const recalcularPrecios = useCallback(
@@ -565,6 +568,7 @@ export default function AsignacionTarjetasPage() {
     setAllResidentesPrivada([]);
     setTarjetaSearchInputs([""]);
     setTarjetasDisponibles([]);
+    setTarjetasSeleccionadas({});
     setError("");
     setShowModal(true);
   };
@@ -660,7 +664,14 @@ export default function AsignacionTarjetasPage() {
     const updated = [...tarjetaSlots];
     updated[index] = { ...updated[index], [field]: value };
     setTarjetaSlots(updated);
-    if (field === "tarjetaId") {
+    if (field === "tarjetaId" && typeof value === "string" && value) {
+      // Guardar tarjeta en mapa de seleccionadas para que no se pierda al buscar otra
+      const tarjeta = tarjetasDisponibles.find((t) => String(t.id) === value);
+      if (tarjeta) {
+        setTarjetasSeleccionadas((prev) => ({ ...prev, [value]: tarjeta }));
+      }
+      recalcularPrecios(updated, form.descuento);
+    } else if (field === "tarjetaId") {
       recalcularPrecios(updated, form.descuento);
     }
   };
@@ -1483,9 +1494,9 @@ export default function AsignacionTarjetasPage() {
                     const available = tarjetasDisponibles.filter(
                       (t) => !selectedIds.includes(String(t.id))
                     );
-                    const selectedTarjeta = tarjetasDisponibles.find(
-                      (t) => String(t.id) === slot.tarjetaId
-                    );
+                    const selectedTarjeta =
+                      tarjetasSeleccionadas[slot.tarjetaId] ||
+                      tarjetasDisponibles.find((t) => String(t.id) === slot.tarjetaId);
                     return (
                       <div key={index} className="space-y-1">
                         <div className="flex items-center gap-2">
