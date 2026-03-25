@@ -36,6 +36,20 @@ const API_RUTA_PERMISO: Record<string, string> = {
   "/api/catalogos/cuentas-gasto": "/catalogos/cuentas-gasto",
 };
 
+// APIs de catálogos: GET es accesible para cualquier usuario autenticado,
+// solo POST/PUT/DELETE requieren permiso de catálogo.
+const CATALOGOS_LECTURA_LIBRE = new Set([
+  "/api/catalogos/privadas",
+  "/api/catalogos/residencias",
+  "/api/catalogos/empleados",
+  "/api/catalogos/tarjetas",
+  "/api/catalogos/puestos",
+  "/api/catalogos/turnos",
+  "/api/catalogos/fallas",
+  "/api/catalogos/materiales",
+  "/api/catalogos/cuentas-gasto",
+]);
+
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
@@ -60,6 +74,15 @@ export default withAuth(
 
     // Verificar rutas de API protegidas
     if (pathname.startsWith("/api/")) {
+      // Catálogos: GET es libre para cualquier usuario autenticado
+      if (req.method === "GET") {
+        const esCatalogoLibre = CATALOGOS_LECTURA_LIBRE.has(pathname) ||
+          [...CATALOGOS_LECTURA_LIBRE].some((cat) => pathname.startsWith(cat + "/"));
+        if (esCatalogoLibre) {
+          return NextResponse.next();
+        }
+      }
+
       // Buscar si este API path tiene un permiso asociado
       // Intentar match exacto primero, luego por prefijo
       const permisoRequerido =
