@@ -24,6 +24,7 @@ import csv
 from datetime import datetime
 
 from c3 import C3, consts, crc as c3_crc, utils
+from zk_c3 import ZKC3Panel
 
 
 # ============================================================
@@ -211,38 +212,31 @@ def send_free_data(panel, debug=False):
 # Conexion
 # ============================================================
 def create_connection(host, timeout=15):
-    """Crea una conexion fresca al panel."""
-    C3._receive = patched_receive
-    panel = C3(host)
-    panel.receive_timeout = timeout
-    panel.connect()
+    """Crea una conexion fresca al panel via ZKC3Panel."""
+    panel = ZKC3Panel(host, 4370, timeout)
+    if not panel.connect():
+        raise ConnectionError(f"No se pudo conectar a {host}")
     return panel
 
 
-def get_table_info(panel, table_name, retries=3):
-    """Obtiene esquema de una tabla con reintentos."""
-    for attempt in range(retries):
-        try:
-            data_cfg = panel._get_device_data_cfg()
-            if not data_cfg:
-                print(f"  Intento {attempt+1}: data_cfg vacio, reintentando...")
-                time.sleep(1)
-                continue
+def get_raw_panel(zk_panel):
+    """Obtiene el objeto C3 interno de un ZKC3Panel."""
+    return zk_panel._c3_panel
 
-            available = []
-            for cfg in data_cfg:
-                available.append(cfg.name)
-                if cfg.name == table_name:
-                    fields = [{'index': f.index, 'name': f.name, 'type': f.type}
-                              for f in cfg.fields]
-                    print(f"  Tablas encontradas: {', '.join(available)}")
-                    return cfg.index, fields
 
-            print(f"  Tablas encontradas: {', '.join(available)}")
-            return None, None
-        except Exception as e:
-            print(f"  Intento {attempt+1}: error obteniendo esquema: {e}")
-            time.sleep(1)
+def get_table_info(panel, table_name):
+    """Obtiene esquema de una tabla via ZKC3Panel.get_table_schema()."""
+    schema = panel.get_table_schema()
+    if not schema:
+        print("  ERROR: get_table_schema() retorno vacio")
+        return None, None
+
+    available = [t['name'] for t in schema]
+    print(f"  Tablas encontradas: {', '.join(available)}")
+
+    for tbl in schema:
+        if tbl['name'] == table_name:
+            return tbl['index'], tbl['fields']
 
     return None, None
 
@@ -361,7 +355,8 @@ def read_field_paginated(host, table_index, field, page_size=200, debug=False):
     while True:
         # Conexion fresca para cada pagina
         try:
-            panel = create_connection(host, timeout=15)
+            zk_panel = create_connection(host, timeout=15)
+            raw_panel = get_raw_panel(zk_panel)
         except Exception as e:
             if debug:
                 print(f"    DEBUG: {fname}: error conectando: {e}")
@@ -377,21 +372,21 @@ def read_field_paginated(host, table_index, field, page_size=200, debug=False):
                   f"params={parameters}")
 
         try:
-            message, msg_size = panel._send_receive(
+            message, msg_size = raw_panel._send_receive(
                 consts.Command.GETDATA, parameters
             )
         except Exception as e:
             if debug:
                 print(f"    DEBUG: {fname}: GETDATA error: {e}")
             try:
-                panel.disconnect()
+                zk_panel.disconnect()
             except Exception:
                 pass
             break
 
         if not message or len(message) < 3:
             try:
-                panel.disconnect()
+                zk_panel.disconnect()
             except Exception:
                 pass
             break
@@ -403,47 +398,44 @@ def read_field_paginated(host, table_index, field, page_size=200, debug=False):
                 print(f"    DEBUG: {fname}: offset={offset} -> {len(values)} valores")
             if not values:
                 try:
-                    panel.disconnect()
+                    zk_panel.disconnect()
                 except Exception:
                     pass
                 break
             all_values.extend(values)
             offset += len(values)
 
-            # Si obtenemos menos de lo que pediriamos, hemos terminado
             if len(values) < page_size:
                 try:
-                    panel.disconnect()
+                    zk_panel.disconnect()
                 except Exception:
                     pass
                 break
         elif message[0] == 0x00:
-            # Sigue siendo data_stat - offset no funciona como paginacion
+            # data_stat - paginacion no funciona
             if debug:
                 total = struct.unpack_from('<I', message, 1)[0]
                 print(f"    DEBUG: {fname}: offset={offset} -> "
                       f"data_stat ({total} bytes), paginacion no soportada")
-            send_free_data(panel, debug)
+            send_free_data(raw_panel, debug)
             try:
-                panel.disconnect()
+                zk_panel.disconnect()
             except Exception:
                 pass
-
             if offset == 0:
-                # Si la primera pagina falla, abortar
                 return None
             break
         else:
             if debug:
                 print(f"    DEBUG: {fname}: respuesta inesperada byte0={message[0]:#04x}")
             try:
-                panel.disconnect()
+                zk_panel.disconnect()
             except Exception:
                 pass
             break
 
         try:
-            panel.disconnect()
+            zk_panel.disconnect()
         except Exception:
             pass
 
@@ -591,14 +583,16 @@ def download_transactions(host, debug=False, timeout=15):
     """Descarga transacciones con multiples estrategias."""
 
     print(f"  Conectando a {host}...")
-    panel = create_connection(host, timeout)
-    print(f"  Conectado - Serial: {panel.serial_number}")
-    print(f"  Firmware: {panel.firmware_version}")
+    zk_panel = create_connection(host, timeout)
+    serial = zk_panel.get_serial()
+    firmware = zk_panel.get_firmware()
+    print(f"  Conectado - Serial: {serial}")
+    print(f"  Firmware: {firmware}")
 
-    table_index, fields = get_table_info(panel, 'transaction')
+    table_index, fields = get_table_info(zk_panel, 'transaction')
     if not fields:
         print("  ERROR: No se encontro tabla transaction")
-        panel.disconnect()
+        zk_panel.disconnect()
         return []
 
     print(f"  Tabla transaction (idx={table_index})")
@@ -611,30 +605,33 @@ def download_transactions(host, debug=False, timeout=15):
     print("  --- Estrategia 1: Two-phase con reconexion ---")
     all_field_values = {}
     record_count = None
-    strategy1_failed = False
 
     for field in fields:
         fname = field['name']
         print(f"  [{fname}]", end=' ', flush=True)
 
         try:
-            panel.disconnect()
+            zk_panel.disconnect()
         except Exception:
             pass
 
         try:
-            panel = create_connection(host, timeout)
+            zk_panel = create_connection(host, timeout)
         except Exception as e:
             print(f"ERROR reconectando: {e}")
             time.sleep(2)
             try:
-                panel = create_connection(host, timeout)
+                zk_panel = create_connection(host, timeout)
             except Exception:
                 print(f"FALLO")
-                strategy1_failed = True
                 continue
 
-        values = read_field_twophase(panel, table_index, field, debug)
+        raw_panel = get_raw_panel(zk_panel)
+        if not raw_panel:
+            print(f"FALLO (sin panel raw)")
+            continue
+
+        values = read_field_twophase(raw_panel, table_index, field, debug)
 
         if values:
             all_field_values[fname] = values
@@ -643,12 +640,10 @@ def download_transactions(host, debug=False, timeout=15):
             print(f"{len(values)} registros OK")
         else:
             print(f"FALLO")
-            strategy1_failed = True
-            # Seguir intentando otros campos - quizas algunos funcionan
             continue
 
     try:
-        panel.disconnect()
+        zk_panel.disconnect()
     except Exception:
         pass
 
@@ -677,7 +672,6 @@ def download_transactions(host, debug=False, timeout=15):
                 print(f"{len(values)} registros OK")
             else:
                 print(f"FALLO")
-                # Si primer campo con paginacion falla, abortar esta estrategia
                 if not all_field_values:
                     print("  Paginacion no soportada por este firmware.")
                     break
