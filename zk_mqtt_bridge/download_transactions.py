@@ -229,39 +229,39 @@ def get_raw_panel(zk_panel):
 
 
 def get_table_info(panel, table_name):
-    """Obtiene esquema de una tabla.
+    """Obtiene esquema de una tabla usando get_table_schema() directo."""
+    # Usar exactamente el mismo metodo que card_manager.py tables
+    schema = panel.get_table_schema()
 
-    Replica el flujo exacto de card_manager.py:
-    1. _ensure_patched_receive() (aplica patch TCP DESPUES de connect)
-    2. _get_device_data_cfg()
-    """
-    # Paso 1: aplicar patch TCP (exacto como card_manager.py)
-    panel._ensure_patched_receive()
+    if not schema:
+        # Si falla, intentar via get_users() que fuerza el patch internamente
+        print("  Schema vacio, intentando forzar via get_users()...")
+        try:
+            panel.get_users()
+        except Exception:
+            pass
+        schema = panel.get_table_schema()
 
-    raw_panel = get_raw_panel(panel)
-    if not raw_panel:
-        print("  ERROR: no hay panel C3 interno")
-        return None, None
+    if not schema:
+        print("  ERROR: No se pudo obtener esquema de tablas")
+        print("  Usando esquema hardcoded para transaction...")
+        # Hardcode basado en output exitoso de card_manager.py tables
+        return 5, [
+            {'index': 0, 'name': 'Cardno', 'type': 'i'},
+            {'index': 1, 'name': 'Pin', 'type': 'i'},
+            {'index': 2, 'name': 'Verified', 'type': 'i'},
+            {'index': 3, 'name': 'DoorID', 'type': 'i'},
+            {'index': 4, 'name': 'EventType', 'type': 'i'},
+            {'index': 5, 'name': 'InOutState', 'type': 'i'},
+            {'index': 6, 'name': 'Time_second', 'type': 'i'},
+        ]
 
-    # Paso 2: obtener esquema (exacto como get_table_schema)
-    try:
-        data_cfg = raw_panel._get_device_data_cfg()
-    except Exception as e:
-        print(f"  ERROR obteniendo esquema: {e}")
-        return None, None
-
-    if not data_cfg:
-        print("  ERROR: data_cfg vacio")
-        return None, None
-
-    available = [cfg.name for cfg in data_cfg]
+    available = [t['name'] for t in schema]
     print(f"  Tablas: {', '.join(available)}")
 
-    for cfg in data_cfg:
-        if cfg.name == table_name:
-            fields = [{'index': f.index, 'name': f.name, 'type': f.type}
-                      for f in cfg.fields]
-            return cfg.index, fields
+    for tbl in schema:
+        if tbl['name'] == table_name:
+            return tbl['index'], tbl['fields']
 
     return None, None
 

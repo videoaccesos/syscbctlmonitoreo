@@ -269,7 +269,7 @@ def cmd_tables(panel, args):
         print("=" * 70)
         print()
         for tbl in schema:
-            field_names = [f"{f['name']}({f['type']})" for f in tbl['fields']]
+            field_names = [f"[{f['index']}]{f['name']}({f['type']})" for f in tbl['fields']]
             print(f"  [{tbl['index']:>2}] {tbl['name']:<20} "
                   f"Campos: {', '.join(field_names)}")
         print()
