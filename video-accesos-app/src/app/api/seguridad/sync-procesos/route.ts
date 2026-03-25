@@ -109,15 +109,20 @@ export async function POST() {
     }
 
     // Paso 2: Limpiar procesos vacíos que no están en el catálogo
+    // Re-consultar para reflejar las eliminaciones del paso 1
     const nombresCatalogo = new Set(CATALOGO_RAMAS.map((r) => r.nombre));
     const todosProcesos = await prisma.proceso.findMany({
-      include: { subprocesos: true },
+      include: { subprocesos: true, hijos: true },
     });
 
     for (const proc of todosProcesos) {
-      if (!nombresCatalogo.has(proc.nombre) && proc.subprocesos.length === 0) {
-        await prisma.proceso.delete({ where: { id: proc.id } });
-        eliminados.push(`Proceso vacío: ${proc.nombre}`);
+      if (!nombresCatalogo.has(proc.nombre) && proc.subprocesos.length === 0 && proc.hijos.length === 0) {
+        try {
+          await prisma.proceso.delete({ where: { id: proc.id } });
+          eliminados.push(`Proceso vacío: ${proc.nombre}`);
+        } catch {
+          // Si falla por FK, simplemente lo dejamos (tiene dependencias)
+        }
       }
     }
 
