@@ -76,10 +76,6 @@ const CATALOGO_RAMAS = [
   },
 ];
 
-// Todas las funciones/rutas válidas del catálogo
-const FUNCIONES_VALIDAS = new Set(
-  CATALOGO_RAMAS.flatMap((r) => r.subprocesos.map((s) => s.funcion))
-);
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -90,43 +86,8 @@ export async function POST() {
   try {
     const creados: string[] = [];
     const actualizados: string[] = [];
-    const eliminados: string[] = [];
 
-    // Paso 1: Limpiar subprocesos huérfanos (sin permisos y con funciones que no están en el catálogo)
-    const todosSubprocesos = await prisma.subproceso.findMany({
-      include: {
-        permisos: true,
-        proceso: true,
-      },
-    });
-
-    for (const sub of todosSubprocesos) {
-      // Si el subproceso no tiene funcion válida y no tiene permisos asignados, eliminarlo
-      if (sub.funcion && !FUNCIONES_VALIDAS.has(sub.funcion) && sub.permisos.length === 0) {
-        await prisma.subproceso.delete({ where: { id: sub.id } });
-        eliminados.push(`Subproceso: ${sub.nombre} (${sub.funcion}) del proceso ${sub.proceso.nombre}`);
-      }
-    }
-
-    // Paso 2: Limpiar procesos vacíos que no están en el catálogo
-    // Re-consultar para reflejar las eliminaciones del paso 1
-    const nombresCatalogo = new Set(CATALOGO_RAMAS.map((r) => r.nombre));
-    const todosProcesos = await prisma.proceso.findMany({
-      include: { subprocesos: true, hijos: true },
-    });
-
-    for (const proc of todosProcesos) {
-      if (!nombresCatalogo.has(proc.nombre) && proc.subprocesos.length === 0 && proc.hijos.length === 0) {
-        try {
-          await prisma.proceso.delete({ where: { id: proc.id } });
-          eliminados.push(`Proceso vacío: ${proc.nombre}`);
-        } catch {
-          // Si falla por FK, simplemente lo dejamos (tiene dependencias)
-        }
-      }
-    }
-
-    // Paso 3: Crear/actualizar procesos y subprocesos del catálogo
+    // Crear/actualizar procesos y subprocesos del catálogo (no se elimina nada)
     for (const rama of CATALOGO_RAMAS) {
       // Buscar proceso existente (case-insensitive check en JS)
       const existentes = await prisma.proceso.findMany();
@@ -185,14 +146,13 @@ export async function POST() {
     }
 
     console.log(
-      `[SYNC-PROCESOS] Completado. Creados: ${creados.length}, Actualizados: ${actualizados.length}, Eliminados: ${eliminados.length}`
+      `[SYNC-PROCESOS] Completado. Creados: ${creados.length}, Actualizados: ${actualizados.length}`
     );
 
     return NextResponse.json({
       message: "Sincronización completada",
       creados,
       actualizados,
-      eliminados,
     });
   } catch (error) {
     console.error("Error al sincronizar procesos:", error);
