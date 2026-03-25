@@ -233,43 +233,46 @@ def get_raw_panel(zk_panel):
 def get_table_info(panel, table_name):
     """Obtiene esquema de una tabla.
 
-    Usa get_users() primero para forzar el patching TCP,
-    luego obtiene el esquema directamente del panel interno.
+    Usa DATATABLE_CFG directo con debug para diagnosticar problemas.
     """
-    # Forzar patching TCP haciendo una lectura liviana
     raw_panel = get_raw_panel(panel)
     if not raw_panel:
         print("  ERROR: no hay panel C3 interno")
         return None, None
 
-    # Obtener esquema directamente del panel C3 interno
+    # Debug: enviar DATATABLE_CFG manualmente y ver respuesta raw
     try:
-        panel._ensure_patched_receive()
+        message, msg_size = raw_panel._send_receive(consts.Command.DATATABLE_CFG)
+        print(f"  DATATABLE_CFG: {msg_size} bytes recibidos")
+        if message:
+            # Mostrar primeros bytes para debug
+            preview = bytes(message[:200])
+            print(f"  Preview: {preview[:100]}")
+        else:
+            print(f"  DATATABLE_CFG: respuesta vacia!")
+            return None, None
+    except Exception as e:
+        print(f"  ERROR DATATABLE_CFG: {e}")
+        return None, None
+
+    # Parsear el esquema
+    try:
         data_cfg = raw_panel._get_device_data_cfg()
     except Exception as e:
-        print(f"  ERROR obteniendo esquema: {e}")
+        print(f"  ERROR parseando esquema: {e}")
         return None, None
 
     if not data_cfg:
-        # Segundo intento: forzar patch leyendo users primero
-        print("  Esquema vacio, forzando patch via get_users()...")
-        try:
-            users = panel.get_users()
-            print(f"  get_users() OK: {len(users)} registros")
-            data_cfg = raw_panel._get_device_data_cfg()
-        except Exception as e:
-            print(f"  ERROR en segundo intento: {e}")
-            return None, None
-
-    if not data_cfg:
-        print("  ERROR: data_cfg sigue vacio despues de retry")
+        print("  data_cfg vacio despues de parsear")
+        # Intentar parsear manualmente desde la respuesta raw
+        print(f"  Respuesta raw ({msg_size} bytes):")
+        for line in bytes(message).split(b'\x0a'):
+            if line.strip():
+                print(f"    {line}")
         return None, None
 
-    available = []
-    for cfg in data_cfg:
-        available.append(cfg.name)
-
-    print(f"  Tablas encontradas: {', '.join(available)}")
+    available = [cfg.name for cfg in data_cfg]
+    print(f"  Tablas: {', '.join(available)}")
 
     for cfg in data_cfg:
         if cfg.name == table_name:
