@@ -151,28 +151,9 @@ export async function GET(request: NextRequest) {
     const ventas = serialize(ventasRaw);
     const privadas = serialize(privadasRaw);
 
-    // Normalizar lecturas: quitar prefijo R/RR/RRR para comparación
-    const normalizarLectura = (lec: unknown): string =>
-      String(lec || "").replace(/^R+/i, "");
-
-    // Normalizar lecturas en vencidas y ventas para display y comparación
-    for (const v of vencidas) {
-      v.lectura_original = v.lectura;
-      v.lectura = normalizarLectura(v.lectura);
-    }
-    for (const v of ventas) {
-      v.lectura_original = v.lectura;
-      v.lectura = normalizarLectura(v.lectura);
-    }
-
     // Clasificar vencidas como renovadas o pendientes
     const ventasAsignacionIds = new Set(
       ventas.map((v) => Number(v.asignacion_id))
-    );
-
-    // Set de lecturas normalizadas (sin R) de las ventas del periodo
-    const ventasLecturas = new Set(
-      ventas.map((v) => String(v.lectura))
     );
 
     const esRenovada = (v: Record<string, unknown>): boolean => {
@@ -180,12 +161,6 @@ export async function GET(request: NextRequest) {
       if (v.renovacion_asignacion_h || v.renovacion_asignacion_b) return true;
       // 2. La misma asignación aparece como venta en el periodo
       if (ventasAsignacionIds.has(Number(v.asignacion_id))) return true;
-      // 3. SOLO para tarjetas con prefijo R original: lectura sin R coincide con venta del periodo
-      const lecOriginal = String(v.lectura_original || "");
-      if (/^R+/i.test(lecOriginal)) {
-        const lecturaSinR = String(v.lectura || "");
-        if (lecturaSinR && ventasLecturas.has(lecturaSinR)) return true;
-      }
       return false;
     };
 
