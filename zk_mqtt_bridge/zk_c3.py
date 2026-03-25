@@ -591,8 +591,11 @@ class ZKC3Panel:
                 consts.Command.GETDATA, parameters
             )
         except Exception as e:
-            logger.error(f"Error GETDATA tabla {table_name}: {e}")
-            return []
+            logger.warning(f"Error GETDATA tabla {table_name}: {e}")
+            logger.info(f"Intentando lectura campo-por-campo para {table_name}")
+            return self._read_table_field_by_field(
+                panel, table_name, fields, table_index
+            )
 
         if not message or len(message) < 2:
             return []
