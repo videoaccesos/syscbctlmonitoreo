@@ -180,9 +180,12 @@ export async function GET(request: NextRequest) {
       if (v.renovacion_asignacion_h || v.renovacion_asignacion_b) return true;
       // 2. La misma asignación aparece como venta en el periodo
       if (ventasAsignacionIds.has(Number(v.asignacion_id))) return true;
-      // 3. Lectura normalizada (sin R) coincide con alguna venta del periodo
-      const lectura = String(v.lectura || "");
-      if (lectura && ventasLecturas.has(lectura)) return true;
+      // 3. SOLO para tarjetas con prefijo R original: lectura sin R coincide con venta del periodo
+      const lecOriginal = String(v.lectura_original || "");
+      if (/^R+/i.test(lecOriginal)) {
+        const lecturaSinR = String(v.lectura || "");
+        if (lecturaSinR && ventasLecturas.has(lecturaSinR)) return true;
+      }
       return false;
     };
 
