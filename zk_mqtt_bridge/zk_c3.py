@@ -329,7 +329,7 @@ class ZKC3Panel:
         if self._backend != "zkaccess_c3" or not self._c3_panel:
             return []
         try:
-            data_cfg = self._get_cached_data_cfg()
+            data_cfg = self._c3_panel._get_device_data_cfg()
             result = []
             for cfg in data_cfg:
                 fields = [{'index': f.index, 'name': f.name, 'type': f.type}
@@ -555,13 +555,14 @@ class ZKC3Panel:
 
         panel = self._c3_panel
 
-        # IMPORTANTE: obtener esquema ANTES de parchear _receive.
-        # _get_device_data_cfg() falla con el patched_receive porque
-        # el panel responde data_stat en vez del schema real.
-        data_cfg = self._get_cached_data_cfg()
+        # Aplicar monkey-patch para recv robusto si no se ha hecho
+        self._ensure_patched_receive()
 
-        if not data_cfg:
-            logger.error("No se pudo obtener esquema de tablas")
+        # Obtener esquema de tablas
+        try:
+            data_cfg = panel._get_device_data_cfg()
+        except Exception as e:
+            logger.error(f"Error obteniendo esquema de tablas: {e}")
             return []
 
         # Buscar la tabla solicitada
@@ -580,9 +581,6 @@ class ZKC3Panel:
         fields = [{'index': f.index, 'name': f.name, 'type': f.type}
                   for f in table_cfg.fields]
         table_index = table_cfg.index
-
-        # Aplicar monkey-patch DESPUES de obtener el esquema
-        self._ensure_patched_receive()
 
         # Intentar lectura completa primero
         field_indexes = sorted(f['index'] for f in fields)
@@ -765,45 +763,6 @@ class ZKC3Panel:
                 break
         return bytes(data)
 
-    def _get_cached_data_cfg(self):
-        """Obtiene esquema de tablas SIN parchear _receive (cacheado).
-
-        DATATABLE_CFG falla con patched_receive porque el panel
-        responde data_stat. Se debe llamar con _receive original.
-        """
-        if getattr(self, '_data_cfg_cache', None):
-            return self._data_cfg_cache
-
-        if not self._c3_panel:
-            return []
-
-        # Si _receive ya fue parcheado, necesitamos restaurar temporalmente
-        try:
-            from c3 import C3 as C3Class
-        except ImportError:
-            return []
-
-        patched = getattr(self, '_receive_patched', False)
-        original = getattr(self, '_original_receive', None)
-
-        if patched and original:
-            # Restaurar _receive original temporalmente
-            C3Class._receive = original
-
-        try:
-            data_cfg = self._c3_panel._get_device_data_cfg()
-            if data_cfg:
-                self._data_cfg_cache = data_cfg
-                return data_cfg
-        except Exception as e:
-            logger.warning(f"Error obteniendo esquema: {e}")
-        finally:
-            # Re-aplicar patch si estaba activo
-            if patched and original:
-                self._ensure_patched_receive()
-
-        return []
-
     def _ensure_patched_receive(self):
         """Aplica monkey-patch al metodo _receive de la libreria c3 para
         manejar fragmentacion TCP correctamente."""
@@ -816,7 +775,6 @@ class ZKC3Panel:
             return
 
         original_receive = C3Class._receive
-        self._original_receive = original_receive
 
         def patched_receive(panel_self):
             panel_self._sock.settimeout(panel_self.receive_timeout)
