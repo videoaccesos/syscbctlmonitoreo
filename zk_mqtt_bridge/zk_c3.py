@@ -46,14 +46,34 @@ def c3_datetime_encode(dt_str: str) -> int:
     )
 
 
-def c3_datetime_decode(value: int) -> str:
-    """Convierte entero C3 a fecha string 'YYYY-MM-DD HH:MM:SS'.
+def _is_yyyymmdd(value: int) -> bool:
+    """Detecta si un entero es una fecha en formato YYYYMMDD (ej: 20260324)."""
+    if value < 20000101 or value > 20991231:
+        return False
+    year = value // 10000
+    month = (value // 100) % 100
+    day = value % 100
+    return (2000 <= year <= 2099 and 1 <= month <= 12 and 1 <= day <= 31)
 
-    Inversa: Second = value % 60, Minute = (value/60) % 60, etc.
+
+def c3_datetime_decode(value: int) -> str:
+    """Convierte entero de fecha del panel a string 'YYYY-MM-DD HH:MM:SS'.
+
+    Soporta dos formatos:
+    - YYYYMMDD: entero simple (ej: 20260324 -> 2026-03-24 00:00:00)
+    - Formula C3: ((Y-2000)*12*31+(M-1)*31+(D-1))*86400+H*3600+Min*60+Sec
     """
     if not value or value <= 0:
         return "2000-01-01 00:00:00"
     try:
+        # Detectar formato YYYYMMDD (usado por algunos firmwares del C3-400)
+        if _is_yyyymmdd(value):
+            year = value // 10000
+            month = (value // 100) % 100
+            day = value % 100
+            return f"{year:04d}-{month:02d}-{day:02d} 00:00:00"
+
+        # Formula C3 clasica
         year = math.floor(value / 32140800) + 2000
         month = math.floor(value / 2678400) % 12 + 1
         day = math.floor(value / 86400) % 31 + 1

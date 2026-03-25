@@ -227,6 +227,32 @@ def cmd_delete(panel, args):
     print()
 
 
+def cmd_raw(panel, args):
+    """Muestra todos los campos crudos de una tarjeta (debug)."""
+    card_no = args.card_no
+    print(f"  Dump raw de tarjeta: {card_no}")
+    print()
+
+    users = panel.get_users()
+    user = next((u for u in users
+                 if str(u.get("CardNo", "")) == str(card_no)), None)
+
+    if not user:
+        print(f"  Tarjeta {card_no} NO ENCONTRADA")
+        return
+
+    print(f"  Campos encontrados ({len(user)}):")
+    print("  " + "-" * 50)
+    for key, val in sorted(user.items()):
+        val_type = type(val).__name__
+        if isinstance(val, int) and key in ("StartTime", "EndTime"):
+            decoded = c3_datetime_decode(val)
+            print(f"  {key:<20} = {val!r:<16} ({val_type}) -> {decoded}")
+        else:
+            print(f"  {key:<20} = {val!r:<16} ({val_type})")
+    print()
+
+
 def cmd_expired(panel, args):
     """Lista tarjetas expiradas."""
     print("=" * 70)
@@ -334,6 +360,10 @@ Comandos:
     p_delete = subparsers.add_parser("delete", help="Eliminar tarjeta")
     p_delete.add_argument("card_no", help="Numero de tarjeta")
 
+    # raw (debug)
+    p_raw = subparsers.add_parser("raw", help="Dump raw de campos de tarjeta")
+    p_raw.add_argument("card_no", help="Numero de tarjeta")
+
     # expired
     subparsers.add_parser("expired", help="Listar tarjetas expiradas")
 
@@ -358,6 +388,7 @@ Comandos:
         "disable": cmd_disable,
         "add": cmd_add,
         "delete": cmd_delete,
+        "raw": cmd_raw,
         "expired": cmd_expired,
     }
 
