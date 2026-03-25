@@ -212,6 +212,7 @@ export default function AccesPhone({
   const answerCallRef = useRef<() => void>(() => {});
   const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
   const ringingRef = useRef(false);
+  const audioUnlockedRef = useRef(false);
   const reconnectInProgressRef = useRef(false);
   const connectingInProgressRef = useRef(false);
 
@@ -240,6 +241,38 @@ export default function AccesPhone({
   // Load config on mount
   useEffect(() => {
     setConfig(loadConfig());
+  }, []);
+
+  // -----------------------------------------------------------
+  // Unlock audio playback on first user interaction.
+  // Chrome/Safari block audio.play() until the user has interacted
+  // with the page (click, touch, keydown). We play a silent snippet
+  // on the first gesture so subsequent ringtone plays are allowed.
+  // -----------------------------------------------------------
+  useEffect(() => {
+    const unlock = () => {
+      if (audioUnlockedRef.current) return;
+      audioUnlockedRef.current = true;
+      // Play & immediately pause a silent audio to unlock the policy
+      const silent = new Audio("/sounds/ringtone-classic.wav");
+      silent.volume = 0;
+      silent.play().then(() => {
+        silent.pause();
+        silent.currentTime = 0;
+        console.log("[AccesPhone] Audio playback unlocked by user gesture");
+      }).catch(() => {});
+      window.removeEventListener("click", unlock, true);
+      window.removeEventListener("touchstart", unlock, true);
+      window.removeEventListener("keydown", unlock, true);
+    };
+    window.addEventListener("click", unlock, true);
+    window.addEventListener("touchstart", unlock, true);
+    window.addEventListener("keydown", unlock, true);
+    return () => {
+      window.removeEventListener("click", unlock, true);
+      window.removeEventListener("touchstart", unlock, true);
+      window.removeEventListener("keydown", unlock, true);
+    };
   }, []);
 
   // -----------------------------------------------------------
