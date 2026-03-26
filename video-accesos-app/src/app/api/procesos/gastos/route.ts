@@ -177,6 +177,8 @@ export async function POST(request: NextRequest) {
     const tp = parseInt(tipoPago, 10);
     const f = fecha ? String(fecha) : "";
 
+    const usuarioId = session.user?.usuarioId ?? 0;
+
     // Para gastos corporativos (privadaId=0), desactivar FK check temporalmente
     if (td > 0) {
       await prisma.$executeRawUnsafe(`SET FOREIGN_KEY_CHECKS=0`);
@@ -184,9 +186,9 @@ export async function POST(request: NextRequest) {
 
     try {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO gastos (tipo_gasto, privada_id, tipo_destino, cuenta_gasto_id, descripcion_gasto, fecha_pago, comprobante, total, tipo_pago, fecha, estatus_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        tgId, pId, td, cgId, desc, fp, comp, tot, tp, f
+        `INSERT INTO gastos (tipo_gasto, privada_id, tipo_destino, cuenta_gasto_id, descripcion_gasto, fecha_pago, comprobante, total, tipo_pago, fecha, usuario_id, estatus_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        tgId, pId, td, cgId, desc, fp, comp, tot, tp, f, usuarioId
       );
     } finally {
       if (td > 0) {
