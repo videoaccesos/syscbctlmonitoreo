@@ -50,6 +50,7 @@ const CATALOGO_RAMAS = [
     subprocesos: [
       { nombre: "Corrección Vencimientos", funcion: "/procesos/correccion-vencimientos" },
       { nombre: "Conciliación de Tarjetas", funcion: "/herramientas/conciliacion" },
+      { nombre: "Dashboard de Ingresos", funcion: "/herramientas/ingresos" },
       { nombre: "Prenomina Quincenal", funcion: "/procesos/prenomina" },
     ],
   },

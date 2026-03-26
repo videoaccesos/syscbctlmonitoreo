@@ -8,6 +8,7 @@ const RUTAS_PUBLICAS = new Set(["/", "/login"]);
 // Si un API no está aquí, se permite a cualquier usuario autenticado.
 const API_RUTA_PERMISO: Record<string, string> = {
   "/api/herramientas/conciliacion": "/herramientas/conciliacion",
+  "/api/herramientas/ingresos": "/herramientas/ingresos",
   "/api/procesos/correccion-vencimientos": "/procesos/correccion-vencimientos",
   "/api/procesos/prenomina": "/procesos/prenomina",
   "/api/procesos/mensualidades": "/procesos/mensualidades",

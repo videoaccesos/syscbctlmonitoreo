@@ -366,6 +366,24 @@ model FolioMensualidad {
   @@map("folios_mensualidades")
 }
 
+// folios_remisiones: Ingresos por concepto de remisión (ingresos varios)
+model FolioRemision {
+  id                Int      @id @default(autoincrement()) @map("remision_id")
+  concepto          String   @default("") @db.VarChar(200)
+  descripcion       String   @default("") @db.VarChar(500)
+  total             Float    @default(0)
+  tipoPago          Int      @default(1) @map("tipo_pago") // 1=Efectivo, 2=Bancos
+  fecha             String   @default("") @db.VarChar(10) // YYYY-MM-DD
+  observaciones     String?  @db.Text
+  estatusId         Int      @default(1) @map("estatus_id") @db.TinyInt // 1=Activo, 2=Cancelado
+  fechaModificacion DateTime? @map("fecha_modificacion")
+  usuarioModId      Int      @default(0) @map("usuario_mod_id")
+
+  @@index([fecha])
+  @@index([estatusId])
+  @@map("folios_remisiones")
+}
+
 // prenomina: prenomina quincenal de empleados
 model Prenomina {
   id                Int      @id @default(autoincrement()) @map("prenomina_id")

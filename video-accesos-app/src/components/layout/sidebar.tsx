@@ -69,6 +69,7 @@ const fullNavigation: NavItem[] = [
     children: [
       { label: "Corrección Vencimientos", href: "/procesos/correccion-vencimientos" },
       { label: "Conciliación de Tarjetas", href: "/herramientas/conciliacion" },
+      { label: "Dashboard de Ingresos", href: "/herramientas/ingresos" },
       { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
     ],
   },
