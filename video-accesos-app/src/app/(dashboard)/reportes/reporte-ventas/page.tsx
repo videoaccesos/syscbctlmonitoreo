@@ -305,7 +305,7 @@ function TablaTarjetas({
                   </span>
                 </td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
-                <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
+                <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}{row.calle ? ` ${row.calle}` : ""}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
                 <td className="px-3 py-1.5 text-center">
                   <span className={`text-xs font-medium ${

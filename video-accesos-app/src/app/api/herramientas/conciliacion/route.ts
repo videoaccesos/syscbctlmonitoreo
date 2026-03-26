@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         p.privada_id,
         p.descripcion AS privada,
         p.renovacion AS privada_renovacion,
-        res.nro_casa,
+        res.nro_casa, res.calle,
         a.concepto
       FROM (
         SELECT asignacion_id, tarjeta_id, residente_id, fecha, precio, descuento, concepto, estatus_id,

@@ -668,7 +668,7 @@ function TabVentas({ ventas }: { ventas: Array<Record<string, unknown>> }) {
                 </span>
               </td>
               <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
-              <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
+              <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}{row.calle ? ` ${row.calle}` : ""}</td>
               <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
               <td className="px-3 py-1.5 text-center">
                 <span className={`text-xs font-medium ${Number(row.tipo_id) === 2 ? "text-purple-700" : "text-teal-700"}`}>
@@ -752,7 +752,7 @@ function TabPendientes({ pendientes }: { pendientes: Array<Record<string, unknow
                 <td className="text-center px-3 py-1.5 text-gray-500 text-xs font-mono">{String(row.asignacion_id)}</td>
                 <td className="px-3 py-1.5 text-red-600 font-medium whitespace-nowrap">{String(row.fecha_vencimiento || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-700">{String(row.privada || "-")}</td>
-                <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}</td>
+                <td className="px-3 py-1.5 text-gray-700">{String(row.nro_casa || "")}{row.calle ? ` ${row.calle}` : ""}</td>
                 <td className="px-3 py-1.5 text-gray-900 font-medium">{String(row.residente || "-")}</td>
                 <td className="px-3 py-1.5 text-gray-600">{String(row.telefono || "-")}</td>
                 <td className="px-3 py-1.5 text-center">

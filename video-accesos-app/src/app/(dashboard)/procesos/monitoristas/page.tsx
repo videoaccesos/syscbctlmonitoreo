@@ -1757,6 +1757,9 @@ export default function MonitoristasPage() {
                       <span className="font-bold text-gray-900">
                         {reg.residencia?.nroCasa || "-"}
                       </span>
+                      {reg.residencia?.calle && (
+                        <span className="text-gray-500 ml-1">{reg.residencia.calle}</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-700 max-w-[220px] truncate">
                       {getNombreSolicitante(reg.solicitanteId)}
