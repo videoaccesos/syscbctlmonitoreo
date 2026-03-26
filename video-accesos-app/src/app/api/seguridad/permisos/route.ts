@@ -31,20 +31,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Funciones válidas del catálogo actual (solo estas se muestran)
-    const FUNCIONES_CATALOGO = new Set([
-      "/catalogos/privadas", "/catalogos/residencias", "/catalogos/empleados",
-      "/catalogos/tarjetas", "/catalogos/puestos", "/catalogos/turnos",
-      "/catalogos/fallas", "/catalogos/materiales", "/catalogos/cuentas-gasto",
-      "/procesos/registro-accesos", "/procesos/monitoristas",
-      "/procesos/asignacion-tarjetas", "/procesos/ordenes-servicio",
-      "/procesos/supervision-llamadas", "/procesos/gastos", "/procesos/mensualidades",
-      "/procesos/correccion-vencimientos", "/herramientas/conciliacion", "/procesos/prenomina",
-      "/reportes/accesos-consultas", "/reportes/accesos-graficas",
-      "/reportes/supervision-llamadas", "/reportes/reporte-ventas",
-      "/reportes/tarjetas-vencimientos", "/reportes/catalogo-tarjetas",
-      "/seguridad/usuarios", "/seguridad/grupos-usuarios", "/seguridad/permisos",
-    ]);
+    // Funciones válidas del catálogo actual con descripción de lo que autorizan
+    const FUNCIONES_CATALOGO: Record<string, string> = {
+      "/catalogos/privadas": "Crear, editar y eliminar privadas (fraccionamientos)",
+      "/catalogos/residencias": "Administrar casas/lotes y sus residentes dentro de cada privada",
+      "/catalogos/empleados": "Alta y edición de empleados del sistema",
+      "/catalogos/tarjetas": "Inventario de tarjetas de acceso (altas, bajas, lecturas)",
+      "/catalogos/puestos": "Catálogo de puestos de trabajo",
+      "/catalogos/turnos": "Definición de turnos laborales",
+      "/catalogos/fallas": "Tipos de fallas para órdenes de servicio",
+      "/catalogos/materiales": "Catálogo de materiales para órdenes de servicio",
+      "/catalogos/cuentas-gasto": "Catálogo de cuentas contables para gastos",
+      "/procesos/registro-accesos": "Registrar entradas/salidas de visitantes y residentes",
+      "/procesos/monitoristas": "Pantalla de operador: atender llamadas, registrar accesos, ver cámaras",
+      "/procesos/asignacion-tarjetas": "Vender, renovar y cancelar tarjetas de acceso",
+      "/procesos/ordenes-servicio": "Crear y dar seguimiento a órdenes de servicio/mantenimiento",
+      "/procesos/supervision-llamadas": "Evaluar calidad de atención de llamadas de operadores",
+      "/procesos/gastos": "Registrar gastos operativos por privada",
+      "/procesos/mensualidades": "Cobrar y consultar pagos mensuales de privadas",
+      "/procesos/correccion-vencimientos": "Corregir fechas de vencimiento de tarjetas masivamente",
+      "/herramientas/conciliacion": "Analizar renovaciones vs pendientes por periodo y privada",
+      "/herramientas/ingresos": "Ver ingresos esperados vs cobrados: mensualidades, tarjetas, remisiones",
+      "/procesos/prenomina": "Generar prenómina quincenal de empleados",
+      "/reportes/accesos-consultas": "Consultar historial de accesos con filtros",
+      "/reportes/accesos-graficas": "Gráficas de accesos por periodo, privada y tipo",
+      "/reportes/supervision-llamadas": "Reportes de calidad de atención telefónica",
+      "/reportes/reporte-ventas": "Detalle de tarjetas vendidas por periodo con exportación Excel",
+      "/reportes/tarjetas-vencimientos": "Listado de tarjetas próximas a vencer con datos de contacto",
+      "/reportes/catalogo-tarjetas": "Consulta general del inventario de tarjetas",
+      "/seguridad/usuarios": "Crear, editar y desactivar usuarios del sistema",
+      "/seguridad/grupos-usuarios": "Administrar grupos y asignar usuarios a grupos",
+      "/seguridad/permisos": "Asignar permisos de pantallas a cada grupo",
+    };
 
     // Obtener solo procesos que tienen subprocesos válidos del catálogo
     const todosProc = await prisma.proceso.findMany({
@@ -57,10 +75,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Filtrar: solo subprocesos con funcion en el catálogo, y solo procesos con al menos uno
+    // Agregar descripción de lo que autoriza cada permiso
     const procesos = todosProc
       .map((p) => ({
         ...p,
-        subprocesos: p.subprocesos.filter((s) => s.funcion && FUNCIONES_CATALOGO.has(s.funcion)),
+        subprocesos: p.subprocesos
+          .filter((s) => s.funcion && s.funcion in FUNCIONES_CATALOGO)
+          .map((s) => ({
+            ...s,
+            descripcion: s.funcion ? FUNCIONES_CATALOGO[s.funcion] || "" : "",
+          })),
       }))
       .filter((p) => p.subprocesos.length > 0);
 

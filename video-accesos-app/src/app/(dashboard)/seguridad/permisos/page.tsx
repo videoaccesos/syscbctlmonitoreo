@@ -28,6 +28,7 @@ interface Subproceso {
   procesoId: number;
   nombre: string;
   funcion: string | null;
+  descripcion?: string;
 }
 
 interface Proceso {
@@ -421,22 +422,31 @@ export default function PermisosPage() {
                       {proceso.subprocesos.map((sub) => (
                         <label
                           key={sub.id}
-                          className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer"
+                          className="flex items-start gap-2 py-2 px-2 rounded hover:bg-gray-50 cursor-pointer"
                         >
                           <input
                             type="checkbox"
                             checked={subprocesoIdsSeleccionados.includes(sub.id)}
                             onChange={() => handleSubprocesoToggle(sub.id)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5"
                           />
-                          <span className="text-sm text-gray-700">
-                            {sub.nombre}
-                          </span>
-                          {sub.funcion && (
-                            <span className="text-xs text-gray-600">
-                              ({sub.funcion})
-                            </span>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-800">
+                                {sub.nombre}
+                              </span>
+                              {sub.funcion && (
+                                <span className="text-xs text-gray-400">
+                                  {sub.funcion}
+                                </span>
+                              )}
+                            </div>
+                            {sub.descripcion && (
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {sub.descripcion}
+                              </p>
+                            )}
+                          </div>
                         </label>
                       ))}
                     </div>
