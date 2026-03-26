@@ -121,7 +121,10 @@ export const authOptions: NextAuthOptions = {
 
           const grupos = gruposDetalles.map((d) => d.grupo.nombre);
           isAdmin = gruposDetalles.some(
-            (d) => d.grupo.nombre.toLowerCase() === "admin" && d.grupo.estatusId === 1
+            (d) => {
+              const nombre = d.grupo.nombre.toLowerCase().trim();
+              return (nombre === "admin" || nombre === "administrador") && d.grupo.estatusId === 1;
+            }
           );
 
           if (isAdmin) {
