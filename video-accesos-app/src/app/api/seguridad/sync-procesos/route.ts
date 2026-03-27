@@ -158,30 +158,33 @@ export async function POST() {
     );
     const eliminados: string[] = [];
 
-    const todosSubprocesos = await prisma.subproceso.findMany({
-      include: { _count: { select: { permisos: true } } },
-    });
+    const todosSubprocesos = await prisma.subproceso.findMany();
 
     for (const sub of todosSubprocesos) {
       if (!sub.funcion || !funcionesCatalogo.has(sub.funcion)) {
-        // Eliminar permisos asociados primero, luego el subproceso
-        if (sub._count.permisos > 0) {
-          await prisma.permisoAcceso.deleteMany({
-            where: { subprocesoId: sub.id },
-          });
-        }
-        await prisma.subproceso.delete({ where: { id: sub.id } });
-        eliminados.push(`  Subproceso huérfano: ${sub.nombre} (${sub.funcion || "sin función"}) [${sub._count.permisos} permisos]`);
+        // Usar raw SQL para evitar problemas con FK constraints
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM permisos_acceso WHERE subproceso_id = ?`,
+          sub.id
+        );
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM subprocesos WHERE subproceso_id = ?`,
+          sub.id
+        );
+        eliminados.push(`  Subproceso huérfano: ${sub.nombre} (${sub.funcion || "sin función"})`);
       }
     }
 
     // Limpiar procesos que quedaron sin subprocesos
-    const procesosVacios = await prisma.proceso.findMany({
-      include: { _count: { select: { subprocesos: true } } },
+    const procesosRestantes = await prisma.proceso.findMany({
+      include: { subprocesos: { select: { id: true } } },
     });
-    for (const proc of procesosVacios) {
-      if (proc._count.subprocesos === 0) {
-        await prisma.proceso.delete({ where: { id: proc.id } });
+    for (const proc of procesosRestantes) {
+      if (proc.subprocesos.length === 0) {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM procesos WHERE proceso_id = ?`,
+          proc.id
+        );
         eliminados.push(`Proceso vacío eliminado: ${proc.nombre}`);
       }
     }
