@@ -331,8 +331,8 @@ export async function POST(request: NextRequest) {
       : "residencias_residentes_tarjetas";
 
     // INSERT con raw SQL para evitar el bug P2023 de Prisma con columnas @db.Date
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO \`${tableName}\` (
+    // La tabla H tiene columna interfon_extra, la tabla B no
+    const columnas = `
         tarjeta_id, tarjeta_id2, tarjeta_id3, tarjeta_id4, tarjeta_id5,
         numero_serie, numero_serie2, numero_serie3, numero_serie4, numero_serie5,
         residente_id, privada, fecha, fecha_vencimiento, fecha_modificacion,
@@ -341,8 +341,12 @@ export async function POST(request: NextRequest) {
         comprador_id, mostrar_nombre_comprador,
         concepto, motivo_descuento, observaciones,
         utilizo_seguro, utilizo_seguro2, utilizo_seguro3, utilizo_seguro4, utilizo_seguro5,
-        estatus_id, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        estatus_id, usuario_id${folioTipo === "H" ? ", interfon_extra" : ""}`;
+    const placeholders = folioTipo === "H"
+      ? "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+      : "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+
+    const params: unknown[] = [
       dataComun.tarjetaId,
       dataComun.tarjetaId2,
       dataComun.tarjetaId3,
@@ -377,6 +381,12 @@ export async function POST(request: NextRequest) {
       dataComun.utilizoSeguro5,
       1,   // estatus_id
       0,   // usuario_id
+    ];
+    if (folioTipo === "H") params.push(0); // interfon_extra
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO \`${tableName}\` (${columnas}) VALUES (${placeholders})`,
+      ...params
     );
 
     // Obtener el ID del registro recién creado
