@@ -1943,6 +1943,7 @@ export default function MonitoristasPage() {
         onIncomingCall={handleIncomingCall}
         onCallAnswered={handleCallAnswered}
         onCallEnded={handleCallEnded}
+        privadaId={formPrivadaId ? Number(formPrivadaId) : undefined}
       />
 
       {/* ================================================================= */}

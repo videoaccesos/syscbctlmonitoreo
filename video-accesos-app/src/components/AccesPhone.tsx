@@ -107,6 +107,7 @@ interface AccesPhoneProps {
   onIncomingCall?: (callerNumber: string, displayName?: string) => void;
   onCallAnswered?: (callerNumber: string) => void;
   onCallEnded?: () => void;
+  privadaId?: number; // privada seleccionada en la pagina padre
 }
 
 // Default SIP config - stored in localStorage
@@ -165,6 +166,7 @@ export default function AccesPhone({
   onIncomingCall,
   onCallAnswered,
   onCallEnded,
+  privadaId: pagePrivadaId,
 }: AccesPhoneProps) {
   // State
   const [expanded, setExpanded] = useState(false);
@@ -202,28 +204,9 @@ export default function AccesPhone({
 
   // Relay buttons state: "idle" | "loading" | "success" | "error"
   const [relayStatus, setRelayStatus] = useState<Record<string, string>>({});
-  // Manual privada selection for relay when no call is active
-  const [manualPrivadaId, setManualPrivadaId] = useState<number>(0);
-  const [privadasList, setPrivadasList] = useState<Array<{ id: number; descripcion: string }>>([]);
 
-  // Load privadas list on mount for manual selector
-  useEffect(() => {
-    fetch("/api/catalogos/privadas?pageSize=200")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.data) {
-          setPrivadasList(
-            data.data
-              .filter((p: { estatusId: number }) => p.estatusId === 1)
-              .map((p: { id: number; descripcion: string }) => ({ id: p.id, descripcion: p.descripcion }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Active privadaId: from call CallerID or manual selection
-  const activePrivadaId = callInfo?.privadaId || manualPrivadaId || 0;
+  // Active privadaId: from call CallerID or page-level selection
+  const activePrivadaId = callInfo?.privadaId || pagePrivadaId || 0;
 
   const executeRelay = useCallback(async (triggerValue: string) => {
     const pId = activePrivadaId;
@@ -1471,25 +1454,7 @@ export default function AccesPhone({
             {/* Relay buttons - apertura de puertas */}
             {connected && !ringing && (
               <div className="px-3 pt-2">
-                <p className="text-xs text-gray-500 text-center mb-1">Apertura Remota</p>
-                {/* Privada selector - when no call provides it automatically */}
-                {!callInfo?.privadaId && (
-                  <select
-                    value={manualPrivadaId}
-                    onChange={(e) => setManualPrivadaId(parseInt(e.target.value, 10))}
-                    className="w-full mb-1.5 rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  >
-                    <option value={0}>Seleccionar privada...</option>
-                    {privadasList.map((p) => (
-                      <option key={p.id} value={p.id}>{p.descripcion}</option>
-                    ))}
-                  </select>
-                )}
-                {callInfo?.privadaId && (
-                  <p className="text-xs text-center text-green-700 font-medium mb-1.5">
-                    {callInfo.callerLabel || `Privada #${callInfo.privadaId}`}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 text-center mb-1.5">Apertura Remota</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {([
                     { trigger: "abrir_visitas_api", label: "Visita", color: "green" },

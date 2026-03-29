@@ -1873,6 +1873,7 @@ export default function RegistroAccesosPage() {
         onIncomingCall={handleIncomingCall}
         onCallAnswered={handleCallAnswered}
         onCallEnded={handleCallEnded}
+        privadaId={formPrivadaId ? Number(formPrivadaId) : undefined}
       />
 
       {showRegGeneral && (
