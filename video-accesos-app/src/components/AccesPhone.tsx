@@ -98,6 +98,7 @@ interface AccesPhoneConfig {
 interface CallInfo {
   number: string;
   callerLabel?: string;
+  privadaId?: number;
   direction: "incoming" | "outgoing";
   startTime: Date;
 }
@@ -198,6 +199,41 @@ export default function AccesPhone({
 
   // Available microphones for settings selector
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
+
+  // Relay buttons state: "idle" | "loading" | "success" | "error"
+  const [relayStatus, setRelayStatus] = useState<Record<string, string>>({});
+
+  const executeRelay = useCallback(async (triggerValue: string) => {
+    const pId = callInfo?.privadaId;
+    if (!pId) return;
+    setRelayStatus(prev => ({ ...prev, [triggerValue]: "loading" }));
+    try {
+      const res = await fetch("/api/relay/ejecutar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trigger_value: triggerValue,
+          residencial_id: pId,
+          source: "softphone",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRelayStatus(prev => ({ ...prev, [triggerValue]: "success" }));
+        diag("RELAY_OK", `${triggerValue} privada=${pId}`);
+      } else {
+        setRelayStatus(prev => ({ ...prev, [triggerValue]: "error" }));
+        diag("RELAY_FAIL", `${triggerValue} privada=${pId} err=${data.error}`);
+      }
+    } catch (err) {
+      setRelayStatus(prev => ({ ...prev, [triggerValue]: "error" }));
+      diag("RELAY_ERROR", `${triggerValue} ${err instanceof Error ? err.message : String(err)}`);
+    }
+    // Reset after 2s
+    setTimeout(() => {
+      setRelayStatus(prev => ({ ...prev, [triggerValue]: "idle" }));
+    }, 2000);
+  }, [callInfo?.privadaId]);
 
   // Refs
   const uaRef = useRef<UA | null>(null);
@@ -778,21 +814,28 @@ export default function AccesPhone({
           });
           setExpanded(true);
 
-          // Lookup caller ID (privada/residencia) for visual identification
+          // Lookup caller ID (privada/residencia) for visual identification + relay
           fetch(`/api/procesos/registro-accesos/buscar-por-telefono?telefono=${encodeURIComponent(callerNumber)}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
               if (data?.found) {
                 let label = "";
+                let pId: number | undefined;
                 if (data.matchLevel === "residencia" && data.data) {
                   const r = data.data;
                   label = `${r.privada?.descripcion || ""}${r.nroCasa ? ` - #${r.nroCasa}` : ""}${r.calle ? ` ${r.calle}` : ""}`;
+                  pId = r.privadaId || r.privada?.id;
                 } else if (data.privada) {
                   label = data.privada.descripcion || "";
+                  pId = data.privada.id;
                 }
-                if (label) {
-                  setCallInfo(prev => prev ? { ...prev, callerLabel: label.trim() } : prev);
-                  diag("CALLER_ID_FOUND", `num=${callerNumber} label=${label.trim()}`);
+                if (label || pId) {
+                  setCallInfo(prev => prev ? {
+                    ...prev,
+                    ...(label ? { callerLabel: label.trim() } : {}),
+                    ...(pId ? { privadaId: pId } : {}),
+                  } : prev);
+                  diag("CALLER_ID_FOUND", `num=${callerNumber} label=${label.trim()} privadaId=${pId || "?"}`);
                 }
               }
             })
@@ -1399,6 +1442,48 @@ export default function AccesPhone({
                       </button>
                     </>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Relay buttons - apertura de puertas (solo en llamada activa) */}
+            {inCall && !ringing && callInfo?.privadaId && (
+              <div className="px-3 pt-2">
+                <p className="text-xs text-gray-500 text-center mb-1.5">Apertura Remota</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { trigger: "abrir_visitas_api", label: "Visita", color: "green" },
+                    { trigger: "abrir_residentes_api", label: "Residente", color: "blue" },
+                    { trigger: "apertura_especial_api", label: "Especial", color: "orange" },
+                  ] as const).map(({ trigger, label, color }) => {
+                    const st = relayStatus[trigger] || "idle";
+                    const colorMap = {
+                      green: { idle: "bg-green-600 hover:bg-green-700", success: "bg-green-400", error: "bg-red-500" },
+                      blue: { idle: "bg-blue-600 hover:bg-blue-700", success: "bg-blue-400", error: "bg-red-500" },
+                      orange: { idle: "bg-orange-500 hover:bg-orange-600", success: "bg-orange-400", error: "bg-red-500" },
+                    };
+                    const bg = st === "loading" ? colorMap[color].idle + " opacity-60"
+                      : st === "success" ? colorMap[color].success
+                      : st === "error" ? colorMap[color].error
+                      : colorMap[color].idle;
+                    return (
+                      <button
+                        key={trigger}
+                        onClick={() => executeRelay(trigger)}
+                        disabled={st === "loading"}
+                        className={`${bg} text-white rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1`}
+                      >
+                        {st === "loading" ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                        ) : st === "success" ? (
+                          "✓"
+                        ) : st === "error" ? (
+                          "✗"
+                        ) : null}
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
