@@ -202,9 +202,31 @@ export default function AccesPhone({
 
   // Relay buttons state: "idle" | "loading" | "success" | "error"
   const [relayStatus, setRelayStatus] = useState<Record<string, string>>({});
+  // Manual privada selection for relay when no call is active
+  const [manualPrivadaId, setManualPrivadaId] = useState<number>(0);
+  const [privadasList, setPrivadasList] = useState<Array<{ id: number; descripcion: string }>>([]);
+
+  // Load privadas list on mount for manual selector
+  useEffect(() => {
+    fetch("/api/catalogos/privadas?pageSize=200")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.data) {
+          setPrivadasList(
+            data.data
+              .filter((p: { estatusId: number }) => p.estatusId === 1)
+              .map((p: { id: number; descripcion: string }) => ({ id: p.id, descripcion: p.descripcion }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Active privadaId: from call CallerID or manual selection
+  const activePrivadaId = callInfo?.privadaId || manualPrivadaId || 0;
 
   const executeRelay = useCallback(async (triggerValue: string) => {
-    const pId = callInfo?.privadaId;
+    const pId = activePrivadaId;
     if (!pId) return;
     setRelayStatus(prev => ({ ...prev, [triggerValue]: "loading" }));
     try {
@@ -233,7 +255,7 @@ export default function AccesPhone({
     setTimeout(() => {
       setRelayStatus(prev => ({ ...prev, [triggerValue]: "idle" }));
     }, 2000);
-  }, [callInfo?.privadaId]);
+  }, [activePrivadaId]);
 
   // Refs
   const uaRef = useRef<UA | null>(null);
@@ -1446,10 +1468,28 @@ export default function AccesPhone({
               </div>
             )}
 
-            {/* Relay buttons - apertura de puertas (solo en llamada activa) */}
-            {inCall && !ringing && callInfo?.privadaId && (
+            {/* Relay buttons - apertura de puertas */}
+            {connected && !ringing && (
               <div className="px-3 pt-2">
-                <p className="text-xs text-gray-500 text-center mb-1.5">Apertura Remota</p>
+                <p className="text-xs text-gray-500 text-center mb-1">Apertura Remota</p>
+                {/* Privada selector - when no call provides it automatically */}
+                {!callInfo?.privadaId && (
+                  <select
+                    value={manualPrivadaId}
+                    onChange={(e) => setManualPrivadaId(parseInt(e.target.value, 10))}
+                    className="w-full mb-1.5 rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  >
+                    <option value={0}>Seleccionar privada...</option>
+                    {privadasList.map((p) => (
+                      <option key={p.id} value={p.id}>{p.descripcion}</option>
+                    ))}
+                  </select>
+                )}
+                {callInfo?.privadaId && (
+                  <p className="text-xs text-center text-green-700 font-medium mb-1.5">
+                    {callInfo.callerLabel || `Privada #${callInfo.privadaId}`}
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-1.5">
                   {([
                     { trigger: "abrir_visitas_api", label: "Visita", color: "green" },
@@ -1457,12 +1497,14 @@ export default function AccesPhone({
                     { trigger: "apertura_especial_api", label: "Especial", color: "orange" },
                   ] as const).map(({ trigger, label, color }) => {
                     const st = relayStatus[trigger] || "idle";
+                    const disabled = !activePrivadaId || st === "loading";
                     const colorMap = {
                       green: { idle: "bg-green-600 hover:bg-green-700", success: "bg-green-400", error: "bg-red-500" },
                       blue: { idle: "bg-blue-600 hover:bg-blue-700", success: "bg-blue-400", error: "bg-red-500" },
                       orange: { idle: "bg-orange-500 hover:bg-orange-600", success: "bg-orange-400", error: "bg-red-500" },
                     };
-                    const bg = st === "loading" ? colorMap[color].idle + " opacity-60"
+                    const bg = disabled && st === "idle" ? "bg-gray-300 cursor-not-allowed"
+                      : st === "loading" ? colorMap[color].idle + " opacity-60"
                       : st === "success" ? colorMap[color].success
                       : st === "error" ? colorMap[color].error
                       : colorMap[color].idle;
@@ -1470,7 +1512,7 @@ export default function AccesPhone({
                       <button
                         key={trigger}
                         onClick={() => executeRelay(trigger)}
-                        disabled={st === "loading"}
+                        disabled={disabled}
                         className={`${bg} text-white rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1`}
                       >
                         {st === "loading" ? (
