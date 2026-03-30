@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { listActiveFrames } from "@/lib/frame-store";
 
 const TAG = "camera-lookup";
 
@@ -139,7 +140,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas`, { privada_id: privada.id, privada: privada.descripcion, cameras });
+    // --- Agregar camaras del agente remoto que no estan en la BD (cam 4+) ---
+    const dbCamIndexes = new Set(cameras.map(c => c.index));
+    const agentFrames = listActiveFrames().filter(f => f.siteId === String(privada.id));
+    for (const af of agentFrames) {
+      if (!dbCamIndexes.has(af.camId)) {
+        cameras.push({
+          index: af.camId,
+          alias: `Camara ${af.camId}`,
+          available: true,
+        });
+      }
+    }
+    // Ordenar por index
+    cameras.sort((a, b) => a.index - b.index);
+
+    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas (${agentFrames.length} del agente)`, { privada_id: privada.id, privada: privada.descripcion, cameras });
 
     return NextResponse.json({
       found: true,
