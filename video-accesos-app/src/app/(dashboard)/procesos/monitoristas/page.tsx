@@ -469,7 +469,7 @@ export default function MonitoristasPage() {
           body: JSON.stringify({
             site_id: String(privId),
             cmd,
-            fps: 2,
+            fps: 25,
             duration: 600,
           }),
         });
@@ -2037,7 +2037,7 @@ export default function MonitoristasPage() {
                 <CameraGrid
                   telefono={incomingCallNumber || undefined}
                   privadaId={incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : undefined)}
-                  refreshMs={300}
+                  refreshMs={40}
                   active={showVideo}
                   compact
                 />

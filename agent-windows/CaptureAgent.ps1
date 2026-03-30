@@ -82,8 +82,9 @@ function Initialize-Agent {
         Log-Info "  Cam $($cam.cam_id): $($cam.alias) -> $($cam.snapshot_url)"
     }
 
-    # Inicializar URL de polling
+    # Inicializar URL de polling y pool de threads
     Initialize-PollUrl
+    Initialize-RunspacePool
 
     $script:AgentState = "idle"
     Log-Info "Agente en estado IDLE - esperando comandos via polling HTTP"
@@ -259,7 +260,7 @@ function Send-Frame {
 # ---------------------------------------------------------------------------
 $script:PollUrl = $null
 $script:LastPollTime = [DateTime]::MinValue
-$script:PollIntervalSec = 2  # Cada 2 segundos
+$script:PollIntervalSec = 1  # Cada 1 segundo
 
 function Initialize-PollUrl {
     # Construir URL de polling a partir de backend_url
@@ -386,50 +387,183 @@ function Stop-CameraStream {
 }
 
 # ---------------------------------------------------------------------------
-# Ciclo principal de captura
+# Ciclo principal de captura - PARALELO usando runspaces
 # ---------------------------------------------------------------------------
+
+# Script block que se ejecuta en cada runspace (captura + envio de una camara)
+$script:CaptureScriptBlock = {
+    param(
+        [string]$SnapshotUrl,
+        [string]$Username,
+        [string]$Password,
+        [string]$AuthType,
+        [string]$BackendUrl,
+        [string]$SiteId,
+        [int]$CamId,
+        [string]$AgentToken,
+        [double]$Fps
+    )
+
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+
+        # --- Capturar snapshot ---
+        $frameData = $null
+
+        $initialRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
+        $initialRequest.Method = "GET"
+        $initialRequest.Timeout = 4000
+        $initialRequest.UserAgent = "CaptureAgent/1.0"
+
+        try {
+            $response = $initialRequest.GetResponse()
+            $stream = $response.GetResponseStream()
+            $ms = New-Object System.IO.MemoryStream
+            $stream.CopyTo($ms)
+            $response.Close()
+            $frameData = $ms.ToArray()
+        } catch [System.Net.WebException] {
+            $webEx = $_.Exception
+            if ($webEx.Response -and $webEx.Response.StatusCode -eq [System.Net.HttpStatusCode]::Unauthorized) {
+                $webEx.Response.Close()
+                $uri = [System.Uri]$SnapshotUrl
+                $credCache = New-Object System.Net.CredentialCache
+                $cred = New-Object System.Net.NetworkCredential($Username, $Password)
+                $authMethod = if ($AuthType -eq "basic") { "Basic" } else { "Digest" }
+                $credCache.Add($uri, $authMethod, $cred)
+
+                $digestRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
+                $digestRequest.Method = "GET"
+                $digestRequest.Timeout = 4000
+                $digestRequest.Credentials = $credCache
+                $digestRequest.PreAuthenticate = $true
+                $digestRequest.UserAgent = "CaptureAgent/1.0"
+
+                $response2 = $digestRequest.GetResponse()
+                $stream2 = $response2.GetResponseStream()
+                $ms2 = New-Object System.IO.MemoryStream
+                $stream2.CopyTo($ms2)
+                $response2.Close()
+                $frameData = $ms2.ToArray()
+            } else {
+                if ($webEx.Response) { $webEx.Response.Close() }
+                return @{ ok = $false; camId = $CamId; error = "HTTP $($webEx.Response.StatusCode)" }
+            }
+        }
+
+        if (-not $frameData -or $frameData.Length -lt 100) {
+            return @{ ok = $false; camId = $CamId; error = "Frame vacio" }
+        }
+
+        # --- Enviar al backend ---
+        $request = [System.Net.HttpWebRequest]::Create($BackendUrl)
+        $request.Method = "POST"
+        $request.ContentType = "image/jpeg"
+        $request.ContentLength = $frameData.Length
+        $request.Timeout = 5000
+        $request.Headers.Add("X-Site-Id", $SiteId)
+        $request.Headers.Add("X-Cam-Id", $CamId.ToString())
+        $request.Headers.Add("X-Agent-Token", $AgentToken)
+        $request.Headers.Add("X-Agent-Host", [System.Net.Dns]::GetHostName())
+        $request.Headers.Add("X-Agent-Fps", $Fps.ToString("F1"))
+        $request.UserAgent = "CaptureAgent/1.0"
+
+        $reqStream = $request.GetRequestStream()
+        $reqStream.Write($frameData, 0, $frameData.Length)
+        $reqStream.Close()
+
+        $response = $request.GetResponse()
+        $status = [int]$response.StatusCode
+        $response.Close()
+
+        return @{ ok = $true; camId = $CamId; bytes = $frameData.Length; status = $status }
+    } catch {
+        return @{ ok = $false; camId = $CamId; error = $_.Exception.Message }
+    }
+}
+
+$script:RunspacePool = $null
+
+function Initialize-RunspacePool {
+    $maxThreads = [Math]::Max($script:Config.cameras.Count, 4)
+    $script:RunspacePool = [runspacefactory]::CreateRunspacePool(1, $maxThreads)
+    $script:RunspacePool.Open()
+    Log-Info "RunspacePool inicializado: max=$maxThreads threads"
+}
+
 function Invoke-CaptureLoop {
     $camConfigs = @{}
     foreach ($cam in $script:Config.cameras) {
         $camConfigs[$cam.cam_id] = $cam
     }
 
+    # Verificar timeouts primero
     foreach ($camId in @($script:StreamingCams.Keys)) {
-        # Verificar timeout
         if ($script:StreamTimeout.ContainsKey($camId)) {
             if ((Get-Date) -gt $script:StreamTimeout[$camId]) {
                 Log-Info "Timeout alcanzado para cam=$camId"
                 Stop-CameraStream -CamId $camId
-                continue
             }
         }
+    }
 
+    if ($script:StreamingCams.Count -eq 0) { return }
+
+    # Lanzar captura paralela de todas las camaras activas
+    $jobs = @()
+
+    foreach ($camId in @($script:StreamingCams.Keys)) {
         $streamInfo = $script:StreamingCams[$camId]
         if (-not $streamInfo) { continue }
-
         $camConfig = $camConfigs[$camId]
-        if (-not $camConfig) {
-            Log-Warn "Camara $camId no encontrada en config"
-            continue
+        if (-not $camConfig) { continue }
+
+        $ps = [powershell]::Create()
+        $ps.RunspacePool = $script:RunspacePool
+        $ps.AddScript($script:CaptureScriptBlock).AddParameters(@{
+            SnapshotUrl = $camConfig.snapshot_url
+            Username    = $camConfig.username
+            Password    = $camConfig.password
+            AuthType    = if ($camConfig.auth_type) { $camConfig.auth_type } else { "digest" }
+            BackendUrl  = $script:Config.backend_url
+            SiteId      = $script:Config.site_id
+            CamId       = $camId
+            AgentToken  = $script:Config.agent_token
+            Fps         = $streamInfo.fps
+        }) | Out-Null
+
+        $handle = $ps.BeginInvoke()
+        $jobs += @{ ps = $ps; handle = $handle; camId = $camId }
+    }
+
+    # Esperar a que todos terminen (con timeout de 6s)
+    $deadline = (Get-Date).AddSeconds(6)
+    foreach ($job in $jobs) {
+        $remaining = ($deadline - (Get-Date)).TotalMilliseconds
+        if ($remaining -gt 0) {
+            $job.handle.AsyncWaitHandle.WaitOne([int]$remaining) | Out-Null
         }
 
-        # Capturar snapshot
-        $frameData = Get-Snapshot -CamConfig $camConfig
-
-        if ($frameData -and $frameData.Length -gt 100) {
-            # Enviar al backend
-            $sent = Send-Frame -FrameData $frameData -CamId $camId -CurrentFps $streamInfo.fps
-            if ($sent) {
-                $streamInfo.frameCount++
-            } else {
-                $streamInfo.errorCount++
+        if ($job.handle.IsCompleted) {
+            $result = $job.ps.EndInvoke($job.handle)
+            if ($result -and $result.Count -gt 0) {
+                $r = $result[0]
+                $info = $script:StreamingCams[$job.camId]
+                if ($r.ok) {
+                    if ($info) { $info.frameCount++ }
+                    Log-Debug "cam=$($job.camId) OK bytes=$($r.bytes)"
+                } else {
+                    if ($info) { $info.errorCount++ }
+                    if ($info -and $info.errorCount % 10 -eq 0) {
+                        Log-Warn "cam=$($job.camId) error: $($r.error) (total=$($info.errorCount))"
+                    }
+                }
             }
         } else {
-            $streamInfo.errorCount++
-            if ($streamInfo.errorCount % 10 -eq 0) {
-                Log-Warn "cam=$camId acumula $($streamInfo.errorCount) errores de captura"
-            }
+            Log-Warn "cam=$($job.camId) timeout en captura paralela"
         }
+        $job.ps.Dispose()
     }
 }
 
@@ -474,17 +608,14 @@ function Start-AgentLoop {
                 Process-Command -Cmd $cmd
             }
 
-            # 2. Si hay camaras activas, capturar y enviar
+            # 2. Si hay camaras activas, capturar y enviar (paralelo)
             if ($script:StreamingCams.Count -gt 0) {
                 Invoke-CaptureLoop
-
-                # Calcular delay basado en FPS mas alto entre las camaras activas
-                $maxFps = ($script:StreamingCams.Values | ForEach-Object { $_.fps } | Measure-Object -Maximum).Maximum
-                if ($maxFps -le 0) { $maxFps = 1 }
-                $delayMs = [int](1000 / $maxFps)
-                Start-Sleep -Milliseconds $delayMs
+                # Minimo delay entre ciclos - las camaras se capturan en paralelo
+                # El tiempo real del ciclo lo domina la camara mas lenta
+                Start-Sleep -Milliseconds 40
             } else {
-                # Estado idle - polling lento para comandos
+                # Estado idle - polling cada 1s para comandos
                 Start-Sleep -Milliseconds 1000
             }
 
