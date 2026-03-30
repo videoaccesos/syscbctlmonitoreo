@@ -455,7 +455,7 @@ export default function MonitoristasPage() {
 
   // -----------------------------------------------------------
   // Enviar start/stop_stream al agente remoto cuando se
-  // selecciona una privada (independiente del panel de video)
+  // selecciona una privada + keepalive periodico
   // -----------------------------------------------------------
   useEffect(() => {
     const privId = incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : 0);
@@ -470,7 +470,7 @@ export default function MonitoristasPage() {
             site_id: String(privId),
             cmd,
             fps: 25,
-            duration: 600,
+            duration: 300,
           }),
         });
       } catch {
@@ -481,10 +481,16 @@ export default function MonitoristasPage() {
     // Enviar start_stream en cuanto hay una privada seleccionada
     sendCmd("start_stream");
 
+    // Keepalive: re-enviar start_stream cada 4 minutos para que no expire el timeout de 5 min
+    const keepalive = setInterval(() => {
+      sendCmd("start_stream");
+    }, 4 * 60 * 1000);
+
     // Abrir panel de video automaticamente
     setShowVideo(true);
 
     return () => {
+      clearInterval(keepalive);
       // Cleanup: detener transmision al cambiar/deseleccionar privada
       sendCmd("stop_stream");
     };

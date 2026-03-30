@@ -61,16 +61,16 @@ export async function POST(request: NextRequest) {
     let shouldPublish = true;
 
     if (cmd === "start_stream") {
-      const viewers = addViewer(String(site_id));
-      payload.fps = fps || 2;
-      payload.duration = duration || 600;
+      const currentViewers = getViewerCount(String(site_id));
+      if (currentViewers === 0) {
+        // Primer viewer - registrar e incrementar
+        addViewer(String(site_id));
+      }
+      // Siempre encolar el comando (actua como keepalive para renovar timeout)
+      payload.fps = fps || 25;
+      payload.duration = duration || 300;
       payload.quality = quality || 55;
       payload.width = width || 640;
-      // Si ya habia viewers, el agente ya esta transmitiendo - no reenviar
-      if (viewers > 1) {
-        logger.info(TAG, `start_stream site=${site_id} - ya hay ${viewers} viewers, no reenviar comando`);
-        shouldPublish = false;
-      }
     }
 
     if (cmd === "stop_stream") {
