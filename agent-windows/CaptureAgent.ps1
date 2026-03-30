@@ -84,6 +84,15 @@ function Initialize-Agent {
 
     $script:AgentState = "idle"
     Log-Info "Agente en estado IDLE"
+
+    # Auto-start: si esta configurado, iniciar streaming automaticamente
+    if ($script:Config.defaults.auto_start -eq $true) {
+        $fps = $script:Config.defaults.fps
+        Log-Info "AUTO-START habilitado: iniciando todas las camaras a ${fps} FPS (continuo)"
+        foreach ($cam in $script:Config.cameras) {
+            Start-CameraStream -CamId $cam.cam_id -Fps $fps -DurationSec 0
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -319,10 +328,16 @@ function Start-CameraStream {
         frameCount = 0
         errorCount = 0
     }
-    $script:StreamTimeout[$CamId] = (Get-Date).AddSeconds($DurationSec)
+    if ($DurationSec -gt 0) {
+        $script:StreamTimeout[$CamId] = (Get-Date).AddSeconds($DurationSec)
+    } else {
+        # Sin timeout = streaming continuo
+        $script:StreamTimeout.Remove($CamId)
+    }
     $script:AgentState = "streaming"
 
-    Log-Info "STREAM START: cam=$CamId fps=$Fps duration=${DurationSec}s"
+    $durLabel = if ($DurationSec -gt 0) { "${DurationSec}s" } else { "continuo" }
+    Log-Info "STREAM START: cam=$CamId fps=$Fps duration=$durLabel"
 }
 
 function Stop-CameraStream {
