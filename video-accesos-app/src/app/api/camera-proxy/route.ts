@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { getFrame } from "@/lib/frame-store";
 import crypto from "crypto";
 
 const TAG = "camera-proxy";
@@ -564,6 +565,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // --- Verificar si hay un frame reciente del agente remoto ---
+    // Si existe un frame fresco en el store, lo servimos directamente
+    // sin necesidad de conectar al DVR (funciona detras de NAT/CGNAT)
+    const agentFrame = getFrame(String(privada.id), camIndex);
+    if (agentFrame) {
+      const ageMs = Date.now() - agentFrame.receivedAt;
+      diag.log("AGENT_FRAME_HIT", `age=${ageMs}ms bytes=${agentFrame.data.length} host=${agentFrame.agentHost || "?"}`);
+      logger.info(TAG, `[${reqId}] AGENT FRAME | Cam ${camIndex} | ${privada.descripcion} | ${agentFrame.data.length} bytes | age=${ageMs}ms`);
+      return new NextResponse(new Uint8Array(agentFrame.data), {
+        status: 200,
+        headers: {
+          "Content-Type": agentFrame.contentType || "image/jpeg",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+          "X-Camera-Index": String(camIndex),
+          "X-Privada": privada.descripcion,
+          "X-Frame-Source": "agent",
+          "X-Frame-Age-Ms": String(ageMs),
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+    diag.log("AGENT_FRAME_MISS", `site=${privada.id} cam=${camIndex}`);
+
+    // --- Fallback: fetch directo al DVR (modo legacy) ---
     // Obtener credenciales
     const creds = findCredentials(cameraUrl, privada);
     logger.info(TAG, `Credenciales: user="${creds.user}" | pass="${creds.pass ? "***" : "(vacio)"}"`);

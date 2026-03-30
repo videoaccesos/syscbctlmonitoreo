@@ -1,0 +1,42 @@
+{
+  "site_id": "5",
+  "agent_token": "CHANGE_ME_token_seguro_generado",
+  "backend_url": "https://TU_SERVIDOR:3000/api/camera-frames",
+  "mqtt": {
+    "broker": "mqtt.tudominio.com",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "client_id_prefix": "cam-agent"
+  },
+  "cameras": [
+    {
+      "cam_id": 1,
+      "alias": "Entrada Principal",
+      "snapshot_url": "http://192.168.1.64/ISAPI/Streaming/channels/702/picture",
+      "username": "admin",
+      "password": "v1de0acces0s",
+      "auth_type": "digest"
+    },
+    {
+      "cam_id": 2,
+      "alias": "Estacionamiento",
+      "snapshot_url": "http://192.168.1.64/ISAPI/Streaming/channels/802/picture",
+      "username": "admin",
+      "password": "v1de0acces0s",
+      "auth_type": "digest"
+    }
+  ],
+  "defaults": {
+    "fps": 2,
+    "quality": 55,
+    "width": 640,
+    "max_duration_sec": 300,
+    "heartbeat_interval_sec": 30
+  },
+  "log": {
+    "path": "logs",
+    "max_size_mb": 10,
+    "level": "INFO"
+  }
+}
