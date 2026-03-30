@@ -82,8 +82,11 @@ function Initialize-Agent {
         Log-Info "  Cam $($cam.cam_id): $($cam.alias) -> $($cam.snapshot_url)"
     }
 
+    # Inicializar URL de polling
+    Initialize-PollUrl
+
     $script:AgentState = "idle"
-    Log-Info "Agente en estado IDLE"
+    Log-Info "Agente en estado IDLE - esperando comandos via polling HTTP"
 
     # Auto-start: si esta configurado, iniciar streaming automaticamente
     if ($script:Config.defaults.auto_start -eq $true) {
@@ -252,30 +255,55 @@ function Send-Frame {
 }
 
 # ---------------------------------------------------------------------------
-# Manejo de comandos MQTT (polling via archivo de comandos)
+# Polling HTTP para recibir comandos del servidor
 # ---------------------------------------------------------------------------
-# NOTA: PowerShell 5.1 no tiene cliente MQTT nativo.
-# Fase 1: Usamos un archivo de comandos como mecanismo simple.
-# El archivo cmd.json es escrito por un script auxiliar que escucha MQTT
-# (mosquitto_sub) o por el backend directamente.
-# Fase 2: Migrar a cliente MQTT nativo con M2Mqtt.dll
-#
-# Alternativa incluida: polling HTTP al backend para obtener comandos.
-# ---------------------------------------------------------------------------
+$script:PollUrl = $null
+$script:LastPollTime = [DateTime]::MinValue
+$script:PollIntervalSec = 2  # Cada 2 segundos
 
-$script:CmdFile = Join-Path $PSScriptRoot "cmd.json"
+function Initialize-PollUrl {
+    # Construir URL de polling a partir de backend_url
+    # backend_url = https://accesoswhatsapp.info/api/camera-frames
+    # poll_url    = https://accesoswhatsapp.info/api/camera-frames/poll?site_id=XX
+    $baseUrl = $script:Config.backend_url -replace '/+$', ''
+    $script:PollUrl = "$baseUrl/poll?site_id=$($script:Config.site_id)"
+    Log-Info "Poll URL: $($script:PollUrl)"
+}
 
 function Get-PendingCommand {
-    # Opcion 1: Archivo de comandos local
-    if (Test-Path $script:CmdFile) {
-        try {
-            $cmdJson = Get-Content $script:CmdFile -Raw | ConvertFrom-Json
-            Remove-Item $script:CmdFile -Force -ErrorAction SilentlyContinue
-            Log-Info "Comando recibido de archivo: $($cmdJson.cmd)"
-            return $cmdJson
-        } catch {
-            Log-Warn "Error leyendo cmd.json: $($_.Exception.Message)"
-            Remove-Item $script:CmdFile -Force -ErrorAction SilentlyContinue
+    # Solo hacer poll cada N segundos
+    if (((Get-Date) - $script:LastPollTime).TotalSeconds -lt $script:PollIntervalSec) {
+        return $null
+    }
+    $script:LastPollTime = Get-Date
+
+    try {
+        $request = [System.Net.HttpWebRequest]::Create($script:PollUrl)
+        $request.Method = "GET"
+        $request.Timeout = 5000
+        $request.Headers.Add("X-Agent-Token", $script:Config.agent_token)
+        $request.UserAgent = "CaptureAgent/1.0"
+
+        $response = $request.GetResponse()
+        $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+        $body = $reader.ReadToEnd()
+        $response.Close()
+
+        $result = $body | ConvertFrom-Json
+
+        if ($result.commands -and $result.commands.Count -gt 0) {
+            Log-Info "Poll: $($result.commands.Count) comando(s) recibido(s)"
+            # Retornar el primer comando; los demas se procesan en la siguiente iteracion
+            # Encolarlos todos procesando uno por uno
+            foreach ($cmd in $result.commands) {
+                Log-Info "  Comando: $($cmd.cmd)"
+            }
+            return $result.commands[0]
+        }
+    } catch {
+        # Solo loguear errores cada 30 segundos para no llenar el log
+        if (((Get-Date) - $script:LastPollTime).TotalSeconds -lt 1) {
+            Log-Debug "Poll error: $($_.Exception.Message)"
         }
     }
     return $null

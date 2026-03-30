@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { clearSiteFrames, addViewer, removeViewer, getViewerCount } from "@/lib/frame-store";
+import { clearSiteFrames, addViewer, removeViewer, getViewerCount, pushCommand } from "@/lib/frame-store";
 
 const TAG = "camera-cmd";
 
@@ -103,52 +103,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // --- Publicar directamente al broker MQTT ---
-    const brokerHost = process.env.MQTT_BROKER_HOST || "50.62.182.131";
-    const brokerPort = parseInt(process.env.MQTT_BROKER_PORT || "1883");
-    const brokerUser = process.env.MQTT_BROKER_USER || "admin";
-    const brokerPass = process.env.MQTT_BROKER_PASS || "v1de0acces0s";
+    // --- Encolar comando para que el agente lo recoja via polling HTTP ---
+    pushCommand(String(site_id), {
+      cmd,
+      fps: payload.fps as number | undefined,
+      duration: payload.duration as number | undefined,
+      quality: payload.quality as number | undefined,
+      width: payload.width as number | undefined,
+      cam_id: camTarget > 0 ? camTarget : undefined,
+      ts: Date.now(),
+    });
 
-    try {
-      const mqtt = await import("mqtt");
-      const client = mqtt.connect(`mqtt://${brokerHost}:${brokerPort}`, {
-        username: brokerUser,
-        password: brokerPass,
-        connectTimeout: 5000,
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          client.end(true);
-          reject(new Error("MQTT connect timeout (5s)"));
-        }, 5000);
-
-        client.on("connect", () => {
-          client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
-            clearTimeout(timeout);
-            client.end();
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-
-        client.on("error", (err) => {
-          clearTimeout(timeout);
-          client.end(true);
-          reject(err);
-        });
-      });
-
-      logger.info(TAG, `MQTT publicado OK: ${topic} -> ${JSON.stringify(payload)}`);
-    } catch (mqttErr) {
-      const msg = mqttErr instanceof Error ? mqttErr.message : String(mqttErr);
-      logger.error(TAG, `MQTT publish error: ${msg}`);
-      return NextResponse.json({
-        ok: false,
-        error: `Error al publicar comando MQTT: ${msg}`,
-        topic,
-      }, { status: 502 });
-    }
+    logger.info(TAG, `Comando encolado para polling: site=${site_id} -> ${JSON.stringify(payload)}`);
 
     return NextResponse.json({
       ok: true,

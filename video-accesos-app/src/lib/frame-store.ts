@@ -167,3 +167,33 @@ export function removeViewer(siteId: string): number {
 export function getViewerCount(siteId: string): number {
   return viewers.get(siteId) || 0;
 }
+
+// ---------------------------------------------------------------------------
+// Cola de comandos pendientes para agentes (polling HTTP)
+// ---------------------------------------------------------------------------
+interface PendingCommand {
+  cmd: string;
+  fps?: number;
+  duration?: number;
+  quality?: number;
+  width?: number;
+  cam_id?: number;
+  ts: number;
+}
+
+const pendingCommands = new Map<string, PendingCommand[]>();
+
+/** Encolar un comando para que el agente lo recoja via polling */
+export function pushCommand(siteId: string, command: PendingCommand): void {
+  if (!pendingCommands.has(siteId)) {
+    pendingCommands.set(siteId, []);
+  }
+  pendingCommands.get(siteId)!.push(command);
+}
+
+/** El agente recoge y vacía sus comandos pendientes */
+export function popCommands(siteId: string): PendingCommand[] {
+  const cmds = pendingCommands.get(siteId) || [];
+  pendingCommands.delete(siteId);
+  return cmds;
+}
