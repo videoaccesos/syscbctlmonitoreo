@@ -125,6 +125,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/((?!login|api/auth|_next/static|_next/image|favicon.ico|sounds/).*)",
+    "/((?!login|api/auth|api/camera-frames|_next/static|_next/image|favicon.ico|sounds/).*)",
   ],
 };
