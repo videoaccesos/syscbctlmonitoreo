@@ -103,57 +103,51 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // --- Publicar al broker MQTT ---
-    // Usamos el endpoint del Bot Orquestador que ya maneja MQTT
-    const mqttBrokerUrl = process.env.MQTT_PUBLISH_URL;
-    const mqttApiKey = process.env.MQTT_API_KEY || "";
+    // --- Publicar directamente al broker MQTT ---
+    const brokerHost = process.env.MQTT_BROKER_HOST || "50.62.182.131";
+    const brokerPort = parseInt(process.env.MQTT_BROKER_PORT || "1883");
+    const brokerUser = process.env.MQTT_BROKER_USER || "admin";
+    const brokerPass = process.env.MQTT_BROKER_PASS || "v1de0acces0s";
 
-    if (mqttBrokerUrl) {
-      // Publicar via API HTTP del broker/orquestador
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (mqttApiKey) {
-        headers["X-API-Key"] = mqttApiKey;
-      }
+    try {
+      const mqtt = await import("mqtt");
+      const client = mqtt.connect(`mqtt://${brokerHost}:${brokerPort}`, {
+        username: brokerUser,
+        password: brokerPass,
+        connectTimeout: 5000,
+      });
 
-      try {
-        const mqttRes = await fetch(mqttBrokerUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            topic,
-            payload: JSON.stringify(payload),
-            qos: 1,
-          }),
-          signal: AbortSignal.timeout(10000),
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          client.end(true);
+          reject(new Error("MQTT connect timeout (5s)"));
+        }, 5000);
+
+        client.on("connect", () => {
+          client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
+            clearTimeout(timeout);
+            client.end();
+            if (err) reject(err);
+            else resolve();
+          });
         });
 
-        if (!mqttRes.ok) {
-          const errText = await mqttRes.text().catch(() => "");
-          logger.warn(TAG, `MQTT publish error: HTTP ${mqttRes.status} ${errText}`);
-          return NextResponse.json({
-            ok: false,
-            error: "Error al publicar comando MQTT",
-            mqtt_status: mqttRes.status,
-            topic,
-          }, { status: 502 });
-        }
+        client.on("error", (err) => {
+          clearTimeout(timeout);
+          client.end(true);
+          reject(err);
+        });
+      });
 
-        logger.info(TAG, `MQTT publicado OK: ${topic} -> ${JSON.stringify(payload)}`);
-      } catch (fetchErr) {
-        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-        logger.error(TAG, `MQTT publish fetch error: ${msg}`);
-        return NextResponse.json({
-          ok: false,
-          error: `Error de conexion al broker: ${msg}`,
-          topic,
-        }, { status: 502 });
-      }
-    } else {
-      // Sin MQTT configurado - registrar el comando para referencia
-      // En produccion, configurar MQTT_PUBLISH_URL
-      logger.warn(TAG, `MQTT no configurado (MQTT_PUBLISH_URL vacio). Comando registrado localmente: ${topic} -> ${JSON.stringify(payload)}`);
+      logger.info(TAG, `MQTT publicado OK: ${topic} -> ${JSON.stringify(payload)}`);
+    } catch (mqttErr) {
+      const msg = mqttErr instanceof Error ? mqttErr.message : String(mqttErr);
+      logger.error(TAG, `MQTT publish error: ${msg}`);
+      return NextResponse.json({
+        ok: false,
+        error: `Error al publicar comando MQTT: ${msg}`,
+        topic,
+      }, { status: 502 });
     }
 
     return NextResponse.json({

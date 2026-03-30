@@ -455,7 +455,7 @@ export default function MonitoristasPage() {
 
   // -----------------------------------------------------------
   // Enviar start/stop_stream al agente remoto cuando se
-  // muestran/ocultan las camaras
+  // selecciona una privada (independiente del panel de video)
   // -----------------------------------------------------------
   useEffect(() => {
     const privId = incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : 0);
@@ -478,15 +478,17 @@ export default function MonitoristasPage() {
       }
     };
 
-    if (showVideo) {
-      sendCmd("start_stream");
-    }
+    // Enviar start_stream en cuanto hay una privada seleccionada
+    sendCmd("start_stream");
+
+    // Abrir panel de video automaticamente
+    setShowVideo(true);
 
     return () => {
-      // Cleanup: detener transmision al cerrar camaras o cambiar privada
+      // Cleanup: detener transmision al cambiar/deseleccionar privada
       sendCmd("stop_stream");
     };
-  }, [showVideo, formPrivadaId, incomingCallResidencia]);
+  }, [formPrivadaId, incomingCallResidencia]);
 
   // -----------------------------------------------------------
   // ESC key closes camera panel
