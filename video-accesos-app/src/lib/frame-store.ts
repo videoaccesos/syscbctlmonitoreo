@@ -138,3 +138,32 @@ export function clearSiteFrames(siteId: string): void {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Viewer reference counting - evita detener el agente si otro operador
+// aun tiene las camaras abiertas para el mismo sitio
+// ---------------------------------------------------------------------------
+const viewers = new Map<string, number>();
+
+/** Registrar que un operador abrio las camaras de un sitio */
+export function addViewer(siteId: string): number {
+  const count = (viewers.get(siteId) || 0) + 1;
+  viewers.set(siteId, count);
+  return count;
+}
+
+/** Registrar que un operador cerro las camaras. Retorna viewers restantes. */
+export function removeViewer(siteId: string): number {
+  const count = Math.max((viewers.get(siteId) || 0) - 1, 0);
+  if (count === 0) {
+    viewers.delete(siteId);
+  } else {
+    viewers.set(siteId, count);
+  }
+  return count;
+}
+
+/** Viewers activos para un sitio */
+export function getViewerCount(siteId: string): number {
+  return viewers.get(siteId) || 0;
+}

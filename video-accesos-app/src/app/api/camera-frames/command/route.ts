@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { clearSiteFrames } from "@/lib/frame-store";
+import { clearSiteFrames, addViewer, removeViewer, getViewerCount } from "@/lib/frame-store";
 
 const TAG = "camera-cmd";
 
@@ -58,20 +58,50 @@ export async function POST(request: NextRequest) {
       : `site/${site_id}/agent/cmd`;
 
     const payload: Record<string, unknown> = { cmd };
+    let shouldPublish = true;
 
     if (cmd === "start_stream") {
+      const viewers = addViewer(String(site_id));
       payload.fps = fps || 2;
-      payload.duration = duration || 120;
+      payload.duration = duration || 600;
       payload.quality = quality || 55;
       payload.width = width || 640;
+      // Si ya habia viewers, el agente ya esta transmitiendo - no reenviar
+      if (viewers > 1) {
+        logger.info(TAG, `start_stream site=${site_id} - ya hay ${viewers} viewers, no reenviar comando`);
+        shouldPublish = false;
+      }
     }
 
     if (cmd === "stop_stream") {
-      // Limpiar frames del store para este sitio
+      const remaining = removeViewer(String(site_id));
+      if (remaining > 0) {
+        // Otros operadores aun necesitan el video - no detener
+        logger.info(TAG, `stop_stream site=${site_id} - quedan ${remaining} viewers, NO detener agente`);
+        return NextResponse.json({
+          ok: true,
+          skipped: true,
+          reason: `${remaining} viewer(s) aun activos`,
+          topic,
+          ts: new Date().toISOString(),
+        });
+      }
+      // Ultimo viewer - si detener
       clearSiteFrames(String(site_id));
     }
 
-    logger.info(TAG, `Comando: ${cmd} -> topic=${topic}`, payload);
+    logger.info(TAG, `Comando: ${cmd} -> topic=${topic} publish=${shouldPublish} viewers=${getViewerCount(String(site_id))}`, payload);
+
+    // Si no hay que publicar (ya habia viewers activos), retornar OK
+    if (!shouldPublish) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "Agent already streaming for other viewers",
+        topic,
+        ts: new Date().toISOString(),
+      });
+    }
 
     // --- Publicar al broker MQTT ---
     // Usamos el endpoint del Bot Orquestador que ya maneja MQTT
