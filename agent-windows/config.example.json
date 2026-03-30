@@ -28,7 +28,7 @@
     }
   ],
   "defaults": {
-    "auto_start": true,
+    "auto_start": false,
     "fps": 2,
     "quality": 55,
     "width": 640,

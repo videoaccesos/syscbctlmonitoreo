@@ -454,6 +454,41 @@ export default function MonitoristasPage() {
   }, [formPrivadaId]);
 
   // -----------------------------------------------------------
+  // Enviar start/stop_stream al agente remoto cuando se
+  // muestran/ocultan las camaras
+  // -----------------------------------------------------------
+  useEffect(() => {
+    const privId = incomingCallResidencia?.privada?.id || (formPrivadaId ? Number(formPrivadaId) : 0);
+    if (!privId) return;
+
+    const sendCmd = async (cmd: string) => {
+      try {
+        await fetch("/api/camera-frames/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_id: String(privId),
+            cmd,
+            fps: 2,
+            duration: 600,
+          }),
+        });
+      } catch {
+        // Silencioso - no bloquear la UI si el comando falla
+      }
+    };
+
+    if (showVideo) {
+      sendCmd("start_stream");
+    }
+
+    return () => {
+      // Cleanup: detener transmision al cerrar camaras o cambiar privada
+      sendCmd("stop_stream");
+    };
+  }, [showVideo, formPrivadaId, incomingCallResidencia]);
+
+  // -----------------------------------------------------------
   // ESC key closes camera panel
   // -----------------------------------------------------------
   useEffect(() => {
