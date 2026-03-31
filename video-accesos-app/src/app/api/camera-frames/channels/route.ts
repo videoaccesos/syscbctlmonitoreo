@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { getSiteChannels, setSiteChannels } from "@/lib/frame-store";
+import { getSiteChannels, setSiteChannels, listActiveFrames } from "@/lib/frame-store";
 
 const TAG = "camera-channels";
 
@@ -62,7 +62,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Se requiere site_id" }, { status: 400 });
   }
 
-  const channels = getSiteChannels(siteId);
+  let channels = getSiteChannels(siteId);
+
+  // Si no hay canales reportados, construir lista a partir de frames activos
+  if (!channels || channels.length === 0) {
+    const activeFrames = listActiveFrames().filter((f) => f.siteId === siteId);
+    if (activeFrames.length > 0) {
+      channels = activeFrames
+        .map((f) => ({
+          channel: f.camId,
+          code: `${f.camId}02`,
+          alias: `Canal ${f.camId}`,
+          bytes: f.bytes,
+        }))
+        .sort((a, b) => a.channel - b.channel);
+    }
+  }
 
   return NextResponse.json({
     ok: true,
