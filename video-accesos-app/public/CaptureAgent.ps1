@@ -21,7 +21,8 @@
 
 param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot "config.json"),
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$RunAsService  # Flag interno: la tarea programada pasa esto para ejecutar el loop
 )
 
 $TaskName = "VideoAccesos-CaptureAgent"
@@ -182,8 +183,15 @@ function Run-SetupWizard {
 function Install-AsScheduledTask {
     $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existing) {
-        # Ya esta instalada
-        return $true
+        # Verificar si esta configurada con SYSTEM (version vieja) - si es asi, re-registrar
+        $taskUser = ($existing.Principal.UserId)
+        if ($taskUser -eq "SYSTEM" -or $taskUser -eq "NT AUTHORITY\SYSTEM") {
+            Write-Host "Actualizando tarea de SYSTEM a usuario actual..." -ForegroundColor Cyan
+            Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        } else {
+            # Ya esta instalada correctamente
+            return $true
+        }
     }
 
     # Verificar admin
@@ -224,15 +232,19 @@ function Install-AsScheduledTask {
 
     $action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`"" `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`" -RunAsService" `
         -WorkingDirectory $PSScriptRoot
+
+    # Usar el usuario actual (no SYSTEM) para que el agente tenga acceso
+    # a los DVR en la red local con las credenciales del usuario
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
     Register-ScheduledTask `
         -TaskName $TaskName `
         -Action $action `
         -Trigger @($triggerStartup, $triggerRepeat) `
         -Settings $settings `
-        -User "SYSTEM" `
+        -User $currentUser `
         -RunLevel Highest `
         -Description "VideoAccesos: Agente de captura de frames DVR. Se relanza automaticamente cada 3 min si se detiene."
 
@@ -873,7 +885,65 @@ if (-not (Test-Path $ConfigPath)) {
 }
 
 # --- PASO 2: Auto-instalar como tarea programada ---
-Install-AsScheduledTask
+$taskInstalled = Install-AsScheduledTask
+
+# --- PASO 2b: Si fue ejecutado interactivamente (sin -RunAsService), delegar a la tarea programada ---
+if (-not $RunAsService -and $taskInstalled) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "  AGENTE INSTALADO COMO SERVICIO" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Iniciando tarea programada en background..." -ForegroundColor Cyan
+
+    # Detener cualquier instancia previa de la tarea
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+
+    # Limpiar lock viejo si existe
+    $lockFile = Join-Path $PSScriptRoot "agent.lock"
+    Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+
+    # Iniciar la tarea programada (corre en background como el usuario actual)
+    Start-ScheduledTask -TaskName $TaskName
+
+    Start-Sleep -Seconds 3
+    $taskState = (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue).State
+
+    if ($taskState -eq "Running") {
+        Write-Host ""
+        Write-Host "El agente esta corriendo en BACKGROUND." -ForegroundColor Green
+        Write-Host "Puedes cerrar esta ventana sin problema." -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Comandos utiles:" -ForegroundColor Gray
+        Write-Host "  Estado:      Get-ScheduledTask -TaskName '$TaskName' | Format-Table TaskName, State" -ForegroundColor Gray
+        Write-Host "  Detener:     Stop-ScheduledTask '$TaskName'" -ForegroundColor Gray
+        Write-Host "  Ver logs:    Get-Content $PSScriptRoot\logs\*.log -Tail 20" -ForegroundColor Gray
+        Write-Host "  Desinstalar: .\CaptureAgent.ps1 -Uninstall" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Cerrando en 10 segundos..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 10
+    } else {
+        Write-Host "AVISO: La tarea no inicio correctamente (estado: $taskState)." -ForegroundColor Yellow
+        Write-Host "Ejecutando el agente en esta ventana como respaldo..." -ForegroundColor Yellow
+        Write-Host "NO cierres esta ventana mientras quieras que el agente funcione." -ForegroundColor Red
+        # Caer al loop de abajo en vez de salir
+        $RunAsService = $true
+    }
+
+    if (-not $RunAsService) {
+        exit 0
+    }
+}
+
+# Si llego aqui sin tarea instalada (no es admin), avisar
+if (-not $RunAsService -and -not $taskInstalled) {
+    Write-Host ""
+    Write-Host "AVISO: Ejecutando en modo manual (sin tarea programada)." -ForegroundColor Yellow
+    Write-Host "Si cierras esta ventana, el agente se detendra." -ForegroundColor Yellow
+    Write-Host "Para instalar como servicio, ejecuta como Administrador." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 # --- PASO 3: Verificar que no haya otra instancia corriendo ---
 $lockFile = Join-Path $PSScriptRoot "agent.lock"
