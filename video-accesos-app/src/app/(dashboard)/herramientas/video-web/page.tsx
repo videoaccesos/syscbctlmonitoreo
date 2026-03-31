@@ -21,11 +21,12 @@ export default function VideoWebPage() {
   const [channels, setChannels] = useState<SiteChannel[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [waitingChannels, setWaitingChannels] = useState(false);
   const intervalsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const imgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
   const mountedRef = useRef(true);
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const channelPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cargar lista de privadas
   useEffect(() => {
@@ -46,26 +47,29 @@ export default function VideoWebPage() {
       intervalsRef.current.forEach((t) => clearTimeout(t));
       intervalsRef.current.clear();
       if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+      if (channelPollRef.current) clearInterval(channelPollRef.current);
     };
+  }, []);
+
+  const fetchChannels = useCallback(async (siteId: string): Promise<SiteChannel[]> => {
+    try {
+      const res = await fetch(`/api/camera-frames/channels?site_id=${siteId}`);
+      const data = await res.json();
+      if (data.channels && data.channels.length > 0) {
+        return data.channels;
+      }
+    } catch {}
+    return [];
   }, []);
 
   // Cargar canales cuando se selecciona un sitio
   const loadChannels = useCallback(async (siteId: string) => {
     if (!siteId) return;
     setLoading(true);
-    try {
-      const res = await fetch(`/api/camera-frames/channels?site_id=${siteId}`);
-      const data = await res.json();
-      if (data.channels && data.channels.length > 0) {
-        setChannels(data.channels);
-      } else {
-        setChannels([]);
-      }
-    } catch {
-      setChannels([]);
-    }
+    const chs = await fetchChannels(siteId);
+    setChannels(chs);
     setLoading(false);
-  }, []);
+  }, [fetchChannels]);
 
   const sendCommand = useCallback(async (siteId: string, cmd: string, mode?: string) => {
     try {
@@ -83,29 +87,22 @@ export default function VideoWebPage() {
     } catch {}
   }, []);
 
-  const startStreaming = useCallback(() => {
-    if (!selectedSiteId || channels.length === 0) return;
+  const startImageRefresh = useCallback((siteId: string, chs: SiteChannel[]) => {
+    // Limpiar anteriores
+    intervalsRef.current.forEach((t) => clearTimeout(t));
+    intervalsRef.current.clear();
+    imgRefs.current.clear();
 
-    sendCommand(selectedSiteId, "start_stream", "all");
-    setStreaming(true);
-
-    // Keepalive
-    if (keepaliveRef.current) clearInterval(keepaliveRef.current);
-    keepaliveRef.current = setInterval(() => {
-      sendCommand(selectedSiteId, "start_stream", "all");
-    }, 4 * 60 * 1000);
-
-    // Iniciar refresh de imagenes
-    channels.forEach((ch) => {
+    chs.forEach((ch) => {
       const img = new Image();
       imgRefs.current.set(ch.channel, img);
 
       const refreshCamera = () => {
-        if (!mountedRef.current || !streaming) return;
+        if (!mountedRef.current) return;
         const newImg = imgRefs.current.get(ch.channel);
         if (!newImg) return;
 
-        const url = `/api/camera-proxy?privada_id=${selectedSiteId}&cam=${ch.channel}&t=${Date.now()}`;
+        const url = `/api/camera-proxy?privada_id=${siteId}&cam=${ch.channel}&t=${Date.now()}`;
         newImg.onload = () => {
           if (!mountedRef.current) return;
           const container = document.getElementById(`cam-${ch.channel}`);
@@ -126,19 +123,67 @@ export default function VideoWebPage() {
       };
       refreshCamera();
     });
-  }, [selectedSiteId, channels, sendCommand, streaming]);
+  }, []);
+
+  const startStreaming = useCallback(async () => {
+    if (!selectedSiteId) return;
+
+    // Siempre enviar start_stream primero
+    sendCommand(selectedSiteId, "start_stream", "all");
+    setStreaming(true);
+
+    // Keepalive
+    if (keepaliveRef.current) clearInterval(keepaliveRef.current);
+    keepaliveRef.current = setInterval(() => {
+      sendCommand(selectedSiteId, "start_stream", "all");
+    }, 4 * 60 * 1000);
+
+    // Si ya tenemos canales, iniciar refresh inmediatamente
+    if (channels.length > 0) {
+      startImageRefresh(selectedSiteId, channels);
+      return;
+    }
+
+    // Si no hay canales, esperar a que el agente los reporte
+    setWaitingChannels(true);
+    let attempts = 0;
+    const maxAttempts = 15; // 30 segundos max
+
+    if (channelPollRef.current) clearInterval(channelPollRef.current);
+    channelPollRef.current = setInterval(async () => {
+      attempts++;
+      if (!mountedRef.current || attempts > maxAttempts) {
+        if (channelPollRef.current) clearInterval(channelPollRef.current);
+        setWaitingChannels(false);
+        return;
+      }
+
+      const chs = await fetchChannels(selectedSiteId);
+      if (chs.length > 0) {
+        if (channelPollRef.current) clearInterval(channelPollRef.current);
+        setChannels(chs);
+        setWaitingChannels(false);
+        startImageRefresh(selectedSiteId, chs);
+      }
+    }, 2000);
+  }, [selectedSiteId, channels, sendCommand, fetchChannels, startImageRefresh]);
 
   const stopStreaming = useCallback(() => {
     if (selectedSiteId) {
       sendCommand(selectedSiteId, "stop_stream");
     }
     setStreaming(false);
+    setWaitingChannels(false);
     intervalsRef.current.forEach((t) => clearTimeout(t));
     intervalsRef.current.clear();
     imgRefs.current.clear();
     if (keepaliveRef.current) {
       clearInterval(keepaliveRef.current);
       keepaliveRef.current = null;
+    }
+    if (channelPollRef.current) {
+      clearInterval(channelPollRef.current);
+      channelPollRef.current = null;
     }
   }, [selectedSiteId, sendCommand]);
 
@@ -198,11 +243,12 @@ export default function VideoWebPage() {
 
           {/* Info de canales */}
           <div className="text-sm text-gray-500">
-            {loading && <span className="flex items-center gap-1"><RefreshCw className="h-4 w-4 animate-spin" /> Cargando canales...</span>}
-            {!loading && channels.length > 0 && (
+            {loading && <span className="flex items-center gap-1"><RefreshCw className="h-4 w-4 animate-spin" /> Cargando...</span>}
+            {waitingChannels && <span className="flex items-center gap-1 text-amber-600"><RefreshCw className="h-4 w-4 animate-spin" /> Esperando respuesta del agente...</span>}
+            {!loading && !waitingChannels && channels.length > 0 && (
               <span className="text-green-600 font-medium">{channels.length} canales disponibles</span>
             )}
-            {!loading && selectedSiteId && channels.length === 0 && (
+            {!loading && !waitingChannels && selectedSiteId && channels.length === 0 && !streaming && (
               <span className="text-amber-600">Sin canales reportados. El agente debe estar activo.</span>
             )}
           </div>
@@ -212,7 +258,7 @@ export default function VideoWebPage() {
             {!streaming ? (
               <button
                 onClick={startStreaming}
-                disabled={channels.length === 0}
+                disabled={!selectedSiteId}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <Play className="h-4 w-4" />
@@ -274,6 +320,15 @@ export default function VideoWebPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Waiting state */}
+      {waitingChannels && channels.length === 0 && (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <RefreshCw className="h-12 w-12 mx-auto text-amber-400 mb-4 animate-spin" />
+          <h3 className="text-lg font-medium text-gray-600 mb-2">Conectando con el agente...</h3>
+          <p className="text-sm text-gray-400">Se envio el comando. Esperando que el agente reporte los canales disponibles.</p>
         </div>
       )}
 
