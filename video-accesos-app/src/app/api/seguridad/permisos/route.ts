@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
       "/procesos/correccion-vencimientos": "Corregir fechas de vencimiento de tarjetas masivamente",
       "/herramientas/conciliacion": "Analizar renovaciones vs pendientes por periodo y privada",
       "/herramientas/ingresos": "Ver ingresos esperados vs cobrados: mensualidades, tarjetas, remisiones",
+      "/herramientas/video-web": "Ver cámaras de video en vivo desde los DVR de las privadas",
       "/procesos/prenomina": "Generar prenómina quincenal de empleados",
       "/reportes/accesos-consultas": "Consultar historial de accesos con filtros",
       "/reportes/accesos-graficas": "Gráficas de accesos por periodo, privada y tipo",

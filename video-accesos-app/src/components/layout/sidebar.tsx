@@ -172,7 +172,7 @@ export function Sidebar() {
     children.some((child) => pathname.startsWith(child.href));
 
   return (
-    <aside className="w-64 bg-slate-900 text-white min-h-screen flex flex-col">
+    <aside className="w-64 bg-slate-900 text-white h-screen flex flex-col sticky top-0">
       {/* Header */}
       <div className="p-5 border-b border-slate-700">
         <div className="flex items-center gap-3">

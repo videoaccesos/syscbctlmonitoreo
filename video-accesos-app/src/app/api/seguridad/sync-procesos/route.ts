@@ -56,6 +56,7 @@ const CATALOGO_RAMAS: Array<{
       { nombre: "Conciliación de Tarjetas", funcion: "/herramientas/conciliacion", descripcion: "Analizar renovaciones vs pendientes por periodo y privada" },
       { nombre: "Dashboard de Ingresos", funcion: "/herramientas/ingresos", descripcion: "Ver ingresos esperados vs cobrados: mensualidades, tarjetas, remisiones" },
       { nombre: "Prenomina Quincenal", funcion: "/procesos/prenomina", descripcion: "Generar prenómina quincenal de empleados" },
+      { nombre: "Video Web", funcion: "/herramientas/video-web", descripcion: "Ver cámaras de video en vivo desde los DVR de las privadas" },
     ],
   },
   {
