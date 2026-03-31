@@ -194,10 +194,6 @@ export default function VideoWebPage() {
     if (siteId) loadChannels(siteId);
   };
 
-  const filteredPrivadas = privadas.filter((p) =>
-    p.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   // Grid columns based on channel count
   const gridCols =
     channels.length <= 1
@@ -232,7 +228,7 @@ export default function VideoWebPage() {
                 onChange={(e) => handleSiteChange(e.target.value)}
               >
                 <option value="">Seleccionar privada...</option>
-                {filteredPrivadas.map((p) => (
+                {privadas.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.descripcion}
                   </option>
