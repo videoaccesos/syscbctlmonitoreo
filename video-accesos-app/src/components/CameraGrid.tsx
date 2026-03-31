@@ -2,23 +2,16 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, AlertTriangle } from "lucide-react";
+import { Camera, CameraOff, RefreshCw, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, Loader2, AlertTriangle, Wifi, WifiOff } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Diagnostics logger - rastrea cada fetch de imagen con tiempos
+// Diagnostics logger
 // ---------------------------------------------------------------------------
-interface CamDiagEntry {
-  ts: string;
-  elapsed: number;
-  cam: number;
-  event: string;
-  detail?: string;
-}
-const _camDiagLog: CamDiagEntry[] = [];
+const _camDiagLog: Array<{ ts: string; elapsed: number; cam: number; event: string; detail?: string }> = [];
 const _camDiagStart = Date.now();
 
 function camDiag(cam: number, event: string, detail?: string) {
-  const entry: CamDiagEntry = {
+  const entry = {
     ts: new Date().toISOString(),
     elapsed: Date.now() - _camDiagStart,
     cam,
@@ -27,29 +20,12 @@ function camDiag(cam: number, event: string, detail?: string) {
   };
   _camDiagLog.push(entry);
   if (_camDiagLog.length > 300) _camDiagLog.shift();
-  console.log(`[DIAG-CAM] +${entry.elapsed}ms | cam${cam} | ${event}${detail ? ` | ${detail}` : ""}`);
+  console.log(`[CameraGrid] +${entry.elapsed}ms | cam${cam} | ${event}${detail ? ` | ${detail}` : ""}`);
 }
 
-// Exponer para consola del browser
 if (typeof window !== "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__camDiag = () => {
-    console.table(_camDiagLog);
-    return _camDiagLog;
-  };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__camDiagStats = () => {
-    const camStats: Record<number, { loads: number; errors: number; lastEvent: string; lastDetail?: string }> = {};
-    for (const e of _camDiagLog) {
-      if (!camStats[e.cam]) camStats[e.cam] = { loads: 0, errors: 0, lastEvent: "", lastDetail: "" };
-      if (e.event === "IMG_LOADED") camStats[e.cam].loads++;
-      if (e.event === "IMG_ERROR") camStats[e.cam].errors++;
-      camStats[e.cam].lastEvent = e.event;
-      camStats[e.cam].lastDetail = e.detail;
-    }
-    console.table(camStats);
-    return camStats;
-  };
+  (window as any).__camDiag = () => { console.table(_camDiagLog); return _camDiagLog; };
 }
 
 interface CameraInfo {
@@ -70,10 +46,12 @@ interface CameraGridProps {
   telefono?: string;
   privadaId?: number;
   refreshMs?: number;
-  active?: boolean; // controla si el refresh esta activo
+  active?: boolean;
   onClose?: () => void;
-  compact?: boolean; // modo compacto para sidebar
+  compact?: boolean;
 }
+
+type GridStatus = "idle" | "connecting" | "streaming" | "no-cameras" | "error";
 
 export default function CameraGrid({
   telefono,
@@ -84,96 +62,204 @@ export default function CameraGrid({
   compact = false,
 }: CameraGridProps) {
   const [lookup, setLookup] = useState<CameraLookupResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [activeCamTab, setActiveCamTab] = useState(0); // indice de la camara activa en modo compact
+  const [status, setStatus] = useState<GridStatus>("idle");
+  const [statusMsg, setStatusMsg] = useState("");
   const [paused, setPaused] = useState(false);
-  const [enlargedCam, setEnlargedCam] = useState<number | null>(null); // indice de camara agrandada
+  const [enlargedCam, setEnlargedCam] = useState<number | null>(null);
   const imgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
-  const intervalsRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
+  const intervalsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const mountedRef = useRef(true);
+  const prevPrivadaRef = useRef<number | string | undefined>(undefined);
+  const relookupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lookupAttemptRef = useRef(0);
 
-  // Buscar camaras cuando cambia el telefono/privadaId
-  const lookupCameras = useCallback(async (silent = false) => {
-    if (!telefono && !privadaId) {
-      console.log("[CameraGrid] lookupCameras: sin telefono ni privadaId, saltando");
-      return;
+  // ------------------------------------------------------------------
+  // Limpiar TODO al cambiar de privada o desmontar
+  // ------------------------------------------------------------------
+  const cleanupAll = useCallback(() => {
+    // Detener todos los timers de refresh de imagenes
+    intervalsRef.current.forEach((timer) => clearTimeout(timer));
+    intervalsRef.current.clear();
+    // Limpiar handlers de imagenes
+    imgRefs.current.forEach((img) => {
+      img.onload = null;
+      img.onerror = null;
+      img.src = ""; // cortar fetch en vuelo
+    });
+    imgRefs.current.clear();
+    // Detener re-lookup
+    if (relookupTimerRef.current) {
+      clearInterval(relookupTimerRef.current);
+      relookupTimerRef.current = null;
     }
+    // Cerrar vista ampliada
+    setEnlargedCam(null);
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Detectar cambio de privada -> corte limpio
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const currentKey = privadaId || telefono;
+    const prevKey = prevPrivadaRef.current;
+
+    if (currentKey !== prevKey) {
+      console.log(`[CameraGrid] Cambio de privada: ${prevKey} -> ${currentKey}`);
+      // Corte limpio: detener todo lo anterior
+      cleanupAll();
+      // Reset estado
+      setLookup(null);
+      setStatus("idle");
+      setStatusMsg("");
+      lookupAttemptRef.current = 0;
+      prevPrivadaRef.current = currentKey;
+    }
+  }, [privadaId, telefono, cleanupAll]);
+
+  // ------------------------------------------------------------------
+  // Lookup de camaras
+  // ------------------------------------------------------------------
+  const lookupCameras = useCallback(async (silent = false): Promise<CameraLookupResult | null> => {
+    if (!telefono && !privadaId) return null;
 
     if (!silent) {
-      setLoading(true);
-      setError("");
-      // NO hacer setLookup(null) - mantener camaras anteriores hasta que lleguen las nuevas
+      setStatus("connecting");
+      setStatusMsg("Buscando camaras...");
     }
 
     try {
       const params = new URLSearchParams();
-      if (privadaId) {
-        params.set("privada_id", String(privadaId));
-      } else if (telefono) {
-        params.set("telefono", telefono);
-      }
+      if (privadaId) params.set("privada_id", String(privadaId));
+      else if (telefono) params.set("telefono", telefono);
 
       const url = `/api/camera-proxy/lookup?${params.toString()}`;
-      console.log("[CameraGrid] Lookup request:", url);
+      console.log("[CameraGrid] Lookup:", url, silent ? "(silent)" : "");
 
       const res = await fetch(url);
-      console.log("[CameraGrid] Lookup response status:", res.status);
-
       if (!res.ok) {
         let detail = `HTTP ${res.status}`;
-        try {
-          const errData = await res.json();
-          console.error("[CameraGrid] Lookup error body:", errData);
-          if (errData.detail) detail = errData.detail;
-          else if (errData.error) detail = errData.error;
-        } catch { /* ignore parse error */ }
+        try { const e = await res.json(); detail = e.detail || e.error || detail; } catch {}
         if (!silent) {
-          setError(`Error al buscar camaras (${detail})`);
+          setStatus("error");
+          setStatusMsg(`Error al buscar camaras: ${detail}`);
         }
-        console.error("[CameraGrid] Lookup failed:", detail);
-        return;
+        return null;
       }
 
       const data: CameraLookupResult = await res.json();
-      console.log("[CameraGrid] Lookup result:", JSON.stringify(data));
-      if (mountedRef.current) {
-        setLookup(data);
-      }
+      console.log("[CameraGrid] Lookup result:", data.found, "cameras:", data.cameras?.length || 0);
+
+      if (!mountedRef.current) return null;
+      return data;
     } catch (err) {
-      if (mountedRef.current && !silent) {
-        const msg = err instanceof Error ? err.message : "desconocido";
-        setError(`Error de conexion al buscar camaras: ${msg}`);
-        console.error("[CameraGrid] Lookup connection error:", msg);
+      const msg = err instanceof Error ? err.message : "desconocido";
+      if (!silent) {
+        setStatus("error");
+        setStatusMsg(`Error de conexion: ${msg}`);
       }
-    } finally {
-      if (mountedRef.current && !silent) {
-        setLoading(false);
-      }
+      return null;
     }
   }, [telefono, privadaId]);
 
+  // ------------------------------------------------------------------
+  // Efecto principal: lookup inicial + re-lookups
+  // ------------------------------------------------------------------
   useEffect(() => {
     mountedRef.current = true;
-    lookupCameras();
+    if (!telefono && !privadaId) return;
 
-    // Re-lookup silencioso cada 5s para detectar nuevos canales del agente
-    const relookupTimer = setInterval(() => {
-      if (!mountedRef.current) return;
-      lookupCameras(true);
+    let cancelled = false;
+
+    const doInitialLookup = async () => {
+      lookupAttemptRef.current++;
+      const data = await lookupCameras(false);
+      if (cancelled) return;
+
+      if (!data || !data.found) {
+        setLookup(data);
+        setStatus("no-cameras");
+        setStatusMsg(data?.found === false
+          ? "Privada no encontrada en el sistema."
+          : "No se pudo conectar al servidor de video.");
+        return;
+      }
+
+      if (!data.cameras?.length) {
+        setLookup(data);
+        setStatus("connecting");
+        setStatusMsg(
+          `Conectando con ${data.privada}... El agente de captura esta iniciando la transmision. ` +
+          `Esto puede tomar unos segundos si el DVR acaba de conectarse.`
+        );
+        // No hay camaras aun, los re-lookups las detectaran
+        return;
+      }
+
+      // Tenemos camaras
+      setLookup(data);
+      setStatus("streaming");
+      setStatusMsg("");
+    };
+
+    doInitialLookup();
+
+    // Re-lookup periodico: detecta nuevas camaras del agente
+    relookupTimerRef.current = setInterval(async () => {
+      if (cancelled || !mountedRef.current) return;
+      const data = await lookupCameras(true);
+      if (cancelled || !mountedRef.current || !data) return;
+
+      // Actualizar lookup si hay cambios
+      const oldCount = lookup?.cameras?.length || 0;
+      const newCount = data.cameras?.length || 0;
+
+      if (data.found) {
+        setLookup(data);
+        if (newCount > 0) {
+          setStatus("streaming");
+          setStatusMsg("");
+        } else if (newCount === 0 && oldCount === 0) {
+          lookupAttemptRef.current++;
+          const attempt = lookupAttemptRef.current;
+          if (attempt <= 3) {
+            setStatus("connecting");
+            setStatusMsg(
+              `Esperando video de ${data.privada}... El agente de captura esta preparando la transmision.`
+            );
+          } else if (attempt <= 10) {
+            setStatus("connecting");
+            setStatusMsg(
+              `Aun sin video de ${data.privada}. Posibles causas:\n` +
+              `- El agente de captura no esta corriendo en la PC de la caseta\n` +
+              `- La PC no tiene conexion a internet\n` +
+              `- El DVR esta apagado o desconectado`
+            );
+          } else {
+            setStatus("no-cameras");
+            setStatusMsg(
+              `Sin video disponible para ${data.privada}. Verifique que:\n` +
+              `1. La PC de la caseta esta encendida y conectada a internet\n` +
+              `2. La tarea VideoAccesos-CaptureAgent esta corriendo\n` +
+              `3. El DVR esta encendido y accesible en la red local`
+            );
+          }
+        }
+      }
     }, 5000);
 
     return () => {
+      cancelled = true;
+      cleanupAll();
       mountedRef.current = false;
-      clearInterval(relookupTimer);
     };
-  }, [lookupCameras]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefono, privadaId, lookupCameras, cleanupAll]);
 
-  // Iniciar/detener refresh de imagenes
-  // Usa carga secuencial: espera a que la imagen termine de cargar antes de pedir la siguiente
-  // Esto evita acumular requests concurrentes que saturan las conexiones del DVR
+  // ------------------------------------------------------------------
+  // Refresh de imagenes cuando hay camaras
+  // ------------------------------------------------------------------
   useEffect(() => {
-    // Limpiar timers y handlers anteriores
+    // Limpiar timers anteriores
     intervalsRef.current.forEach((timer) => clearTimeout(timer));
     intervalsRef.current.clear();
     imgRefs.current.forEach((img) => {
@@ -182,29 +268,22 @@ export default function CameraGrid({
     });
 
     if (!active || paused || !lookup?.found || !lookup.cameras?.length) {
-      console.log("[CameraGrid] Refresh skip: active=", active, "paused=", paused, "found=", lookup?.found, "cameras=", lookup?.cameras?.length);
       return;
     }
 
-    console.log("[CameraGrid] Iniciando refresh de imagenes para", lookup.cameras.length, "camaras, refreshMs=", refreshMs);
+    console.log("[CameraGrid] Iniciando refresh:", lookup.cameras.length, "camaras, refreshMs=", refreshMs);
 
     const proxyBase = "/api/camera-proxy";
     const params = new URLSearchParams();
-    if (lookup.privada_id) {
-      params.set("privada_id", String(lookup.privada_id));
-    } else if (telefono) {
-      params.set("telefono", telefono);
-    }
+    if (lookup.privada_id) params.set("privada_id", String(lookup.privada_id));
+    else if (telefono) params.set("telefono", telefono);
 
-    // Para cada camara disponible, cargar secuencialmente
-    // Solo pide el siguiente snapshot cuando el actual termina (onload/onerror)
     for (const cam of lookup.cameras) {
       if (!cam.available) continue;
 
       let loadCount = 0;
       let errorCount = 0;
       let consecutiveErrors = 0;
-      let lastLoadTime = 0;
 
       const refreshCamera = () => {
         const img = imgRefs.current.get(cam.index);
@@ -216,15 +295,13 @@ export default function CameraGrid({
 
         const fetchStart = Date.now();
 
-        // Programar siguiente refresh solo cuando esta imagen termine de cargar
         img.onload = () => {
           if (!mountedRef.current) return;
           loadCount++;
           consecutiveErrors = 0;
-          const fetchDuration = Date.now() - fetchStart;
-          lastLoadTime = fetchDuration;
+          const dur = Date.now() - fetchStart;
           if (loadCount <= 3 || loadCount % 50 === 0) {
-            camDiag(cam.index, "IMG_LOADED", `#${loadCount} ${img.naturalWidth}x${img.naturalHeight} ${fetchDuration}ms`);
+            camDiag(cam.index, "IMG_LOADED", `#${loadCount} ${img.naturalWidth}x${img.naturalHeight} ${dur}ms`);
           }
           const tid = setTimeout(refreshCamera, refreshMs);
           intervalsRef.current.set(cam.index, tid);
@@ -233,14 +310,10 @@ export default function CameraGrid({
           if (!mountedRef.current) return;
           errorCount++;
           consecutiveErrors++;
-          const fetchDuration = Date.now() - fetchStart;
+          const dur = Date.now() - fetchStart;
           if (errorCount <= 5 || errorCount % 20 === 0 || consecutiveErrors === 1) {
-            camDiag(cam.index, "IMG_ERROR", `#${errorCount} consecutive=${consecutiveErrors} ${fetchDuration}ms src=${img.src.substring(0, 120)}`);
+            camDiag(cam.index, "IMG_ERROR", `#${errorCount} consecutive=${consecutiveErrors} ${dur}ms`);
           }
-          if (consecutiveErrors >= 10 && consecutiveErrors % 10 === 0) {
-            camDiag(cam.index, "IMG_STUCK", `${consecutiveErrors} errores consecutivos - posible bloqueo de red/proxy`);
-          }
-          // En error, esperar mas para no saturar la camara/DVR
           const tid = setTimeout(refreshCamera, Math.max(refreshMs * 3, 3000));
           intervalsRef.current.set(cam.index, tid);
         };
@@ -252,8 +325,7 @@ export default function CameraGrid({
         img.src = imgUrl;
       };
 
-      // Primer fetch inmediato
-      camDiag(cam.index, "START_REFRESH", `alias=${cam.alias} refreshMs=${refreshMs}`);
+      camDiag(cam.index, "START_REFRESH", `alias=${cam.alias}`);
       refreshCamera();
     }
 
@@ -281,58 +353,88 @@ export default function CameraGrid({
 
   // Ref callback para registrar imagenes
   const setImgRef = useCallback((index: number, el: HTMLImageElement | null) => {
-    if (el) {
-      imgRefs.current.set(index, el);
-    } else {
-      imgRefs.current.delete(index);
-    }
+    if (el) imgRefs.current.set(index, el);
+    else imgRefs.current.delete(index);
   }, []);
 
-  // Sin telefono/privada configurado
-  if (!telefono && !privadaId) {
-    return null;
-  }
+  // ------------------------------------------------------------------
+  // RENDER
+  // ------------------------------------------------------------------
 
-  // Cargando
-  if (loading) {
+  // Sin privada/telefono seleccionado
+  if (!telefono && !privadaId) return null;
+
+  // Estado: conectando (spinner)
+  if (status === "connecting") {
     return (
-      <div className={`rounded-lg border border-gray-200 bg-gray-50 p-4 ${compact ? "text-xs" : ""}`}>
-        <div className="flex items-center gap-2 text-gray-700">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span>Buscando camaras...</span>
+      <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="h-8 w-8 text-orange-400 animate-spin" />
+          <div className="space-y-1">
+            <p className="text-sm text-white font-medium">Conectando video...</p>
+            {statusMsg.split("\n").map((line, i) => (
+              <p key={i} className="text-xs text-gray-400">{line}</p>
+            ))}
+          </div>
+          {lookup?.privada && (
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+              <Wifi className="h-3 w-3 animate-pulse" />
+              <span>{lookup.privada}</span>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
-  // Error
-  if (error) {
+  // Estado: error
+  if (status === "error") {
     return (
-      <div className={`rounded-lg border border-red-200 bg-red-50 p-4 ${compact ? "text-xs" : ""}`}>
-        <div className="flex items-center gap-2 text-red-600">
-          <CameraOff className="h-4 w-4" />
-          <span>{error}</span>
+      <div className="rounded-lg border border-red-800 bg-red-950 p-4">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <AlertTriangle className="h-6 w-6 text-red-400" />
+          <p className="text-sm text-red-300 font-medium">Error de video</p>
+          <p className="text-xs text-red-400/80">{statusMsg}</p>
         </div>
       </div>
     );
   }
 
-  // No encontrado
-  if (lookup && !lookup.found) {
+  // Estado: no hay camaras (despues de varios intentos)
+  if (status === "no-cameras") {
     return (
-      <div className={`rounded-lg border border-yellow-200 bg-yellow-50 p-3 ${compact ? "text-xs" : ""}`}>
-        <div className="flex items-center gap-2 text-yellow-700">
-          <CameraOff className="h-4 w-4" />
-          <span>Sin camaras configuradas para este numero</span>
+      <div className="rounded-lg border border-yellow-800 bg-yellow-950 p-4">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <WifiOff className="h-6 w-6 text-yellow-400" />
+          <p className="text-sm text-yellow-300 font-medium">Sin video disponible</p>
+          {statusMsg.split("\n").map((line, i) => (
+            <p key={i} className="text-xs text-yellow-400/80">{line}</p>
+          ))}
+          <button
+            onClick={() => {
+              lookupAttemptRef.current = 0;
+              setStatus("connecting");
+              setStatusMsg("Reintentando conexion...");
+              lookupCameras(false).then((data) => {
+                if (data?.found && data.cameras?.length) {
+                  setLookup(data);
+                  setStatus("streaming");
+                  setStatusMsg("");
+                }
+              });
+            }}
+            className="mt-2 px-3 py-1 rounded bg-yellow-800 text-yellow-200 text-xs hover:bg-yellow-700 transition flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Reintentar
+          </button>
         </div>
       </div>
     );
   }
 
-  // Sin camaras
-  if (!lookup?.cameras?.length) {
-    return null;
-  }
+  // Sin lookup aun (estado idle)
+  if (!lookup?.cameras?.length) return null;
 
   const availableCams = lookup.cameras.filter((c) => c.available);
   if (availableCams.length === 0) return null;
@@ -344,10 +446,8 @@ export default function CameraGrid({
         <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
           <div className="flex items-center gap-2 text-white">
             <Camera className="h-4 w-4 text-orange-400" />
-            <span className="text-sm font-medium">
-              {lookup.privada}
-            </span>
-            <span className="text-xs text-gray-600">
+            <span className="text-sm font-medium">{lookup.privada}</span>
+            <span className="text-xs text-gray-500">
               ({availableCams.length} cam{availableCams.length !== 1 ? "s" : ""})
             </span>
           </div>
@@ -378,18 +478,16 @@ export default function CameraGrid({
           </div>
         </div>
 
-        {/* Paused indicator */}
         {paused && (
           <div className="bg-yellow-900/50 border-b border-yellow-700/50 px-3 py-1 text-center">
-            <span className="text-xs text-yellow-400">Video pausado - clic para reanudar</span>
+            <span className="text-xs text-yellow-400">Video pausado</span>
           </div>
         )}
 
-        {/* Camera thumbnails - stacked vertically */}
+        {/* Camera thumbnails */}
         <div className="space-y-0.5 p-0.5">
           {availableCams.map((cam) => (
             <div key={cam.index} className="relative group bg-black">
-              {/* Camera label + enlarge button */}
               <div className="absolute top-1 left-1 z-10 bg-black/60 rounded px-1.5 py-0.5">
                 <span className="text-[10px] text-white font-medium">{cam.alias}</span>
               </div>
@@ -400,8 +498,6 @@ export default function CameraGrid({
               >
                 <Maximize2 className="h-3.5 w-3.5" />
               </button>
-
-              {/* Camera image - small thumbnail */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 ref={(el) => setImgRef(cam.index, el)}
@@ -414,10 +510,10 @@ export default function CameraGrid({
           ))}
         </div>
 
-        {/* Refresh rate indicator */}
+        {/* Footer */}
         <div className="bg-gray-800 border-t border-gray-700 px-3 py-1 flex items-center justify-between">
           <span className="text-[10px] text-gray-700">
-            Refresh: {refreshMs}ms
+            {refreshMs}ms
           </span>
           {!paused && active && (
             <span className="flex items-center gap-1 text-[10px] text-green-500">
@@ -428,12 +524,11 @@ export default function CameraGrid({
         </div>
       </div>
 
-      {/* Enlarged camera overlay - rendered via Portal to escape transformed parents */}
+      {/* Enlarged camera overlay */}
       {enlargedCam !== null &&
         createPortal(
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm">
             <div className="relative w-full max-w-4xl mx-4">
-              {/* Header */}
               <div className="flex items-center justify-between bg-gray-900 rounded-t-xl px-4 py-2 border-b border-gray-700">
                 <div className="flex items-center gap-2 text-white">
                   <Camera className="h-4 w-4 text-orange-400" />
@@ -442,7 +537,6 @@ export default function CameraGrid({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Navigation between cameras */}
                   {availableCams.length > 1 && (
                     <>
                       <button
@@ -476,23 +570,15 @@ export default function CameraGrid({
                   </button>
                 </div>
               </div>
-              {/* Enlarged image - uses the same img ref that's already refreshing */}
               <div className="bg-black rounded-b-xl overflow-hidden">
                 {availableCams.map((cam) => (
-                  <div
-                    key={cam.index}
-                    className={enlargedCam === cam.index ? "block" : "hidden"}
-                  >
+                  <div key={cam.index} className={enlargedCam === cam.index ? "block" : "hidden"}>
                     <EnlargedCameraView camIndex={cam.index} imgRefs={imgRefs} />
                   </div>
                 ))}
               </div>
             </div>
-            {/* Click outside to close */}
-            <div
-              className="absolute inset-0 -z-10"
-              onClick={() => setEnlargedCam(null)}
-            />
+            <div className="absolute inset-0 -z-10" onClick={() => setEnlargedCam(null)} />
           </div>,
           document.body
         )}
@@ -500,7 +586,6 @@ export default function CameraGrid({
   );
 }
 
-/** Shows an enlarged copy of a camera that syncs with the thumbnail's src */
 function EnlargedCameraView({
   camIndex,
   imgRefs,
@@ -511,14 +596,12 @@ function EnlargedCameraView({
   const enlargedImgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    // Sync the enlarged image src from the thumbnail
     const syncSrc = () => {
       const srcImg = imgRefs.current?.get(camIndex);
       if (srcImg && enlargedImgRef.current && srcImg.src) {
         enlargedImgRef.current.src = srcImg.src;
       }
     };
-
     syncSrc();
     const interval = setInterval(syncSrc, 200);
     return () => clearInterval(interval);
