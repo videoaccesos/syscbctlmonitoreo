@@ -73,8 +73,8 @@ function Run-SetupWizard {
     $backendUrl = Read-Host "URL del backend [https://accesoswhatsapp.info/api/camera-frames]"
     if (-not $backendUrl) { $backendUrl = "https://accesoswhatsapp.info/api/camera-frames" }
 
-    $agentToken = Read-Host "Token del agente [videoaccesos-agent-2024]"
-    if (-not $agentToken) { $agentToken = "videoaccesos-agent-2024" }
+    $agentToken = Read-Host "Token del agente [b7f9dee88d9e9d141557ef6227a351048df0d105b71dfd00cdda483d7d347c47]"
+    if (-not $agentToken) { $agentToken = "b7f9dee88d9e9d141557ef6227a351048df0d105b71dfd00cdda483d7d347c47" }
 
     # --- Explorar DVR ---
     Write-Host ""
