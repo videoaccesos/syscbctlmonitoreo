@@ -1,87 +1,96 @@
 <#
 .SYNOPSIS
-    Agente de captura de frames bajo demanda para sitios remotos.
+    Agente de captura de frames - archivo unico, autoinstalable.
 
 .DESCRIPTION
     Proceso residente en Windows que:
-    - Se conecta a un broker MQTT y escucha comandos start_stream / stop_stream
-    - Permanece idle con bajo consumo hasta recibir instruccion
-    - Captura snapshots JPEG desde DVR/camaras locales por LAN
+    - Si no existe config.json, ejecuta un wizard interactivo:
+      pide IP del DVR, site_id, explora canales automaticamente y genera config.json
+    - Si no esta registrado como Tarea Programada, se autoinstala
+    - Permanece idle hasta recibir comandos start_stream / stop_stream via polling HTTP
+    - Captura snapshots JPEG desde DVR/camaras locales por LAN (paralelo)
     - Envia los frames al backend central por HTTPS POST
-    - Publica heartbeat, estado y errores por MQTT
-    - Se detiene por comando o por timeout automatico
 
-    Diseñado para funcionar detras de NAT/CGNAT sin necesidad de port forwarding,
-    IP publica ni tuneles. Solo usa conexiones salientes.
+    Solo conexiones salientes. Funciona detras de NAT/CGNAT sin port forwarding.
 
 .NOTES
-    Requiere: PowerShell 5.1+, acceso LAN al DVR, acceso a internet (HTTPS + MQTT)
-    Archivo de configuracion: config.json (junto al script)
+    Requiere: PowerShell 5.1+, acceso LAN al DVR, acceso a internet (HTTPS)
+    Ejecutar como Administrador para autoinstalacion de tarea programada.
+    Uso: .\CaptureAgent.ps1
 #>
 
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.json")
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.json"),
+    [switch]$Uninstall
 )
 
-# ---------------------------------------------------------------------------
-# Configuracion y estado global
-# ---------------------------------------------------------------------------
-$ErrorActionPreference = "Continue"
+$TaskName = "VideoAccesos-CaptureAgent"
 
-$script:Config = $null
-$script:AgentState = "starting"  # starting, idle, streaming, error
-$script:StreamingCams = @{}      # cam_id -> $true si esta transmitiendo
-$script:StreamTimeout = @{}      # cam_id -> DateTime de fin
-$script:StopRequested = $false
-$script:LogFile = $null
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-function Write-Log {
-    param([string]$Level, [string]$Message)
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
-    $line = "[$ts] [$Level] $Message"
-    Write-Host $line
-    if ($script:LogFile) {
-        try { Add-Content -Path $script:LogFile -Value $line -ErrorAction SilentlyContinue } catch {}
-    }
+# ============================================================================
+# DESINSTALACION
+# ============================================================================
+if ($Uninstall) {
+    Write-Host "Desinstalando tarea programada..." -ForegroundColor Yellow
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName "VideoAccesos-MqttListener" -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "Tarea eliminada." -ForegroundColor Green
+    Write-Host "Para eliminar config.json y logs, borre manualmente la carpeta." -ForegroundColor Gray
+    exit 0
 }
 
-function Log-Info  { param([string]$Msg) Write-Log "INFO"  $Msg }
-function Log-Warn  { param([string]$Msg) Write-Log "WARN"  $Msg }
-function Log-Error { param([string]$Msg) Write-Log "ERROR" $Msg }
-function Log-Debug { param([string]$Msg) if ($script:Config.log.level -eq "DEBUG") { Write-Log "DEBUG" $Msg } }
+# ============================================================================
+# SETUP WIZARD - Genera config.json si no existe
+# ============================================================================
+function Run-SetupWizard {
+    Write-Host ""
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host "  VideoAccesos - Configuracion del Agente " -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "No se encontro config.json. Vamos a configurar el agente." -ForegroundColor Yellow
+    Write-Host ""
 
-# ---------------------------------------------------------------------------
-# Auto-exploracion del DVR: detecta canales activos
-# ---------------------------------------------------------------------------
-$script:DiscoveredCameras = @()
-
-function Explore-DVR {
-    # Obtener IP base y credenciales del primer camera config
-    $baseCam = $script:Config.cameras[0]
-    if (-not $baseCam) {
-        Log-Warn "No hay camaras configuradas, no se puede explorar DVR"
-        return
+    # --- Pedir datos basicos ---
+    $siteId = Read-Host "ID de la privada (site_id, ej: 70)"
+    while (-not $siteId) {
+        Write-Host "  El site_id es obligatorio." -ForegroundColor Red
+        $siteId = Read-Host "ID de la privada (site_id)"
     }
 
-    # Extraer IP del DVR de la primera URL
-    $dvrIp = $null
-    if ($baseCam.snapshot_url -match "http://([^/]+)") {
-        $dvrIp = $Matches[1]
-    }
-    if (-not $dvrIp) {
-        Log-Warn "No se pudo extraer IP del DVR"
-        return
+    $dvrIp = Read-Host "IP del DVR en la red local (ej: 192.168.1.64)"
+    while (-not $dvrIp) {
+        Write-Host "  La IP del DVR es obligatoria." -ForegroundColor Red
+        $dvrIp = Read-Host "IP del DVR"
     }
 
-    $username = $baseCam.username
-    $password = $baseCam.password
+    $username = Read-Host "Usuario del DVR [admin]"
+    if (-not $username) { $username = "admin" }
+
+    $password = Read-Host "Contrasena del DVR [v1de0acces0s]"
+    if (-not $password) { $password = "v1de0acces0s" }
+
+    $backendUrl = Read-Host "URL del backend [https://accesoswhatsapp.info/api/camera-frames]"
+    if (-not $backendUrl) { $backendUrl = "https://accesoswhatsapp.info/api/camera-frames" }
+
+    $agentToken = Read-Host "Token del agente [videoaccesos-agent-2024]"
+    if (-not $agentToken) { $agentToken = "videoaccesos-agent-2024" }
+
+    # --- Explorar DVR ---
+    Write-Host ""
+    Write-Host "Explorando DVR en $dvrIp ..." -ForegroundColor Cyan
+
     $secPass = ConvertTo-SecureString $password -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential($username, $secPass)
 
-    Log-Info "=== Explorando DVR en $dvrIp ==="
+    # Info del dispositivo
+    try {
+        $devInfo = Invoke-WebRequest -Uri "http://${dvrIp}/ISAPI/System/deviceInfo" -Credential $cred -TimeoutSec 5 -UseBasicParsing
+        if ($devInfo.Content -match "<deviceName>(.*?)</deviceName>") { Write-Host "  Dispositivo: $($Matches[1])" -ForegroundColor Green }
+        if ($devInfo.Content -match "<model>(.*?)</model>") { Write-Host "  Modelo:      $($Matches[1])" -ForegroundColor Green }
+    } catch {
+        Write-Host "  No se pudo obtener info del dispositivo" -ForegroundColor Yellow
+    }
 
     # Obtener nombres de canales
     $channelNames = @{}
@@ -101,6 +110,213 @@ function Explore-DVR {
     } catch {}
 
     # Probar canales 1-16 (sub-stream)
+    Write-Host ""
+    $cameras = @()
+    for ($ch = 1; $ch -le 16; $ch++) {
+        $chCode = "${ch}02"
+        $url = "http://${dvrIp}/ISAPI/Streaming/channels/${chCode}/picture"
+        try {
+            $r = Invoke-WebRequest -Uri $url -Credential $cred -TimeoutSec 5 -UseBasicParsing
+            if ($r.StatusCode -eq 200 -and $r.Content.Length -gt 500) {
+                $name = if ($channelNames.ContainsKey($ch)) { $channelNames[$ch] } else { "Canal $ch" }
+                $sizeKb = [math]::Round($r.Content.Length / 1024, 1)
+                Write-Host "  Canal $ch ($name): OK [${sizeKb} KB]" -ForegroundColor Green
+                $cameras += @{
+                    cam_id = $ch
+                    alias = $name
+                    snapshot_url = $url
+                    username = $username
+                    password = $password
+                    auth_type = "digest"
+                }
+            } else {
+                Write-Host "  Canal ${ch}: sin imagen" -ForegroundColor DarkGray
+            }
+        } catch {
+            Write-Host "  Canal ${ch}: no disponible" -ForegroundColor DarkGray
+        }
+    }
+
+    if ($cameras.Count -eq 0) {
+        Write-Host ""
+        Write-Host "ERROR: No se encontraron canales con imagen en el DVR." -ForegroundColor Red
+        Write-Host "Verifique la IP, usuario y contrasena." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "$($cameras.Count) canales con imagen encontrados." -ForegroundColor Green
+
+    # --- Generar config.json ---
+    $config = @{
+        site_id = $siteId
+        agent_token = $agentToken
+        backend_url = $backendUrl
+        cameras = $cameras
+        defaults = @{
+            auto_start = $false
+            fps = 25
+            quality = 55
+            width = 640
+            max_duration_sec = 300
+            heartbeat_interval_sec = 30
+        }
+        log = @{
+            path = "logs"
+            max_size_mb = 10
+            level = "INFO"
+        }
+    }
+
+    $json = $config | ConvertTo-Json -Depth 4
+    Set-Content -Path $ConfigPath -Value $json -Encoding UTF8
+
+    Write-Host ""
+    Write-Host "config.json generado en: $ConfigPath" -ForegroundColor Green
+    Write-Host ""
+}
+
+# ============================================================================
+# AUTO-INSTALACION como Tarea Programada
+# ============================================================================
+function Install-AsScheduledTask {
+    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($existing) {
+        # Ya esta instalada
+        return $true
+    }
+
+    # Verificar admin
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if (-not $isAdmin) {
+        Write-Host ""
+        Write-Host "AVISO: Para instalar la tarea programada, ejecute como Administrador." -ForegroundColor Yellow
+        Write-Host "El agente funcionara en esta sesion pero NO arrancara automaticamente." -ForegroundColor Yellow
+        Write-Host ""
+        return $false
+    }
+
+    Write-Host "Instalando como tarea programada..." -ForegroundColor Cyan
+
+    # Limpiar tarea legacy si existe
+    Unregister-ScheduledTask -TaskName "VideoAccesos-MqttListener" -Confirm:$false -ErrorAction SilentlyContinue
+
+    $scriptPath = Join-Path $PSScriptRoot "CaptureAgent.ps1"
+
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -RestartCount 5 `
+        -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit (New-TimeSpan -Days 365)
+
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+
+    $action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`"" `
+        -WorkingDirectory $PSScriptRoot
+
+    Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $action `
+        -Trigger $trigger `
+        -Settings $settings `
+        -User "SYSTEM" `
+        -RunLevel Highest `
+        -Description "VideoAccesos: Agente de captura de frames DVR."
+
+    Write-Host "Tarea '$TaskName' registrada OK." -ForegroundColor Green
+    Write-Host "Arrancara automaticamente al iniciar Windows." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Comandos utiles:" -ForegroundColor Gray
+    Write-Host "  Iniciar:     Start-ScheduledTask '$TaskName'"
+    Write-Host "  Detener:     Stop-ScheduledTask '$TaskName'"
+    Write-Host "  Reiniciar:   Stop-ScheduledTask '$TaskName'; Start-Sleep 3; Start-ScheduledTask '$TaskName'"
+    Write-Host "  Estado:      Get-ScheduledTask -TaskName '$TaskName' | Format-Table TaskName, State"
+    Write-Host "  Desinstalar: .\CaptureAgent.ps1 -Uninstall"
+    Write-Host "  Ver logs:    Get-Content $PSScriptRoot\logs\*.log -Tail 20"
+    Write-Host ""
+
+    return $true
+}
+
+# ============================================================================
+# CONFIGURACION Y ESTADO GLOBAL
+# ============================================================================
+$ErrorActionPreference = "Continue"
+
+$script:Config = $null
+$script:AgentState = "starting"
+$script:StreamingCams = @{}
+$script:StreamTimeout = @{}
+$script:StopRequested = $false
+$script:LogFile = $null
+$script:DiscoveredCameras = @()
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+function Write-Log {
+    param([string]$Level, [string]$Message)
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    $line = "[$ts] [$Level] $Message"
+    Write-Host $line
+    if ($script:LogFile) {
+        try { Add-Content -Path $script:LogFile -Value $line -ErrorAction SilentlyContinue } catch {}
+    }
+}
+
+function Log-Info  { param([string]$Msg) Write-Log "INFO"  $Msg }
+function Log-Warn  { param([string]$Msg) Write-Log "WARN"  $Msg }
+function Log-Error { param([string]$Msg) Write-Log "ERROR" $Msg }
+function Log-Debug { param([string]$Msg) if ($script:Config.log.level -eq "DEBUG") { Write-Log "DEBUG" $Msg } }
+
+# ============================================================================
+# AUTO-EXPLORACION DEL DVR
+# ============================================================================
+function Explore-DVR {
+    $baseCam = $script:Config.cameras[0]
+    if (-not $baseCam) {
+        Log-Warn "No hay camaras configuradas, no se puede explorar DVR"
+        return
+    }
+
+    $dvrIp = $null
+    if ($baseCam.snapshot_url -match "http://([^/]+)") {
+        $dvrIp = $Matches[1]
+    }
+    if (-not $dvrIp) {
+        Log-Warn "No se pudo extraer IP del DVR"
+        return
+    }
+
+    $username = $baseCam.username
+    $password = $baseCam.password
+    $secPass = ConvertTo-SecureString $password -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential($username, $secPass)
+
+    Log-Info "=== Explorando DVR en $dvrIp ==="
+
+    $channelNames = @{}
+    try {
+        $channels = Invoke-WebRequest -Uri "http://${dvrIp}/ISAPI/System/Video/inputs/channels" -Credential $cred -TimeoutSec 5 -UseBasicParsing
+        $xml = [xml]$channels.Content
+        foreach ($ch in $xml.VideoInputChannelList.VideoInputChannel) {
+            if ($ch.id -and $ch.name) { $channelNames[[int]$ch.id] = $ch.name }
+        }
+    } catch {}
+    try {
+        $ipCh = Invoke-WebRequest -Uri "http://${dvrIp}/ISAPI/ContentMgmt/InputProxy/channels" -Credential $cred -TimeoutSec 5 -UseBasicParsing
+        $xml2 = [xml]$ipCh.Content
+        foreach ($ch in $xml2.InputProxyChannelList.InputProxyChannel) {
+            if ($ch.id -and $ch.name) { $channelNames[[int]$ch.id] = $ch.name }
+        }
+    } catch {}
+
     $discovered = @()
     for ($ch = 1; $ch -le 16; $ch++) {
         $chCode = "${ch}02"
@@ -122,15 +338,12 @@ function Explore-DVR {
                     bytes = $r.Content.Length
                 }
             }
-        } catch {
-            # Canal no disponible - ignorar
-        }
+        } catch {}
     }
 
     $script:DiscoveredCameras = $discovered
     Log-Info "DVR explorado: $($discovered.Count) canales con imagen"
 
-    # Reportar canales al servidor
     Report-Channels
 }
 
@@ -177,16 +390,10 @@ function Report-Channels {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Inicializacion
-# ---------------------------------------------------------------------------
+# ============================================================================
+# INICIALIZACION
+# ============================================================================
 function Initialize-Agent {
-    # Cargar configuracion
-    if (-not (Test-Path $ConfigPath)) {
-        Write-Error "Config no encontrado: $ConfigPath"
-        exit 1
-    }
-
     $script:Config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 
     # Crear directorio de logs
@@ -200,206 +407,41 @@ function Initialize-Agent {
     Log-Info "Site ID: $($script:Config.site_id)"
     Log-Info "Backend: $($script:Config.backend_url)"
     Log-Info "Camaras configuradas: $($script:Config.cameras.Count)"
-    Log-Info "Config: $ConfigPath"
 
     foreach ($cam in $script:Config.cameras) {
         Log-Info "  Cam $($cam.cam_id): $($cam.alias) -> $($cam.snapshot_url)"
     }
 
-    # Inicializar URL de polling y pool de threads
     Initialize-PollUrl
     Initialize-RunspacePool
-
-    # Explorar DVR para descubrir todos los canales disponibles
     Explore-DVR
 
     $script:AgentState = "idle"
     Log-Info "Agente en estado IDLE - esperando comandos via polling HTTP"
 
-    # Auto-start: si esta configurado, iniciar streaming automaticamente
     if ($script:Config.defaults.auto_start -eq $true) {
         $fps = $script:Config.defaults.fps
-        Log-Info "AUTO-START habilitado: iniciando todas las camaras a ${fps} FPS (continuo)"
+        Log-Info "AUTO-START habilitado: iniciando todas las camaras a ${fps} FPS"
         foreach ($cam in $script:Config.cameras) {
             Start-CameraStream -CamId $cam.cam_id -Fps $fps -DurationSec 0
         }
     }
 }
 
-# ---------------------------------------------------------------------------
-# Captura de snapshot con Digest Auth
-# ---------------------------------------------------------------------------
-function Get-SnapshotDigest {
-    param(
-        [string]$Url,
-        [string]$Username,
-        [string]$Password,
-        [int]$TimeoutSec = 8
-    )
-
-    try {
-        # Primer request - obtener challenge 401
-        $initialRequest = [System.Net.HttpWebRequest]::Create($Url)
-        $initialRequest.Method = "GET"
-        $initialRequest.Timeout = $TimeoutSec * 1000
-        $initialRequest.UserAgent = "CaptureAgent/1.0"
-
-        try {
-            $response = $initialRequest.GetResponse()
-            # Si responde 200 directamente (sin auth)
-            $stream = $response.GetResponseStream()
-            $ms = New-Object System.IO.MemoryStream
-            $stream.CopyTo($ms)
-            $response.Close()
-            return $ms.ToArray()
-        } catch [System.Net.WebException] {
-            $webEx = $_.Exception
-            if ($webEx.Response -and $webEx.Response.StatusCode -eq [System.Net.HttpStatusCode]::Unauthorized) {
-                # Leer WWW-Authenticate header
-                $authHeader = $webEx.Response.Headers["WWW-Authenticate"]
-                $webEx.Response.Close()
-
-                if (-not $authHeader) {
-                    Log-Error "No WWW-Authenticate header en 401"
-                    return $null
-                }
-
-                # Usar CredentialCache con Digest
-                $uri = [System.Uri]$Url
-                $credCache = New-Object System.Net.CredentialCache
-                $cred = New-Object System.Net.NetworkCredential($Username, $Password)
-                $credCache.Add($uri, "Digest", $cred)
-
-                $digestRequest = [System.Net.HttpWebRequest]::Create($Url)
-                $digestRequest.Method = "GET"
-                $digestRequest.Timeout = $TimeoutSec * 1000
-                $digestRequest.Credentials = $credCache
-                $digestRequest.PreAuthenticate = $true
-                $digestRequest.UserAgent = "CaptureAgent/1.0"
-
-                $response2 = $digestRequest.GetResponse()
-                $stream2 = $response2.GetResponseStream()
-                $ms2 = New-Object System.IO.MemoryStream
-                $stream2.CopyTo($ms2)
-                $response2.Close()
-                return $ms2.ToArray()
-            } else {
-                $status = if ($webEx.Response) { $webEx.Response.StatusCode } else { "NoResponse" }
-                Log-Error "HTTP error: $status - $($webEx.Message)"
-                if ($webEx.Response) { $webEx.Response.Close() }
-                return $null
-            }
-        }
-    } catch {
-        Log-Error "Excepcion en snapshot: $($_.Exception.Message)"
-        return $null
-    }
-}
-
-function Get-SnapshotBasic {
-    param(
-        [string]$Url,
-        [string]$Username,
-        [string]$Password,
-        [int]$TimeoutSec = 8
-    )
-
-    try {
-        $cred = New-Object System.Net.NetworkCredential($Username, $Password)
-        $request = [System.Net.HttpWebRequest]::Create($Url)
-        $request.Method = "GET"
-        $request.Timeout = $TimeoutSec * 1000
-        $request.Credentials = $cred
-        $request.UserAgent = "CaptureAgent/1.0"
-
-        $response = $request.GetResponse()
-        $stream = $response.GetResponseStream()
-        $ms = New-Object System.IO.MemoryStream
-        $stream.CopyTo($ms)
-        $response.Close()
-        return $ms.ToArray()
-    } catch {
-        Log-Error "Excepcion en snapshot basic: $($_.Exception.Message)"
-        return $null
-    }
-}
-
-function Get-Snapshot {
-    param([object]$CamConfig)
-
-    $authType = if ($CamConfig.auth_type) { $CamConfig.auth_type } else { "digest" }
-
-    if ($authType -eq "basic") {
-        return Get-SnapshotBasic -Url $CamConfig.snapshot_url -Username $CamConfig.username -Password $CamConfig.password
-    } else {
-        return Get-SnapshotDigest -Url $CamConfig.snapshot_url -Username $CamConfig.username -Password $CamConfig.password
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Envio de frame al backend
-# ---------------------------------------------------------------------------
-function Send-Frame {
-    param(
-        [byte[]]$FrameData,
-        [int]$CamId,
-        [double]$CurrentFps
-    )
-
-    $url = $script:Config.backend_url
-    $hostname = [System.Net.Dns]::GetHostName()
-
-    try {
-        $request = [System.Net.HttpWebRequest]::Create($url)
-        $request.Method = "POST"
-        $request.ContentType = "image/jpeg"
-        $request.ContentLength = $FrameData.Length
-        $request.Timeout = 10000
-        $request.Headers.Add("X-Site-Id", $script:Config.site_id)
-        $request.Headers.Add("X-Cam-Id", $CamId.ToString())
-        $request.Headers.Add("X-Agent-Token", $script:Config.agent_token)
-        $request.Headers.Add("X-Agent-Host", $hostname)
-        $request.Headers.Add("X-Agent-Fps", $CurrentFps.ToString("F1"))
-        $request.UserAgent = "CaptureAgent/1.0"
-
-        # Aceptar certificados auto-firmados en desarrollo
-        # En produccion usar certificado valido
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-
-        $reqStream = $request.GetRequestStream()
-        $reqStream.Write($FrameData, 0, $FrameData.Length)
-        $reqStream.Close()
-
-        $response = $request.GetResponse()
-        $status = [int]$response.StatusCode
-        $response.Close()
-
-        Log-Debug "Frame enviado: cam=$CamId bytes=$($FrameData.Length) status=$status"
-        return $true
-    } catch {
-        Log-Error "Error enviando frame cam=$CamId : $($_.Exception.Message)"
-        return $false
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Polling HTTP para recibir comandos del servidor
-# ---------------------------------------------------------------------------
+# ============================================================================
+# POLLING HTTP para comandos
+# ============================================================================
 $script:PollUrl = $null
 $script:LastPollTime = [DateTime]::MinValue
-$script:PollIntervalSec = 1  # Cada 1 segundo
+$script:PollIntervalSec = 1
 
 function Initialize-PollUrl {
-    # Construir URL de polling a partir de backend_url
-    # backend_url = https://accesoswhatsapp.info/api/camera-frames
-    # poll_url    = https://accesoswhatsapp.info/api/camera-frames/poll?site_id=XX
     $baseUrl = $script:Config.backend_url -replace '/+$', ''
     $script:PollUrl = "$baseUrl/poll?site_id=$($script:Config.site_id)"
     Log-Info "Poll URL: $($script:PollUrl)"
 }
 
 function Get-PendingCommand {
-    # Solo hacer poll cada N segundos
     if (((Get-Date) - $script:LastPollTime).TotalSeconds -lt $script:PollIntervalSec) {
         return $null
     }
@@ -421,18 +463,13 @@ function Get-PendingCommand {
 
         if ($result.commands -and $result.commands.Count -gt 0) {
             Log-Info "Poll: $($result.commands.Count) comando(s) recibido(s)"
-            # Retornar el primer comando; los demas se procesan en la siguiente iteracion
-            # Encolarlos todos procesando uno por uno
             foreach ($cmd in $result.commands) {
                 Log-Info "  Comando: $($cmd.cmd)"
             }
             return $result.commands[0]
         }
     } catch {
-        # Solo loguear errores cada 30 segundos para no llenar el log
-        if (((Get-Date) - $script:LastPollTime).TotalSeconds -lt 1) {
-            Log-Debug "Poll error: $($_.Exception.Message)"
-        }
+        Log-Debug "Poll error: $($_.Exception.Message)"
     }
     return $null
 }
@@ -448,7 +485,6 @@ function Process-Command {
             $mode = if ($Cmd.mode) { $Cmd.mode } else { "configured" }
 
             if ($mode -eq "all" -and $script:DiscoveredCameras.Count -gt 0) {
-                # Modo "all": transmitir todos los canales descubiertos del DVR
                 Log-Info "start_stream mode=all: iniciando $($script:DiscoveredCameras.Count) canales descubiertos"
                 foreach ($cam in $script:DiscoveredCameras) {
                     Start-CameraStream -CamId $cam.channel -Fps $fps -DurationSec $duration
@@ -456,7 +492,6 @@ function Process-Command {
             } elseif ($camId -gt 0) {
                 Start-CameraStream -CamId $camId -Fps $fps -DurationSec $duration
             } else {
-                # Modo normal: solo camaras configuradas
                 foreach ($cam in $script:Config.cameras) {
                     Start-CameraStream -CamId $cam.cam_id -Fps $fps -DurationSec $duration
                 }
@@ -464,11 +499,9 @@ function Process-Command {
         }
         "stop_stream" {
             $camId = if ($Cmd.cam_id) { [int]$Cmd.cam_id } else { 0 }
-
             if ($camId -gt 0) {
                 Stop-CameraStream -CamId $camId
             } else {
-                # Detener todas las camaras activas
                 foreach ($camKey in @($script:StreamingCams.Keys)) {
                     Stop-CameraStream -CamId $camKey
                 }
@@ -480,9 +513,9 @@ function Process-Command {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Control de streaming
-# ---------------------------------------------------------------------------
+# ============================================================================
+# CONTROL DE STREAMING
+# ============================================================================
 function Start-CameraStream {
     param([int]$CamId, [double]$Fps, [int]$DurationSec)
 
@@ -495,7 +528,6 @@ function Start-CameraStream {
     if ($DurationSec -gt 0) {
         $script:StreamTimeout[$CamId] = (Get-Date).AddSeconds($DurationSec)
     } else {
-        # Sin timeout = streaming continuo
         $script:StreamTimeout.Remove($CamId)
     }
     $script:AgentState = "streaming"
@@ -521,11 +553,9 @@ function Stop-CameraStream {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Ciclo principal de captura - PARALELO usando runspaces
-# ---------------------------------------------------------------------------
-
-# Script block que se ejecuta en cada runspace (captura + envio de una camara)
+# ============================================================================
+# CAPTURA PARALELA con RunspacePool
+# ============================================================================
 $script:CaptureScriptBlock = {
     param(
         [string]$SnapshotUrl,
@@ -543,8 +573,7 @@ $script:CaptureScriptBlock = {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
-        # --- Capturar snapshot usando Invoke-WebRequest (maneja Digest auth) ---
-        $frameData = $null
+        # Capturar snapshot usando Invoke-WebRequest (maneja Digest auth en runspaces)
         $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
         $psCred = New-Object System.Management.Automation.PSCredential($Username, $secPass)
 
@@ -555,7 +584,7 @@ $script:CaptureScriptBlock = {
             return @{ ok = $false; camId = $CamId; error = "Frame vacio o status $($snapResponse.StatusCode)" }
         }
 
-        # --- Enviar al backend ---
+        # Enviar al backend
         $request = [System.Net.HttpWebRequest]::Create($BackendUrl)
         $request.Method = "POST"
         $request.ContentType = "image/jpeg"
@@ -592,12 +621,11 @@ function Initialize-RunspacePool {
 }
 
 function Invoke-CaptureLoop {
-    # Construir mapa de configs: primero las del config.json, luego las descubiertas
+    # Construir mapa de configs: config.json + descubiertas
     $camConfigs = @{}
     foreach ($cam in $script:Config.cameras) {
         $camConfigs[$cam.cam_id] = $cam
     }
-    # Agregar canales descubiertos que no estan en config
     foreach ($cam in $script:DiscoveredCameras) {
         if (-not $camConfigs.ContainsKey($cam.channel)) {
             $camConfigs[$cam.channel] = @{
@@ -611,7 +639,7 @@ function Invoke-CaptureLoop {
         }
     }
 
-    # Verificar timeouts primero
+    # Verificar timeouts
     foreach ($camId in @($script:StreamingCams.Keys)) {
         if ($script:StreamTimeout.ContainsKey($camId)) {
             if ((Get-Date) -gt $script:StreamTimeout[$camId]) {
@@ -623,9 +651,8 @@ function Invoke-CaptureLoop {
 
     if ($script:StreamingCams.Count -eq 0) { return }
 
-    # Lanzar captura paralela de todas las camaras activas
+    # Lanzar captura paralela
     $jobs = @()
-
     foreach ($camId in @($script:StreamingCams.Keys)) {
         $streamInfo = $script:StreamingCams[$camId]
         if (-not $streamInfo) { continue }
@@ -650,7 +677,7 @@ function Invoke-CaptureLoop {
         $jobs += @{ ps = $ps; handle = $handle; camId = $camId }
     }
 
-    # Esperar a que todos terminen (con timeout de 6s)
+    # Esperar a que terminen (timeout 6s)
     $deadline = (Get-Date).AddSeconds(6)
     foreach ($job in $jobs) {
         $remaining = ($deadline - (Get-Date)).TotalMilliseconds
@@ -680,9 +707,9 @@ function Invoke-CaptureLoop {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Heartbeat
-# ---------------------------------------------------------------------------
+# ============================================================================
+# HEARTBEAT
+# ============================================================================
 $script:LastHeartbeat = [DateTime]::MinValue
 
 function Send-Heartbeat {
@@ -690,51 +717,40 @@ function Send-Heartbeat {
     if (((Get-Date) - $script:LastHeartbeat).TotalSeconds -lt $interval) { return }
 
     $script:LastHeartbeat = Get-Date
-    $hostname = [System.Net.Dns]::GetHostName()
-
     $heartbeat = @{
         agent = "capture-agent"
         state = $script:AgentState
         site_id = $script:Config.site_id
-        host = $hostname
+        host = [System.Net.Dns]::GetHostName()
         cameras = $script:Config.cameras.Count
         streaming = $script:StreamingCams.Count
         ts = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
     } | ConvertTo-Json -Compress
 
     Log-Debug "Heartbeat: $heartbeat"
-    # El heartbeat se enviaria por MQTT. En fase 1, solo se registra en log.
-    # Fase 2: publicar a site/{site_id}/agent/heartbeat
 }
 
-# ---------------------------------------------------------------------------
-# Loop principal
-# ---------------------------------------------------------------------------
+# ============================================================================
+# LOOP PRINCIPAL
+# ============================================================================
 function Start-AgentLoop {
     Log-Info "Iniciando loop principal..."
 
     while (-not $script:StopRequested) {
         try {
-            # 1. Verificar comandos pendientes
             $cmd = Get-PendingCommand
             if ($cmd) {
                 Process-Command -Cmd $cmd
             }
 
-            # 2. Si hay camaras activas, capturar y enviar (paralelo)
             if ($script:StreamingCams.Count -gt 0) {
                 Invoke-CaptureLoop
-                # Minimo delay entre ciclos - las camaras se capturan en paralelo
-                # El tiempo real del ciclo lo domina la camara mas lenta
                 Start-Sleep -Milliseconds 40
             } else {
-                # Estado idle - polling cada 1s para comandos
                 Start-Sleep -Milliseconds 1000
             }
 
-            # 3. Heartbeat
             Send-Heartbeat
-
         } catch {
             Log-Error "Error en loop principal: $($_.Exception.Message)"
             Start-Sleep -Seconds 5
@@ -744,23 +760,29 @@ function Start-AgentLoop {
     Log-Info "=== Agente detenido ==="
 }
 
-# ---------------------------------------------------------------------------
-# Punto de entrada
-# ---------------------------------------------------------------------------
+# ============================================================================
+# PUNTO DE ENTRADA
+# ============================================================================
 
 # Manejar Ctrl+C
 $null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
     $script:StopRequested = $true
 }
+try { [Console]::TreatControlCAsInput = $false } catch {}
 
-try {
-    [Console]::TreatControlCAsInput = $false
-} catch {}
-
-# Permitir TLS 1.2 (necesario para HTTPS a servidores modernos)
+# TLS 1.2
 try {
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 } catch {}
 
+# --- PASO 1: Si no existe config.json, ejecutar wizard ---
+if (-not (Test-Path $ConfigPath)) {
+    Run-SetupWizard
+}
+
+# --- PASO 2: Auto-instalar como tarea programada ---
+Install-AsScheduledTask
+
+# --- PASO 3: Arrancar el agente ---
 Initialize-Agent
 Start-AgentLoop
