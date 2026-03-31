@@ -209,8 +209,8 @@ function Install-AsScheduledTask {
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
         -StartWhenAvailable `
-        -RestartCount 5 `
-        -RestartInterval (New-TimeSpan -Minutes 1) `
+        -RestartCount 999 `
+        -RestartInterval (New-TimeSpan -Seconds 30) `
         -ExecutionTimeLimit (New-TimeSpan -Days 365)
 
     $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -228,6 +228,15 @@ function Install-AsScheduledTask {
         -User "SYSTEM" `
         -RunLevel Highest `
         -Description "VideoAccesos: Agente de captura de frames DVR."
+
+    # Configurar la tarea para reiniciar en CUALQUIER terminacion (no solo fallo)
+    # Esto asegura 24/7 operacion continua
+    try {
+        $task = Get-ScheduledTask -TaskName $TaskName
+        $task.Settings.RestartOnFailure = $true
+        $task.Settings.RestartOnFailure | Out-Null
+        Set-ScheduledTask -InputObject $task -ErrorAction SilentlyContinue
+    } catch {}
 
     Write-Host "Tarea '$TaskName' registrada OK." -ForegroundColor Green
     Write-Host "Arrancara automaticamente al iniciar Windows." -ForegroundColor Green
@@ -399,6 +408,16 @@ function Initialize-Agent {
     # Crear directorio de logs
     $logDir = Join-Path $PSScriptRoot $script:Config.log.path
     if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+    # Rotacion de logs: eliminar archivos con mas de 7 dias
+    try {
+        $cutoff = (Get-Date).AddDays(-7)
+        Get-ChildItem -Path $logDir -Filter "agent-*.log" -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -lt $cutoff } |
+            ForEach-Object {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+    } catch {}
 
     $logDate = Get-Date -Format "yyyy-MM-dd"
     $script:LogFile = Join-Path $logDir "agent-$logDate.log"
@@ -612,15 +631,32 @@ $script:CaptureScriptBlock = {
 }
 
 $script:RunspacePool = $null
+$script:CaptureCount = 0
+$script:PoolRecycleEvery = 500  # Reciclar RunspacePool cada N ciclos
 
 function Initialize-RunspacePool {
+    if ($script:RunspacePool) {
+        try { $script:RunspacePool.Close() } catch {}
+        try { $script:RunspacePool.Dispose() } catch {}
+    }
     $maxThreads = [Math]::Max($script:Config.cameras.Count, 4)
+    $maxThreads = [Math]::Min($maxThreads, 16)
     $script:RunspacePool = [runspacefactory]::CreateRunspacePool(1, $maxThreads)
     $script:RunspacePool.Open()
+    $script:CaptureCount = 0
     Log-Info "RunspacePool inicializado: max=$maxThreads threads"
 }
 
 function Invoke-CaptureLoop {
+    # Reciclar RunspacePool cada N ciclos para evitar memory leak
+    $script:CaptureCount++
+    if ($script:CaptureCount -ge $script:PoolRecycleEvery) {
+        Log-Info "Reciclando RunspacePool despues de $($script:CaptureCount) ciclos..."
+        Initialize-RunspacePool
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+    }
+
     # Construir mapa de configs: config.json + descubiertas
     $camConfigs = @{}
     foreach ($cam in $script:Config.cameras) {
@@ -717,6 +753,10 @@ function Send-Heartbeat {
     if (((Get-Date) - $script:LastHeartbeat).TotalSeconds -lt $interval) { return }
 
     $script:LastHeartbeat = Get-Date
+    # Memoria del proceso actual
+    $proc = [System.Diagnostics.Process]::GetCurrentProcess()
+    $memMB = [Math]::Round($proc.WorkingSet64 / 1MB, 1)
+
     $heartbeat = @{
         agent = "capture-agent"
         state = $script:AgentState
@@ -724,20 +764,28 @@ function Send-Heartbeat {
         host = [System.Net.Dns]::GetHostName()
         cameras = $script:Config.cameras.Count
         streaming = $script:StreamingCams.Count
+        memory_mb = $memMB
+        capture_cycles = $script:CaptureCount
         ts = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
     } | ConvertTo-Json -Compress
 
-    Log-Debug "Heartbeat: $heartbeat"
+    Log-Info "Heartbeat: mem=${memMB}MB streaming=$($script:StreamingCams.Count) cycles=$($script:CaptureCount)"
 }
 
 # ============================================================================
 # LOOP PRINCIPAL
 # ============================================================================
+$script:LoopIteration = 0
+$script:LastGC = [DateTime]::MinValue
+$script:LastLogRotate = [DateTime]::MinValue
+
 function Start-AgentLoop {
     Log-Info "Iniciando loop principal..."
 
     while (-not $script:StopRequested) {
         try {
+            $script:LoopIteration++
+
             $cmd = Get-PendingCommand
             if ($cmd) {
                 Process-Command -Cmd $cmd
@@ -751,6 +799,24 @@ function Start-AgentLoop {
             }
 
             Send-Heartbeat
+
+            # GC cada 5 minutos para liberar memoria
+            if (((Get-Date) - $script:LastGC).TotalMinutes -ge 5) {
+                $script:LastGC = Get-Date
+                [System.GC]::Collect()
+                [System.GC]::WaitForPendingFinalizers()
+            }
+
+            # Rotar archivo de log a medianoche
+            $today = Get-Date -Format "yyyy-MM-dd"
+            $currentLogName = "agent-$today.log"
+            $logDir = Join-Path $PSScriptRoot $script:Config.log.path
+            $expectedPath = Join-Path $logDir $currentLogName
+            if ($script:LogFile -ne $expectedPath) {
+                Log-Info "Rotando log -> $currentLogName"
+                $script:LogFile = $expectedPath
+            }
+
         } catch {
             Log-Error "Error en loop principal: $($_.Exception.Message)"
             Start-Sleep -Seconds 5
@@ -783,6 +849,38 @@ if (-not (Test-Path $ConfigPath)) {
 # --- PASO 2: Auto-instalar como tarea programada ---
 Install-AsScheduledTask
 
-# --- PASO 3: Arrancar el agente ---
-Initialize-Agent
-Start-AgentLoop
+# --- PASO 3: Arrancar el agente con auto-reinicio ---
+$restartCount = 0
+$maxRestarts = 100  # Limite de reinicios antes de salir (la tarea programada lo relanzara)
+
+while ($restartCount -lt $maxRestarts) {
+    try {
+        Initialize-Agent
+        Start-AgentLoop
+        # Si llega aqui es porque StopRequested = true (salida limpia)
+        break
+    } catch {
+        $restartCount++
+        $errMsg = $_.Exception.Message
+        try { Log-Error "CRASH #${restartCount}: $errMsg" } catch {}
+        Write-Host "ERROR FATAL #${restartCount}: $errMsg" -ForegroundColor Red
+        Write-Host "Reiniciando en 10 segundos..." -ForegroundColor Yellow
+
+        # Limpiar RunspacePool si existe
+        if ($script:RunspacePool) {
+            try { $script:RunspacePool.Close() } catch {}
+            try { $script:RunspacePool.Dispose() } catch {}
+            $script:RunspacePool = $null
+        }
+        $script:StreamingCams = @{}
+        $script:StreamTimeout = @{}
+
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+        Start-Sleep -Seconds 10
+    }
+}
+
+if ($restartCount -ge $maxRestarts) {
+    try { Log-Error "Limite de reinicios alcanzado ($maxRestarts). Saliendo para que la tarea programada relance." } catch {}
+}
