@@ -53,9 +53,9 @@ export async function POST(request: NextRequest) {
     }
 
     const camId = parseInt(camIdRaw);
-    if (isNaN(camId) || camId < 1 || camId > 10) {
+    if (isNaN(camId) || camId < 1 || camId > 16) {
       return NextResponse.json(
-        { error: "X-Cam-Id debe ser entre 1 y 10" },
+        { error: "X-Cam-Id debe ser entre 1 y 16" },
         { status: 400 }
       );
     }

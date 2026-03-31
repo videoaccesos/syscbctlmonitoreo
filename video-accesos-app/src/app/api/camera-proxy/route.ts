@@ -439,9 +439,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (camIndex < 1 || camIndex > 10) {
+    if (camIndex < 1 || camIndex > 16) {
       return NextResponse.json(
-        { error: "cam debe ser entre 1 y 10" },
+        { error: "cam debe ser entre 1 y 16" },
         { status: 400 }
       );
     }
