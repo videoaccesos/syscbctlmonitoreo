@@ -1,0 +1,4 @@
+# ZK C3-400 MQTT Bridge - Dependencias
+paho-mqtt>=1.6.1,<2.0
+PyYAML>=6.0
+zkaccess-c3>=0.0.15

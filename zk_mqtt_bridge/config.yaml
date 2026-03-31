@@ -1,0 +1,54 @@
+# ZK C3-400 MQTT Bridge - Configuracion
+# Este archivo se copia y edita en cada sitio cliente
+
+# Identificador unico del sitio (se usa en los topics MQTT)
+site_id: "privada_ejemplo"
+
+# Conexion al C3-400 (red local del cliente)
+zk_panel:
+  ip: "192.168.1.201"
+  port: 4370
+  # Timeout de conexion TCP en segundos
+  timeout: 5
+  # Intervalo de polling para eventos en tiempo real (segundos)
+  poll_interval: 2
+  # Intervalo de sincronizacion completa de registros (segundos)
+  sync_interval: 300
+
+# Conexion MQTT al broker (tu servidor)
+mqtt:
+  broker: "accesoswhatsapp.info"
+  port: 1883
+  # Usar TLS (puerto 8883 tipicamente)
+  use_tls: false
+  # Credenciales (dejar vacio si no se requieren)
+  username: ""
+  password: ""
+  # QoS: 0=at most once, 1=at least once, 2=exactly once
+  qos: 1
+  # Mantener conexion viva (segundos)
+  keepalive: 60
+  # Prefijo para todos los topics
+  topic_prefix: "videoaccesos"
+
+# Puertas configuradas en el C3-400
+doors:
+  - id: 1
+    name: "Entrada Principal"
+    relay: 1
+  - id: 2
+    name: "Entrada Vehicular"
+    relay: 2
+  - id: 3
+    name: "Salida Peatonal"
+    relay: 3
+  - id: 4
+    name: "Salida Vehicular"
+    relay: 4
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "zk_bridge.log"
+  max_size_mb: 10
+  backup_count: 5
