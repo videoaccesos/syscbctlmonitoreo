@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   const privadas = await prisma.privada.findMany({
-    where: { estatusId: { in: [1, 2] } },
+    where: { estatusId: { not: 4 } },
     select: { id: true, descripcion: true },
     orderBy: { descripcion: "asc" },
   });
