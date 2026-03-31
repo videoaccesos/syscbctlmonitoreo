@@ -459,23 +459,25 @@ function Initialize-PollUrl {
     Log-Info "Poll URL: $($script:PollUrl)"
 }
 
-function Get-PendingCommand {
+function Get-PendingCommands {
     if (((Get-Date) - $script:LastPollTime).TotalSeconds -lt $script:PollIntervalSec) {
-        return $null
+        return @()
     }
     $script:LastPollTime = Get-Date
 
+    $response = $null
+    $reader = $null
     try {
         $request = [System.Net.HttpWebRequest]::Create($script:PollUrl)
         $request.Method = "GET"
         $request.Timeout = 5000
+        $request.KeepAlive = $false  # No reutilizar conexion (evita pool stale)
         $request.Headers.Add("X-Agent-Token", $script:Config.agent_token)
         $request.UserAgent = "CaptureAgent/1.0"
 
         $response = $request.GetResponse()
         $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
         $body = $reader.ReadToEnd()
-        $response.Close()
 
         $result = $body | ConvertFrom-Json
 
@@ -484,12 +486,16 @@ function Get-PendingCommand {
             foreach ($cmd in $result.commands) {
                 Log-Info "  Comando: $($cmd.cmd)"
             }
-            return $result.commands[0]
+            return $result.commands
         }
     } catch {
         Log-Debug "Poll error: $($_.Exception.Message)"
+        return $null  # null = error, distinguir de @() = exito sin comandos
+    } finally {
+        if ($reader) { try { $reader.Close(); $reader.Dispose() } catch {} }
+        if ($response) { try { $response.Close(); $response.Dispose() } catch {} }
     }
-    return $null
+    return @()
 }
 
 function Process-Command {
@@ -777,6 +783,8 @@ function Send-Heartbeat {
 $script:LoopIteration = 0
 $script:LastGC = [DateTime]::MinValue
 $script:LastLogRotate = [DateTime]::MinValue
+$script:LastSuccessfulPoll = [DateTime]::Now
+$script:WatchdogMaxSilence = 120  # Si no hay poll exitoso en 2 min, auto-reiniciar
 
 function Start-AgentLoop {
     Log-Info "Iniciando loop principal..."
@@ -785,9 +793,13 @@ function Start-AgentLoop {
         try {
             $script:LoopIteration++
 
-            $cmd = Get-PendingCommand
-            if ($cmd) {
-                Process-Command -Cmd $cmd
+            $cmds = Get-PendingCommands
+            if ($null -ne $cmds) {
+                # Poll fue exitoso (null = error de red, @() = exito sin comandos)
+                $script:LastSuccessfulPoll = Get-Date
+                foreach ($cmd in $cmds) {
+                    Process-Command -Cmd $cmd
+                }
             }
 
             if ($script:StreamingCams.Count -gt 0) {
@@ -798,6 +810,13 @@ function Start-AgentLoop {
             }
 
             Send-Heartbeat
+
+            # Watchdog: si no hubo poll exitoso en 2 min, forzar reinicio
+            $silenceSec = ((Get-Date) - $script:LastSuccessfulPoll).TotalSeconds
+            if ($silenceSec -gt $script:WatchdogMaxSilence) {
+                Log-Error "WATCHDOG: sin poll exitoso por ${silenceSec}s - forzando reinicio"
+                throw "Watchdog timeout: sin comunicacion con servidor por ${silenceSec}s"
+            }
 
             # GC cada 5 minutos para liberar memoria
             if (((Get-Date) - $script:LastGC).TotalMinutes -ge 5) {
@@ -836,9 +855,10 @@ trap {
     continue
 }
 
-# TLS 1.2
+# TLS 1.2 + aumentar limite de conexiones (evita deadlock del connection pool)
 try {
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+    [System.Net.ServicePointManager]::DefaultConnectionLimit = 50
 } catch {}
 
 # --- PASO 1: Si no existe config.json, ejecutar wizard ---
