@@ -408,57 +408,16 @@ $script:CaptureScriptBlock = {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
-        # --- Capturar snapshot ---
+        # --- Capturar snapshot usando Invoke-WebRequest (maneja Digest auth) ---
         $frameData = $null
+        $secPass = ConvertTo-SecureString $Password -AsPlainText -Force
+        $psCred = New-Object System.Management.Automation.PSCredential($Username, $secPass)
 
-        # Configurar credenciales desde el primer request (evita doble roundtrip 401)
-        $uri = [System.Uri]$SnapshotUrl
-        $credCache = New-Object System.Net.CredentialCache
-        $cred = New-Object System.Net.NetworkCredential($Username, $Password)
-        $authMethod = if ($AuthType -eq "basic") { "Basic" } else { "Digest" }
-        $credCache.Add($uri, $authMethod, $cred)
-
-        # Primer intento sin PreAuthenticate (necesario para Digest - requiere challenge)
-        $initialRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
-        $initialRequest.Method = "GET"
-        $initialRequest.Timeout = 4000
-        $initialRequest.UserAgent = "CaptureAgent/1.0"
-        $initialRequest.Credentials = $credCache
-
-        try {
-            $response = $initialRequest.GetResponse()
-            $stream = $response.GetResponseStream()
-            $ms = New-Object System.IO.MemoryStream
-            $stream.CopyTo($ms)
-            $response.Close()
-            $frameData = $ms.ToArray()
-        } catch [System.Net.WebException] {
-            $webEx = $_.Exception
-            $status = if ($webEx.Response) { [int]$webEx.Response.StatusCode } else { 0 }
-            if ($webEx.Response) { $webEx.Response.Close() }
-
-            if ($status -eq 401) {
-                # Segundo intento con PreAuthenticate
-                $digestRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
-                $digestRequest.Method = "GET"
-                $digestRequest.Timeout = 4000
-                $digestRequest.Credentials = $credCache
-                $digestRequest.PreAuthenticate = $true
-                $digestRequest.UserAgent = "CaptureAgent/1.0"
-
-                $response2 = $digestRequest.GetResponse()
-                $stream2 = $response2.GetResponseStream()
-                $ms2 = New-Object System.IO.MemoryStream
-                $stream2.CopyTo($ms2)
-                $response2.Close()
-                $frameData = $ms2.ToArray()
-            } else {
-                return @{ ok = $false; camId = $CamId; error = "HTTP $status" }
-            }
-        }
-
-        if (-not $frameData -or $frameData.Length -lt 100) {
-            return @{ ok = $false; camId = $CamId; error = "Frame vacio" }
+        $snapResponse = Invoke-WebRequest -Uri $SnapshotUrl -Credential $psCred -TimeoutSec 4 -UseBasicParsing
+        if ($snapResponse.StatusCode -eq 200 -and $snapResponse.Content.Length -gt 100) {
+            $frameData = $snapResponse.Content
+        } else {
+            return @{ ok = $false; camId = $CamId; error = "Frame vacio o status $($snapResponse.StatusCode)" }
         }
 
         # --- Enviar al backend ---
