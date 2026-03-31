@@ -220,7 +220,7 @@ function Install-AsScheduledTask {
     $triggerStartup = New-ScheduledTaskTrigger -AtStartup
     $triggerRepeat  = New-ScheduledTaskTrigger -Once -At (Get-Date) `
         -RepetitionInterval (New-TimeSpan -Minutes 3) `
-        -RepetitionDuration ([TimeSpan]::MaxValue)
+        -RepetitionDuration (New-TimeSpan -Days 9999)
 
     $action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
