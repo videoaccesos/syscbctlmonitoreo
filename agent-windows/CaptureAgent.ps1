@@ -210,7 +210,7 @@ function Install-AsScheduledTask {
         -DontStopIfGoingOnBatteries `
         -StartWhenAvailable `
         -RestartCount 999 `
-        -RestartInterval (New-TimeSpan -Seconds 30) `
+        -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit (New-TimeSpan -Days 365)
 
     $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -228,15 +228,6 @@ function Install-AsScheduledTask {
         -User "SYSTEM" `
         -RunLevel Highest `
         -Description "VideoAccesos: Agente de captura de frames DVR."
-
-    # Configurar la tarea para reiniciar en CUALQUIER terminacion (no solo fallo)
-    # Esto asegura 24/7 operacion continua
-    try {
-        $task = Get-ScheduledTask -TaskName $TaskName
-        $task.Settings.RestartOnFailure = $true
-        $task.Settings.RestartOnFailure | Out-Null
-        Set-ScheduledTask -InputObject $task -ErrorAction SilentlyContinue
-    } catch {}
 
     Write-Host "Tarea '$TaskName' registrada OK." -ForegroundColor Green
     Write-Host "Arrancara automaticamente al iniciar Windows." -ForegroundColor Green
