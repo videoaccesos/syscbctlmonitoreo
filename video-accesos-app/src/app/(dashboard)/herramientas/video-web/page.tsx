@@ -30,7 +30,7 @@ export default function VideoWebPage() {
 
   // Cargar lista de privadas
   useEffect(() => {
-    fetch("/api/privadas/list")
+    fetch("/api/privadas/list?video=1")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setPrivadas(data);
