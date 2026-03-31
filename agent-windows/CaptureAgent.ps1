@@ -411,10 +411,19 @@ $script:CaptureScriptBlock = {
         # --- Capturar snapshot ---
         $frameData = $null
 
+        # Configurar credenciales desde el primer request (evita doble roundtrip 401)
+        $uri = [System.Uri]$SnapshotUrl
+        $credCache = New-Object System.Net.CredentialCache
+        $cred = New-Object System.Net.NetworkCredential($Username, $Password)
+        $authMethod = if ($AuthType -eq "basic") { "Basic" } else { "Digest" }
+        $credCache.Add($uri, $authMethod, $cred)
+
+        # Primer intento sin PreAuthenticate (necesario para Digest - requiere challenge)
         $initialRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
         $initialRequest.Method = "GET"
         $initialRequest.Timeout = 4000
         $initialRequest.UserAgent = "CaptureAgent/1.0"
+        $initialRequest.Credentials = $credCache
 
         try {
             $response = $initialRequest.GetResponse()
@@ -425,14 +434,11 @@ $script:CaptureScriptBlock = {
             $frameData = $ms.ToArray()
         } catch [System.Net.WebException] {
             $webEx = $_.Exception
-            if ($webEx.Response -and $webEx.Response.StatusCode -eq [System.Net.HttpStatusCode]::Unauthorized) {
-                $webEx.Response.Close()
-                $uri = [System.Uri]$SnapshotUrl
-                $credCache = New-Object System.Net.CredentialCache
-                $cred = New-Object System.Net.NetworkCredential($Username, $Password)
-                $authMethod = if ($AuthType -eq "basic") { "Basic" } else { "Digest" }
-                $credCache.Add($uri, $authMethod, $cred)
+            $status = if ($webEx.Response) { [int]$webEx.Response.StatusCode } else { 0 }
+            if ($webEx.Response) { $webEx.Response.Close() }
 
+            if ($status -eq 401) {
+                # Segundo intento con PreAuthenticate
                 $digestRequest = [System.Net.HttpWebRequest]::Create($SnapshotUrl)
                 $digestRequest.Method = "GET"
                 $digestRequest.Timeout = 4000
@@ -447,8 +453,7 @@ $script:CaptureScriptBlock = {
                 $response2.Close()
                 $frameData = $ms2.ToArray()
             } else {
-                if ($webEx.Response) { $webEx.Response.Close() }
-                return @{ ok = $false; camId = $CamId; error = "HTTP $($webEx.Response.StatusCode)" }
+                return @{ ok = $false; camId = $CamId; error = "HTTP $status" }
             }
         }
 
