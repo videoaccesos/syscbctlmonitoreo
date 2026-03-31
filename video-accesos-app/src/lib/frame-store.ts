@@ -36,7 +36,7 @@ const frames = new Map<string, StoredFrame>();
 
 /** Maximo tiempo (ms) que un frame se considera valido. Pasado este tiempo,
  *  getFrame() lo ignora y retorna null. Evita mostrar imagenes viejas. */
-const MAX_FRAME_AGE_MS = 5_000; // 5 segundos (con alto FPS se renueva constantemente)
+const MAX_FRAME_AGE_MS = 15_000; // 15 segundos - margen para transiciones entre privadas
 
 /** Limpieza periodica de frames viejos para no acumular memoria */
 const CLEANUP_INTERVAL_MS = 30_000; // cada 30 seg

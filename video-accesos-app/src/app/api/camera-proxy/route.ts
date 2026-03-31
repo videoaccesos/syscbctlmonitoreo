@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { getFrame } from "@/lib/frame-store";
+import { getFrame, pushCommand } from "@/lib/frame-store";
 import crypto from "crypto";
 
 const TAG = "camera-proxy";
@@ -411,6 +411,26 @@ function noSignalSvg(channel: string, errorMsg: string): string {
 </svg>`;
 }
 
+// --- Auto-trigger start_stream cuando el proxy no encuentra frame del agente ---
+// Evita que el usuario tenga que esperar a que el flujo UI envie el comando.
+// Debounce por sitio: max 1 trigger cada 30 segundos.
+const autoTriggerLastSent = new Map<string, number>();
+const AUTO_TRIGGER_DEBOUNCE_MS = 30_000;
+
+function autoTriggerStartStream(siteId: string) {
+  const now = Date.now();
+  const last = autoTriggerLastSent.get(siteId) || 0;
+  if (now - last < AUTO_TRIGGER_DEBOUNCE_MS) return;
+  autoTriggerLastSent.set(siteId, now);
+  logger.info(TAG, `Auto-trigger start_stream para site=${siteId}`);
+  pushCommand(siteId, {
+    cmd: "start_stream",
+    fps: 25,
+    duration: 300,
+    ts: now,
+  });
+}
+
 export async function GET(request: NextRequest) {
   const reqId = `r${++_proxyReqCounter}`;
   const diag = createProxyDiag(reqId);
@@ -547,6 +567,10 @@ export async function GET(request: NextRequest) {
       });
     }
     diag.log("AGENT_FRAME_MISS", `site=${privada.id} cam=${camIndex}`);
+
+    // --- Auto-trigger start_stream si no hay frame del agente ---
+    // Debounce: max 1 vez cada 30s por sitio
+    autoTriggerStartStream(String(privada.id));
 
     // --- Fallback: fetch directo al DVR (modo legacy, solo cam 1-3) ---
     // Obtener la URL de video segun el indice

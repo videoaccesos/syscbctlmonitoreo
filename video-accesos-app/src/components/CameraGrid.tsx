@@ -103,7 +103,7 @@ export default function CameraGrid({
     if (!silent) {
       setLoading(true);
       setError("");
-      setLookup(null);
+      // NO hacer setLookup(null) - mantener camaras anteriores hasta que lleguen las nuevas
     }
 
     try {
