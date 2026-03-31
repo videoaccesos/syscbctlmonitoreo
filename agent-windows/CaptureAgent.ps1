@@ -797,8 +797,14 @@ function Start-AgentLoop {
             if ($null -ne $cmds) {
                 # Poll fue exitoso (null = error de red, @() = exito sin comandos)
                 $script:LastSuccessfulPoll = Get-Date
-                foreach ($cmd in $cmds) {
-                    Process-Command -Cmd $cmd
+                if ($cmds.Count -gt 0) {
+                    # Solo procesar el ULTIMO comando: si llegan start,stop,start,stop
+                    # acumulados, solo importa el final
+                    $lastCmd = $cmds[$cmds.Count - 1]
+                    if ($cmds.Count -gt 1) {
+                        Log-Info "Descartando $($cmds.Count - 1) comando(s) obsoletos, ejecutando solo: $($lastCmd.cmd)"
+                    }
+                    Process-Command -Cmd $lastCmd
                 }
             }
 
