@@ -282,15 +282,8 @@ export default function VideoWebPage() {
               style={{ aspectRatio: "4/3" }}
               onClick={() => streaming && setExpandedCam(cam)}
             >
-              {/* Imagen real - sin parpadeo */}
-              <img
-                id={`cam-img-${cam.index}`}
-                alt={cam.alias}
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ display: "none" }}
-              />
               {/* Placeholder cuando no hay imagen */}
-              <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: "#1a1a2e" }}>
+              <div className="absolute inset-0 flex items-center justify-center z-0" style={{ backgroundColor: "#1a1a2e" }}>
                 {!streaming && (
                   <div className="text-center text-gray-500">
                     <Video className="h-8 w-8 mx-auto mb-1 opacity-30" />
@@ -298,6 +291,13 @@ export default function VideoWebPage() {
                   </div>
                 )}
               </div>
+              {/* Imagen real - encima del placeholder */}
+              <img
+                id={`cam-img-${cam.index}`}
+                alt={cam.alias}
+                className="absolute inset-0 w-full h-full object-cover z-[1]"
+                style={{ display: "none" }}
+              />
               {/* Label */}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1.5 z-10">
                 <div className="flex items-center justify-between">
