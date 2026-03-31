@@ -211,9 +211,16 @@ function Install-AsScheduledTask {
         -StartWhenAvailable `
         -RestartCount 999 `
         -RestartInterval (New-TimeSpan -Minutes 1) `
-        -ExecutionTimeLimit (New-TimeSpan -Days 365)
+        -ExecutionTimeLimit (New-TimeSpan -Days 365) `
+        -MultipleInstances IgnoreNew
 
-    $trigger = New-ScheduledTaskTrigger -AtStartup
+    # Dos triggers:
+    # 1. Al iniciar el sistema
+    # 2. Repeticion cada 3 minutos indefinidamente (watchdog: si muere, se relanza)
+    $triggerStartup = New-ScheduledTaskTrigger -AtStartup
+    $triggerRepeat  = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+        -RepetitionInterval (New-TimeSpan -Minutes 3) `
+        -RepetitionDuration ([TimeSpan]::MaxValue)
 
     $action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
@@ -223,14 +230,15 @@ function Install-AsScheduledTask {
     Register-ScheduledTask `
         -TaskName $TaskName `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger @($triggerStartup, $triggerRepeat) `
         -Settings $settings `
         -User "SYSTEM" `
         -RunLevel Highest `
-        -Description "VideoAccesos: Agente de captura de frames DVR."
+        -Description "VideoAccesos: Agente de captura de frames DVR. Se relanza automaticamente cada 3 min si se detiene."
 
     Write-Host "Tarea '$TaskName' registrada OK." -ForegroundColor Green
     Write-Host "Arrancara automaticamente al iniciar Windows." -ForegroundColor Green
+    Write-Host "Si se detiene, se relanzara en maximo 3 minutos." -ForegroundColor Green
     Write-Host ""
     Write-Host "Comandos utiles:" -ForegroundColor Gray
     Write-Host "  Iniciar:     Start-ScheduledTask '$TaskName'"
@@ -822,10 +830,11 @@ function Start-AgentLoop {
 # ============================================================================
 
 # Manejar Ctrl+C
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    $script:StopRequested = $true
-}
 try { [Console]::TreatControlCAsInput = $false } catch {}
+trap {
+    $script:StopRequested = $true
+    continue
+}
 
 # TLS 1.2
 try {
@@ -840,7 +849,29 @@ if (-not (Test-Path $ConfigPath)) {
 # --- PASO 2: Auto-instalar como tarea programada ---
 Install-AsScheduledTask
 
-# --- PASO 3: Arrancar el agente con auto-reinicio ---
+# --- PASO 3: Verificar que no haya otra instancia corriendo ---
+$lockFile = Join-Path $PSScriptRoot "agent.lock"
+$lockPid = $null
+if (Test-Path $lockFile) {
+    $lockPid = Get-Content $lockFile -ErrorAction SilentlyContinue
+    if ($lockPid) {
+        $existingProc = Get-Process -Id ([int]$lockPid) -ErrorAction SilentlyContinue
+        if ($existingProc -and $existingProc.ProcessName -eq "powershell") {
+            Write-Host "Agente ya corriendo (PID $lockPid). Saliendo." -ForegroundColor Yellow
+            exit 0
+        }
+    }
+}
+# Escribir nuestro PID
+$PID | Set-Content $lockFile -Force
+
+# Limpiar lock al salir
+$exitHandler = {
+    Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+}
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $exitHandler -ErrorAction SilentlyContinue | Out-Null
+
+# --- PASO 4: Arrancar el agente con auto-reinicio ---
 $restartCount = 0
 $maxRestarts = 100  # Limite de reinicios antes de salir (la tarea programada lo relanzara)
 
@@ -872,6 +903,10 @@ while ($restartCount -lt $maxRestarts) {
     }
 }
 
+# Limpiar lock
+Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+
 if ($restartCount -ge $maxRestarts) {
     try { Log-Error "Limite de reinicios alcanzado ($maxRestarts). Saliendo para que la tarea programada relance." } catch {}
+    exit 1  # Exit con error para que RestartOnFailure lo relance
 }
