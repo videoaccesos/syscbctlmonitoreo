@@ -470,7 +470,7 @@ export default function MonitoristasPage() {
             site_id: String(privId),
             cmd,
             fps: 25,
-            duration: 300,
+            duration: 0,
           }),
         });
       } catch {

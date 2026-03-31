@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       }
       // Siempre encolar el comando (actua como keepalive para renovar timeout)
       payload.fps = fps || 25;
-      payload.duration = duration || 300;
+      payload.duration = duration ?? 0;
       payload.quality = quality || 55;
       payload.width = width || 640;
     }

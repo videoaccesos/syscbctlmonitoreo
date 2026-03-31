@@ -158,7 +158,7 @@ function Run-SetupWizard {
             fps = 25
             quality = 55
             width = 640
-            max_duration_sec = 300
+            max_duration_sec = 0
             heartbeat_interval_sec = 30
         }
         log = @{

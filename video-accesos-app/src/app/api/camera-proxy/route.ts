@@ -426,7 +426,7 @@ function autoTriggerStartStream(siteId: string) {
   pushCommand(siteId, {
     cmd: "start_stream",
     fps: 25,
-    duration: 300,
+    duration: 0,
     ts: now,
   });
 }

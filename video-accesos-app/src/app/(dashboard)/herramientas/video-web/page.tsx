@@ -78,7 +78,7 @@ export default function VideoWebPage() {
           site_id: siteId,
           cmd,
           fps: 10,
-          duration: 300,
+          duration: 0,
           mode: mode || "all",
         }),
       });
