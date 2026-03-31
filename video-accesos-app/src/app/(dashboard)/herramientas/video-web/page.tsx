@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Video, RefreshCw, Play, Square, Search } from "lucide-react";
+import { Video, RefreshCw, Play, Square, Search, X, Maximize2 } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -21,10 +21,12 @@ export default function VideoWebPage() {
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expandedCam, setExpandedCam] = useState<CameraInfo | null>(null);
   const intervalsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const mountedRef = useRef(true);
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamingRef = useRef(false);
 
   // Cargar lista de privadas
   useEffect(() => {
@@ -49,7 +51,6 @@ export default function VideoWebPage() {
     };
   }, []);
 
-  // Obtener camaras via lookup (mismo endpoint que terminal monitorista)
   const fetchCameras = useCallback(async (siteId: string): Promise<CameraInfo[]> => {
     try {
       const res = await fetch(`/api/camera-proxy/lookup?privada_id=${siteId}`);
@@ -84,34 +85,45 @@ export default function VideoWebPage() {
     } catch {}
   }, []);
 
+  // Refresh de imagen sin parpadeo: preload en Image oculto, swap solo cuando carga
   const startImageRefresh = useCallback((siteId: string, cams: CameraInfo[]) => {
-    // Limpiar anteriores
     intervalsRef.current.forEach((t) => clearTimeout(t));
     intervalsRef.current.clear();
 
     cams.forEach((cam) => {
       const refreshCamera = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || !streamingRef.current) return;
 
-        const img = new Image();
+        const preloader = new Image();
         const url = `/api/camera-proxy?privada_id=${siteId}&cam=${cam.index}&t=${Date.now()}`;
-        img.onload = () => {
-          if (!mountedRef.current) return;
-          const container = document.getElementById(`cam-${cam.index}`);
-          if (container) {
-            container.style.backgroundImage = `url(${img.src})`;
-            container.style.backgroundSize = "cover";
-            container.style.backgroundPosition = "center";
+
+        preloader.onload = () => {
+          if (!mountedRef.current || !streamingRef.current) return;
+
+          // Actualizar img en grid
+          const imgEl = document.getElementById(`cam-img-${cam.index}`) as HTMLImageElement | null;
+          if (imgEl) {
+            imgEl.src = preloader.src;
+            imgEl.style.display = "block";
           }
+
+          // Actualizar img en modal expandido
+          const modalEl = document.getElementById("cam-img-expanded") as HTMLImageElement | null;
+          if (modalEl && modalEl.dataset.camIndex === String(cam.index)) {
+            modalEl.src = preloader.src;
+          }
+
           const tid = setTimeout(refreshCamera, 200);
           intervalsRef.current.set(cam.index, tid);
         };
-        img.onerror = () => {
-          if (!mountedRef.current) return;
+
+        preloader.onerror = () => {
+          if (!mountedRef.current || !streamingRef.current) return;
           const tid = setTimeout(refreshCamera, 2000);
           intervalsRef.current.set(cam.index, tid);
         };
-        img.src = url;
+
+        preloader.src = url;
       };
       refreshCamera();
     });
@@ -120,11 +132,10 @@ export default function VideoWebPage() {
   const startStreaming = useCallback(async () => {
     if (!selectedSiteId) return;
 
-    // Enviar start_stream al agente
     sendCommand(selectedSiteId, "start_stream", "all");
     setStreaming(true);
+    streamingRef.current = true;
 
-    // Cargar camaras disponibles
     let cams = cameras;
     if (cams.length === 0) {
       cams = await fetchCameras(selectedSiteId);
@@ -137,10 +148,10 @@ export default function VideoWebPage() {
       sendCommand(selectedSiteId, "start_stream", "all");
     }, 4 * 60 * 1000);
 
-    // Re-check camaras cada 5s (por si el agente empieza a enviar nuevas)
+    // Re-check camaras cada 5s
     if (cameraRefreshRef.current) clearInterval(cameraRefreshRef.current);
     cameraRefreshRef.current = setInterval(async () => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !streamingRef.current) return;
       const updated = await fetchCameras(selectedSiteId);
       if (updated.length > cams.length) {
         cams = updated;
@@ -149,7 +160,6 @@ export default function VideoWebPage() {
       }
     }, 5000);
 
-    // Iniciar refresh de imagenes
     if (cams.length > 0) {
       startImageRefresh(selectedSiteId, cams);
     }
@@ -160,6 +170,8 @@ export default function VideoWebPage() {
       sendCommand(selectedSiteId, "stop_stream");
     }
     setStreaming(false);
+    streamingRef.current = false;
+    setExpandedCam(null);
     intervalsRef.current.forEach((t) => clearTimeout(t));
     intervalsRef.current.clear();
     if (keepaliveRef.current) {
@@ -176,12 +188,12 @@ export default function VideoWebPage() {
     if (streaming) stopStreaming();
     setSelectedSiteId(siteId);
     setCameras([]);
+    setExpandedCam(null);
     const p = privadas.find((x) => String(x.id) === siteId);
     setSelectedName(p?.descripcion || "");
     if (siteId) loadCameras(siteId);
   };
 
-  // Grid columns based on camera count
   const gridCols =
     cameras.length <= 1
       ? "grid-cols-1"
@@ -226,9 +238,6 @@ export default function VideoWebPage() {
             {!loading && cameras.length > 0 && (
               <span className="text-green-600 font-medium">{cameras.length} camaras</span>
             )}
-            {!loading && selectedSiteId && cameras.length === 0 && !streaming && (
-              <span className="text-amber-600">Sin camaras configuradas para esta privada.</span>
-            )}
           </div>
 
           <div className="flex gap-2">
@@ -267,12 +276,21 @@ export default function VideoWebPage() {
       {cameras.length > 0 && (
         <div className={`grid ${gridCols} gap-2`}>
           {cameras.map((cam) => (
-            <div key={cam.index} className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: "4/3" }}>
-              <div
-                id={`cam-${cam.index}`}
-                className="absolute inset-0 flex items-center justify-center"
-                style={{ backgroundColor: "#1a1a2e" }}
-              >
+            <div
+              key={cam.index}
+              className="relative bg-gray-900 rounded-lg overflow-hidden cursor-pointer group"
+              style={{ aspectRatio: "4/3" }}
+              onClick={() => streaming && setExpandedCam(cam)}
+            >
+              {/* Imagen real - sin parpadeo */}
+              <img
+                id={`cam-img-${cam.index}`}
+                alt={cam.alias}
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ display: "none" }}
+              />
+              {/* Placeholder cuando no hay imagen */}
+              <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: "#1a1a2e" }}>
                 {!streaming && (
                   <div className="text-center text-gray-500">
                     <Video className="h-8 w-8 mx-auto mb-1 opacity-30" />
@@ -280,17 +298,24 @@ export default function VideoWebPage() {
                   </div>
                 )}
               </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1.5">
+              {/* Label */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1.5 z-10">
                 <div className="flex items-center justify-between">
                   <span className="text-white text-xs font-medium truncate">{cam.alias}</span>
                   <span className="text-gray-400 text-[10px]">Ch {cam.index}</span>
                 </div>
               </div>
+              {/* Live + expand indicator */}
               {streaming && (
-                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-red-600/90 rounded px-1.5 py-0.5">
-                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                  <span className="text-white text-[10px] font-bold">LIVE</span>
-                </div>
+                <>
+                  <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-red-600/90 rounded px-1.5 py-0.5 z-10">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                    <span className="text-white text-[10px] font-bold">LIVE</span>
+                  </div>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors z-[5] flex items-center justify-center">
+                    <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover:opacity-70 transition-opacity" />
+                  </div>
+                </>
               )}
             </div>
           ))}
@@ -312,6 +337,65 @@ export default function VideoWebPage() {
           <Video className="h-16 w-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-medium text-gray-500 mb-2">Selecciona una privada</h3>
           <p className="text-sm text-gray-400">Elige una privada para ver las camaras disponibles del DVR</p>
+        </div>
+      )}
+
+      {/* Modal de camara expandida */}
+      {expandedCam && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center"
+          onClick={() => setExpandedCam(null)}
+        >
+          <div className="relative w-full h-full max-w-[90vw] max-h-[90vh] m-4" onClick={(e) => e.stopPropagation()}>
+            {/* Imagen expandida */}
+            <img
+              id="cam-img-expanded"
+              data-cam-index={expandedCam.index}
+              alt={expandedCam.alias}
+              className="w-full h-full object-contain"
+            />
+            {/* Header */}
+            <div className="absolute top-0 left-0 right-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 bg-red-600/90 rounded px-2 py-1">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  <span className="text-white text-xs font-bold">LIVE</span>
+                </div>
+                <span className="text-white font-medium">{expandedCam.alias}</span>
+                <span className="text-gray-400 text-sm">Ch {expandedCam.index} - {selectedName}</span>
+              </div>
+              <button
+                onClick={() => setExpandedCam(null)}
+                className="text-white hover:text-gray-300 bg-black/50 rounded-full p-2 transition"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            {/* Thumbnails de otras camaras */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+              <div className="flex gap-2 overflow-x-auto">
+                {cameras.map((cam) => (
+                  <button
+                    key={cam.index}
+                    onClick={() => setExpandedCam(cam)}
+                    className={`flex-shrink-0 rounded overflow-hidden border-2 transition ${
+                      expandedCam.index === cam.index ? "border-orange-500" : "border-transparent hover:border-white/50"
+                    }`}
+                    style={{ width: 120, height: 90 }}
+                  >
+                    <img
+                      src={document.getElementById(`cam-img-${cam.index}`)?.getAttribute("src") || ""}
+                      alt={cam.alias}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1">
+                      <span className="text-white text-[10px]">{cam.alias}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
