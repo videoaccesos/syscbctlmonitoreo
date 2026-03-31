@@ -71,6 +71,7 @@ const fullNavigation: NavItem[] = [
       { label: "Conciliación de Tarjetas", href: "/herramientas/conciliacion" },
       { label: "Dashboard de Ingresos", href: "/herramientas/ingresos" },
       { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
+      { label: "Video Web", href: "/herramientas/video-web" },
     ],
   },
   {

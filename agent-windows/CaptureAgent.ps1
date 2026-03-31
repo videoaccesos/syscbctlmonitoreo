@@ -54,6 +54,130 @@ function Log-Error { param([string]$Msg) Write-Log "ERROR" $Msg }
 function Log-Debug { param([string]$Msg) if ($script:Config.log.level -eq "DEBUG") { Write-Log "DEBUG" $Msg } }
 
 # ---------------------------------------------------------------------------
+# Auto-exploracion del DVR: detecta canales activos
+# ---------------------------------------------------------------------------
+$script:DiscoveredCameras = @()
+
+function Explore-DVR {
+    # Obtener IP base y credenciales del primer camera config
+    $baseCam = $script:Config.cameras[0]
+    if (-not $baseCam) {
+        Log-Warn "No hay camaras configuradas, no se puede explorar DVR"
+        return
+    }
+
+    # Extraer IP del DVR de la primera URL
+    $dvrIp = $null
+    if ($baseCam.snapshot_url -match "http://([^/]+)") {
+        $dvrIp = $Matches[1]
+    }
+    if (-not $dvrIp) {
+        Log-Warn "No se pudo extraer IP del DVR"
+        return
+    }
+
+    $username = $baseCam.username
+    $password = $baseCam.password
+    $secPass = ConvertTo-SecureString $password -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential($username, $secPass)
+
+    Log-Info "=== Explorando DVR en $dvrIp ==="
+
+    # Obtener nombres de canales
+    $channelNames = @{}
+    try {
+        $channels = Invoke-WebRequest -Uri "http://${dvrIp}/ISAPI/System/Video/inputs/channels" -Credential $cred -TimeoutSec 5 -UseBasicParsing
+        $xml = [xml]$channels.Content
+        foreach ($ch in $xml.VideoInputChannelList.VideoInputChannel) {
+            if ($ch.id -and $ch.name) { $channelNames[[int]$ch.id] = $ch.name }
+        }
+    } catch {}
+    try {
+        $ipCh = Invoke-WebRequest -Uri "http://${dvrIp}/ISAPI/ContentMgmt/InputProxy/channels" -Credential $cred -TimeoutSec 5 -UseBasicParsing
+        $xml2 = [xml]$ipCh.Content
+        foreach ($ch in $xml2.InputProxyChannelList.InputProxyChannel) {
+            if ($ch.id -and $ch.name) { $channelNames[[int]$ch.id] = $ch.name }
+        }
+    } catch {}
+
+    # Probar canales 1-16 (sub-stream)
+    $discovered = @()
+    for ($ch = 1; $ch -le 16; $ch++) {
+        $chCode = "${ch}02"
+        $url = "http://${dvrIp}/ISAPI/Streaming/channels/${chCode}/picture"
+        try {
+            $r = Invoke-WebRequest -Uri $url -Credential $cred -TimeoutSec 5 -UseBasicParsing
+            if ($r.StatusCode -eq 200 -and $r.Content.Length -gt 500) {
+                $name = if ($channelNames.ContainsKey($ch)) { $channelNames[$ch] } else { "Canal $ch" }
+                $sizeKb = [math]::Round($r.Content.Length / 1024, 1)
+                Log-Info "  Canal $ch ($name): OK [${sizeKb} KB] -> $chCode"
+                $discovered += @{
+                    channel = $ch
+                    code = $chCode
+                    alias = $name
+                    snapshot_url = $url
+                    username = $username
+                    password = $password
+                    auth_type = "digest"
+                    bytes = $r.Content.Length
+                }
+            }
+        } catch {
+            # Canal no disponible - ignorar
+        }
+    }
+
+    $script:DiscoveredCameras = $discovered
+    Log-Info "DVR explorado: $($discovered.Count) canales con imagen"
+
+    # Reportar canales al servidor
+    Report-Channels
+}
+
+function Report-Channels {
+    if ($script:DiscoveredCameras.Count -eq 0) { return }
+
+    $baseUrl = $script:Config.backend_url -replace '/+$', ''
+    $reportUrl = "$baseUrl/channels"
+
+    $channels = @()
+    foreach ($cam in $script:DiscoveredCameras) {
+        $channels += @{
+            channel = $cam.channel
+            code = $cam.code
+            alias = $cam.alias
+            bytes = $cam.bytes
+        }
+    }
+
+    $body = @{
+        site_id = $script:Config.site_id
+        channels = $channels
+    } | ConvertTo-Json -Depth 3
+
+    try {
+        $request = [System.Net.HttpWebRequest]::Create($reportUrl)
+        $request.Method = "POST"
+        $request.ContentType = "application/json"
+        $request.Timeout = 10000
+        $request.Headers.Add("X-Agent-Token", $script:Config.agent_token)
+        $request.UserAgent = "CaptureAgent/1.0"
+
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+        $request.ContentLength = $bytes.Length
+        $reqStream = $request.GetRequestStream()
+        $reqStream.Write($bytes, 0, $bytes.Length)
+        $reqStream.Close()
+
+        $response = $request.GetResponse()
+        $response.Close()
+        Log-Info "Canales reportados al servidor OK"
+    } catch {
+        Log-Warn "Error reportando canales: $($_.Exception.Message)"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Inicializacion
 # ---------------------------------------------------------------------------
 function Initialize-Agent {
@@ -85,6 +209,9 @@ function Initialize-Agent {
     # Inicializar URL de polling y pool de threads
     Initialize-PollUrl
     Initialize-RunspacePool
+
+    # Explorar DVR para descubrir todos los canales disponibles
+    Explore-DVR
 
     $script:AgentState = "idle"
     Log-Info "Agente en estado IDLE - esperando comandos via polling HTTP"
@@ -318,11 +445,18 @@ function Process-Command {
             $fps = if ($Cmd.fps) { [double]$Cmd.fps } else { $script:Config.defaults.fps }
             $duration = if ($Cmd.duration) { [int]$Cmd.duration } else { $script:Config.defaults.max_duration_sec }
             $camId = if ($Cmd.cam_id) { [int]$Cmd.cam_id } else { 0 }
+            $mode = if ($Cmd.mode) { $Cmd.mode } else { "configured" }
 
-            if ($camId -gt 0) {
+            if ($mode -eq "all" -and $script:DiscoveredCameras.Count -gt 0) {
+                # Modo "all": transmitir todos los canales descubiertos del DVR
+                Log-Info "start_stream mode=all: iniciando $($script:DiscoveredCameras.Count) canales descubiertos"
+                foreach ($cam in $script:DiscoveredCameras) {
+                    Start-CameraStream -CamId $cam.channel -Fps $fps -DurationSec $duration
+                }
+            } elseif ($camId -gt 0) {
                 Start-CameraStream -CamId $camId -Fps $fps -DurationSec $duration
             } else {
-                # Todas las camaras
+                # Modo normal: solo camaras configuradas
                 foreach ($cam in $script:Config.cameras) {
                     Start-CameraStream -CamId $cam.cam_id -Fps $fps -DurationSec $duration
                 }
@@ -334,8 +468,9 @@ function Process-Command {
             if ($camId -gt 0) {
                 Stop-CameraStream -CamId $camId
             } else {
-                foreach ($cam in $script:Config.cameras) {
-                    Stop-CameraStream -CamId $cam.cam_id
+                # Detener todas las camaras activas
+                foreach ($camKey in @($script:StreamingCams.Keys)) {
+                    Stop-CameraStream -CamId $camKey
                 }
             }
         }
@@ -457,9 +592,23 @@ function Initialize-RunspacePool {
 }
 
 function Invoke-CaptureLoop {
+    # Construir mapa de configs: primero las del config.json, luego las descubiertas
     $camConfigs = @{}
     foreach ($cam in $script:Config.cameras) {
         $camConfigs[$cam.cam_id] = $cam
+    }
+    # Agregar canales descubiertos que no estan en config
+    foreach ($cam in $script:DiscoveredCameras) {
+        if (-not $camConfigs.ContainsKey($cam.channel)) {
+            $camConfigs[$cam.channel] = @{
+                cam_id = $cam.channel
+                alias = $cam.alias
+                snapshot_url = $cam.snapshot_url
+                username = $cam.username
+                password = $cam.password
+                auth_type = $cam.auth_type
+            }
+        }
     }
 
     # Verificar timeouts primero

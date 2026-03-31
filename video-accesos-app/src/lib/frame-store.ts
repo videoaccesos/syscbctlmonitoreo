@@ -178,6 +178,7 @@ interface PendingCommand {
   quality?: number;
   width?: number;
   cam_id?: number;
+  mode?: string;
   ts: number;
 }
 
@@ -196,4 +197,37 @@ export function popCommands(siteId: string): PendingCommand[] {
   const cmds = pendingCommands.get(siteId) || [];
   pendingCommands.delete(siteId);
   return cmds;
+}
+
+// ---------------------------------------------------------------------------
+// Canales descubiertos por agentes (reportados via /api/camera-frames/channels)
+// ---------------------------------------------------------------------------
+export interface SiteChannel {
+  channel: number;
+  code: string;
+  alias: string;
+  bytes?: number;
+}
+
+const siteChannels = new Map<string, { channels: SiteChannel[]; reportedAt: number }>();
+
+/** Guardar canales reportados por un agente */
+export function setSiteChannels(siteId: string, channels: SiteChannel[]): void {
+  siteChannels.set(siteId, { channels, reportedAt: Date.now() });
+}
+
+/** Obtener canales reportados para un sitio */
+export function getSiteChannels(siteId: string): SiteChannel[] | null {
+  const data = siteChannels.get(siteId);
+  if (!data) return null;
+  return data.channels;
+}
+
+/** Listar todos los sitios con canales reportados */
+export function listSitesWithChannels(): Array<{ siteId: string; channelCount: number; reportedAt: number }> {
+  const result: Array<{ siteId: string; channelCount: number; reportedAt: number }> = [];
+  for (const [siteId, data] of siteChannels) {
+    result.push({ siteId, channelCount: data.channels.length, reportedAt: data.reportedAt });
+  }
+  return result;
 }

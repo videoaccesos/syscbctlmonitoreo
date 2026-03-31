@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { site_id, cam_id, cmd, fps, duration, quality, width } = body;
+    const { site_id, cam_id, cmd, fps, duration, quality, width, mode } = body;
 
     if (!site_id || !cmd) {
       return NextResponse.json(
@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
       quality: payload.quality as number | undefined,
       width: payload.width as number | undefined,
       cam_id: camTarget > 0 ? camTarget : undefined,
+      mode: mode as string | undefined,
       ts: Date.now(),
     });
 

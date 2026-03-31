@@ -1,0 +1,72 @@
+import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
+import { getSiteChannels, setSiteChannels } from "@/lib/frame-store";
+
+const TAG = "camera-channels";
+
+const AGENT_TOKEN = process.env.AGENT_TOKEN || "b7f9dee88d9e9d141557ef6227a351048df0d105b71dfd00cdda483d7d347c47";
+
+/**
+ * POST /api/camera-frames/channels
+ * El agente reporta los canales disponibles del DVR.
+ *
+ * GET /api/camera-frames/channels?site_id=66
+ * Devuelve los canales disponibles para un sitio (requiere sesion).
+ */
+export async function POST(request: NextRequest) {
+  const token = request.headers.get("x-agent-token") || "";
+  if (token !== AGENT_TOKEN) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { site_id, channels } = body;
+
+    if (!site_id || !Array.isArray(channels)) {
+      return NextResponse.json({ error: "Se requieren site_id y channels" }, { status: 400 });
+    }
+
+    setSiteChannels(String(site_id), channels);
+    logger.info(TAG, `Site ${site_id}: ${channels.length} canales reportados por agente`);
+
+    return NextResponse.json({
+      ok: true,
+      site_id,
+      channels_count: channels.length,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error(TAG, `Error: ${msg}`);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  // Auth via session o agent token
+  const token = request.headers.get("x-agent-token") || "";
+  if (token !== AGENT_TOKEN) {
+    // Verificar sesion
+    const { getServerSession } = await import("next-auth/next");
+    const { authOptions } = await import("@/lib/auth");
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+  }
+
+  const { searchParams } = new URL(request.url);
+  const siteId = searchParams.get("site_id");
+
+  if (!siteId) {
+    return NextResponse.json({ error: "Se requiere site_id" }, { status: 400 });
+  }
+
+  const channels = getSiteChannels(siteId);
+
+  return NextResponse.json({
+    ok: true,
+    site_id: siteId,
+    channels: channels || [],
+  });
+}
