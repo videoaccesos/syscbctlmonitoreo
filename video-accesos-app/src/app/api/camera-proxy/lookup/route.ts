@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { listActiveFrames } from "@/lib/frame-store";
+import { listActiveFrames, getSiteChannels } from "@/lib/frame-store";
 
 const TAG = "camera-lookup";
 
@@ -140,22 +140,39 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // --- Agregar camaras del agente remoto que no estan en la BD (cam 4+) ---
-    const dbCamIndexes = new Set(cameras.map(c => c.index));
-    const agentFrames = listActiveFrames().filter(f => f.siteId === String(privada.id));
+    // --- Agregar camaras del agente remoto ---
+    const knownIndexes = new Set(cameras.map(c => c.index));
+    const siteIdStr = String(privada.id);
+
+    // 1. Canales reportados por el agente (disponibles aunque no estén transmitiendo)
+    const agentChannels = getSiteChannels(siteIdStr) || [];
+    for (const ch of agentChannels) {
+      if (!knownIndexes.has(ch.channel)) {
+        cameras.push({
+          index: ch.channel,
+          alias: ch.alias || `Camara ${ch.channel}`,
+          available: true,
+        });
+        knownIndexes.add(ch.channel);
+      }
+    }
+
+    // 2. Frames activos (por si hay cámaras transmitiendo no reportadas en channels)
+    const agentFrames = listActiveFrames().filter(f => f.siteId === siteIdStr);
     for (const af of agentFrames) {
-      if (!dbCamIndexes.has(af.camId)) {
+      if (!knownIndexes.has(af.camId)) {
         cameras.push({
           index: af.camId,
           alias: `Camara ${af.camId}`,
           available: true,
         });
+        knownIndexes.add(af.camId);
       }
     }
     // Ordenar por index
     cameras.sort((a, b) => a.index - b.index);
 
-    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas (${agentFrames.length} del agente)`, { privada_id: privada.id, privada: privada.descripcion, cameras });
+    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas (${agentChannels.length} canales agente, ${agentFrames.length} frames activos)`, { privada_id: privada.id, privada: privada.descripcion, cameras });
 
     return NextResponse.json({
       found: true,
