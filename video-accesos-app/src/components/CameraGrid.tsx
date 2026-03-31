@@ -94,15 +94,17 @@ export default function CameraGrid({
   const mountedRef = useRef(true);
 
   // Buscar camaras cuando cambia el telefono/privadaId
-  const lookupCameras = useCallback(async () => {
+  const lookupCameras = useCallback(async (silent = false) => {
     if (!telefono && !privadaId) {
       console.log("[CameraGrid] lookupCameras: sin telefono ni privadaId, saltando");
       return;
     }
 
-    setLoading(true);
-    setError("");
-    setLookup(null);
+    if (!silent) {
+      setLoading(true);
+      setError("");
+      setLookup(null);
+    }
 
     try {
       const params = new URLSearchParams();
@@ -126,7 +128,9 @@ export default function CameraGrid({
           if (errData.detail) detail = errData.detail;
           else if (errData.error) detail = errData.error;
         } catch { /* ignore parse error */ }
-        setError(`Error al buscar camaras (${detail})`);
+        if (!silent) {
+          setError(`Error al buscar camaras (${detail})`);
+        }
         console.error("[CameraGrid] Lookup failed:", detail);
         return;
       }
@@ -137,13 +141,13 @@ export default function CameraGrid({
         setLookup(data);
       }
     } catch (err) {
-      if (mountedRef.current) {
+      if (mountedRef.current && !silent) {
         const msg = err instanceof Error ? err.message : "desconocido";
         setError(`Error de conexion al buscar camaras: ${msg}`);
         console.error("[CameraGrid] Lookup connection error:", msg);
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && !silent) {
         setLoading(false);
       }
     }
@@ -152,8 +156,16 @@ export default function CameraGrid({
   useEffect(() => {
     mountedRef.current = true;
     lookupCameras();
+
+    // Re-lookup silencioso cada 5s para detectar nuevos canales del agente
+    const relookupTimer = setInterval(() => {
+      if (!mountedRef.current) return;
+      lookupCameras(true);
+    }, 5000);
+
     return () => {
       mountedRef.current = false;
+      clearInterval(relookupTimer);
     };
   }, [lookupCameras]);
 
