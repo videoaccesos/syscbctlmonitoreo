@@ -413,20 +413,22 @@ function noSignalSvg(channel: string, errorMsg: string): string {
 
 // --- Auto-trigger start_stream cuando el proxy no encuentra frame del agente ---
 // Evita que el usuario tenga que esperar a que el flujo UI envie el comando.
-// Debounce por sitio: max 1 trigger cada 30 segundos.
+// Debounce por sitio+cam: max 1 trigger cada 15 segundos por cámara.
 const autoTriggerLastSent = new Map<string, number>();
-const AUTO_TRIGGER_DEBOUNCE_MS = 30_000;
+const AUTO_TRIGGER_DEBOUNCE_MS = 15_000;
 
-function autoTriggerStartStream(siteId: string) {
+function autoTriggerStartStream(siteId: string, camId?: number) {
   const now = Date.now();
-  const last = autoTriggerLastSent.get(siteId) || 0;
+  const key = camId ? `${siteId}:${camId}` : siteId;
+  const last = autoTriggerLastSent.get(key) || 0;
   if (now - last < AUTO_TRIGGER_DEBOUNCE_MS) return;
-  autoTriggerLastSent.set(siteId, now);
-  logger.info(TAG, `Auto-trigger start_stream para site=${siteId}`);
+  autoTriggerLastSent.set(key, now);
+  logger.info(TAG, `Auto-trigger start_stream para site=${siteId} cam=${camId || "all"}`);
   pushCommand(siteId, {
     cmd: "start_stream",
     fps: 25,
     duration: 0,
+    cam_id: camId,
     ts: now,
   });
 }
@@ -569,8 +571,7 @@ export async function GET(request: NextRequest) {
     diag.log("AGENT_FRAME_MISS", `site=${privada.id} cam=${camIndex}`);
 
     // --- Auto-trigger start_stream si no hay frame del agente ---
-    // Debounce: max 1 vez cada 30s por sitio
-    autoTriggerStartStream(String(privada.id));
+    autoTriggerStartStream(String(privada.id), camIndex);
 
     // --- Fallback: fetch directo al DVR (modo legacy, solo cam 1-3) ---
     // Obtener la URL de video segun el indice

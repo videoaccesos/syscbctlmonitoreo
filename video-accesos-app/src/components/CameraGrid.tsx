@@ -119,6 +119,24 @@ export default function CameraGrid({
   // ------------------------------------------------------------------
   // Lookup de camaras
   // ------------------------------------------------------------------
+  // Enviar start_stream para activar la transmision del agente
+  const triggerStartStream = useCallback(async (siteId: number) => {
+    try {
+      await fetch("/api/camera-frames/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: String(siteId),
+          cmd: "start_stream",
+          fps: 25,
+          duration: 0,
+          mode: "all",
+        }),
+      });
+      console.log("[CameraGrid] start_stream enviado para site", siteId);
+    } catch {}
+  }, []);
+
   const lookupCameras = useCallback(async (silent = false): Promise<CameraLookupResult | null> => {
     if (!telefono && !privadaId) return null;
 
@@ -195,10 +213,11 @@ export default function CameraGrid({
         return;
       }
 
-      // Tenemos camaras
+      // Tenemos camaras - activar transmision
       setLookup(data);
       setStatus("streaming");
       setStatusMsg("");
+      if (data.privada_id) triggerStartStream(data.privada_id);
     };
 
     doInitialLookup();
@@ -218,6 +237,8 @@ export default function CameraGrid({
         if (newCount > 0) {
           setStatus("streaming");
           setStatusMsg("");
+          // Enviar start_stream si es la primera vez que aparecen camaras
+          if (oldCount === 0 && data.privada_id) triggerStartStream(data.privada_id);
         } else if (newCount === 0 && oldCount === 0) {
           lookupAttemptRef.current++;
           const attempt = lookupAttemptRef.current;

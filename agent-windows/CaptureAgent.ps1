@@ -796,6 +796,7 @@ $script:LoopIteration = 0
 $script:LastGC = [DateTime]::MinValue
 $script:LastLogRotate = [DateTime]::MinValue
 $script:LastSuccessfulPoll = [DateTime]::Now
+$script:LastChannelReport = [DateTime]::MinValue
 $script:WatchdogMaxSilence = 120  # Si no hay poll exitoso en 2 min, auto-reiniciar
 
 function Start-AgentLoop {
@@ -828,6 +829,12 @@ function Start-AgentLoop {
             }
 
             Send-Heartbeat
+
+            # Re-reportar canales cada 60s para que el servidor los tenga frescos
+            if (((Get-Date) - $script:LastChannelReport).TotalSeconds -ge 60) {
+                Report-Channels
+                $script:LastChannelReport = Get-Date
+            }
 
             # Watchdog: si no hubo poll exitoso en 2 min, forzar reinicio
             $silenceSec = ((Get-Date) - $script:LastSuccessfulPoll).TotalSeconds
