@@ -93,11 +93,19 @@ export async function PUT(request: NextRequest) {
       };
     });
 
+    // Validar telefonos (formato Twilio: solo digitos, 10-15 chars)
+    const rawPhones = Array.isArray(body.notify_phones) ? body.notify_phones : existing?.notifyPhones || [];
+    const notifyPhones: string[] = rawPhones
+      .map((p: string) => String(p).replace(/\D/g, ""))
+      .filter((p: string) => p.length >= 10 && p.length <= 15);
+
     const config: GateConfig = {
       siteId: String(site_id),
       camId: parseInt(cam_id),
+      privadaName: body.privada_name || existing?.privadaName || undefined,
       intervalSec: interval_sec ?? existing?.intervalSec ?? 300,
       zones: parsedZones,
+      notifyPhones,
     };
 
     setGateConfig(config);

@@ -159,16 +159,18 @@ class PluginVision(ModuloBase):
     # ------------------------------------------------------------------
 
     def _process_alert(self, payload: dict):
-        """Consulta supervisores en BD y envia WhatsApp con foto a cada uno."""
+        """Envia WhatsApp con foto a los telefonos configurados o supervisores de BD."""
         alias = payload.get("alias", "Desconocido")
         site_id = payload.get("site_id", "?")
         cam_id = payload.get("cam_id", "?")
+        privada = payload.get("privada", f"Sitio {site_id}")
         difference = payload.get("difference", 0)
         held_seconds = payload.get("held_seconds", 0)
-        image_url = payload.get("image_url")  # ruta relativa: /static/gate-alerts/xxx.jpg
+        image_url = payload.get("image_url")
+        notify_phones = payload.get("notify_phones", [])
         ts = payload.get("ts", datetime.utcnow().isoformat())
 
-        # Formatear tiempo abierto
+        # Formatear tiempo transcurrido desde primera deteccion
         if held_seconds >= 3600:
             time_str = f"{held_seconds // 3600}h {(held_seconds % 3600) // 60} min"
         elif held_seconds >= 60:
@@ -176,12 +178,21 @@ class PluginVision(ModuloBase):
         else:
             time_str = f"{held_seconds} seg"
 
+        # Formatear hora local
+        try:
+            ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            hora_local = ts_dt.strftime("%H:%M:%S")
+        except Exception:
+            hora_local = ts
+
         message = (
             "\u26a0\ufe0f ALERTA PORT\u00d3N \u26a0\ufe0f\n"
-            f"{alias} lleva {time_str} abierto\n"
-            f"Diferencia detectada: {difference}%\n"
-            f"Sitio: {site_id} | C\u00e1mara: {cam_id}\n"
-            f"{ts}"
+            f"\U0001f3e0 {privada}\n"
+            f"\U0001f6aa {alias}\n"
+            f"\u23f1 Tiempo abierto: {time_str}\n"
+            f"\U0001f4ca Diferencia: {difference}%\n"
+            f"\U0001f4f7 C\u00e1mara: {cam_id}\n"
+            f"\U0001f552 {hora_local}"
         )
 
         # Construir URL absoluta de la evidencia fotografica
@@ -189,17 +200,27 @@ class PluginVision(ModuloBase):
         if image_url:
             media_url = f"{NEXTJS_DOMAIN}{image_url}"
 
-        # Obtener supervisores de la BD
-        supervisors = self._get_supervisors()
-        if not supervisors:
-            logger.warning("[Vision] No se encontraron supervisores activos")
+        # Determinar destinatarios:
+        # 1) Telefonos configurados en el monitor (prioridad)
+        # 2) Fallback: supervisores de la BD
+        phones_to_notify = []
+        if notify_phones and isinstance(notify_phones, list):
+            phones_to_notify = [str(p).strip() for p in notify_phones if str(p).strip()]
+
+        if not phones_to_notify:
+            supervisors = self._get_supervisors()
+            phones_to_notify = [
+                sup.get("telefono", "").strip()
+                for sup in supervisors
+                if sup.get("telefono", "").strip()
+            ]
+
+        if not phones_to_notify:
+            logger.warning("[Vision] No hay telefonos para notificar alerta de %s", alias)
             return
 
         sent_count = 0
-        for sup in supervisors:
-            telefono = sup.get("telefono", "").strip()
-            if not telefono:
-                continue
+        for telefono in phones_to_notify:
             try:
                 self._send_whatsapp(telefono, message, media_url)
                 sent_count += 1

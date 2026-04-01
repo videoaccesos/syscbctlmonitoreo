@@ -52,10 +52,14 @@ export interface GateZone {
 export interface GateConfig {
   siteId: string;
   camId: number;
+  /** Nombre de la privada (para incluir en alertas) */
+  privadaName?: string;
   /** Intervalo entre snapshots en segundos. Default 300 (5 min) */
   intervalSec: number;
   /** Hasta 3 zonas de monitoreo */
   zones: GateZone[];
+  /** Numeros de telefono para notificacion WhatsApp (formato Twilio: 5216672639025) */
+  notifyPhones: string[];
 }
 
 export type GateState = "closed" | "open" | "unknown" | "no-signal";
@@ -521,14 +525,19 @@ async function runMonitorCycle(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Alertas via MQTT
+// Alertas: MQTT + HTTP directo al bot orquestador
 // ---------------------------------------------------------------------------
+
+/** URL del bot orquestador para enviar alertas */
+const BOT_ALERT_URL = process.env.BOT_ALERT_URL || "http://localhost:5501/api/vision/alert";
 
 function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec: number, jpegData?: Buffer): void {
   const minutes = Math.round(heldSec / 60);
   const timeLabel = minutes >= 1 ? `${minutes} min` : `${Math.round(heldSec)}s`;
-  const message = `Porton "${zone.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`;
+  const privadaLabel = config.privadaName || `Sitio ${config.siteId}`;
+  const message = `Porton "${zone.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%) - ${privadaLabel}`;
 
+  // Guardar evidencia fotografica
   let imageFile: string | null = null;
   let imageUrl: string | null = null;
   try {
@@ -550,16 +559,27 @@ function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec
     cam_id: config.camId,
     zone_id: zone.id,
     alias: zone.alias,
+    privada: privadaLabel,
     state: "open",
     held_seconds: Math.round(heldSec),
     difference: Math.round(diff * 100),
     message,
     image_url: imageUrl,
+    notify_phones: config.notifyPhones || [],
     ts: new Date().toISOString(),
   };
 
+  // Via 1: MQTT (para cualquier suscriptor)
   if (isMqttConnected()) publishAlert(config.siteId, alertPayload);
 
+  // Via 2: HTTP POST directo al bot orquestador (WhatsApp con foto)
+  if (config.notifyPhones && config.notifyPhones.length > 0) {
+    notifyBotOrquestador(alertPayload).catch((err) => {
+      logger.error(TAG, `Error notificando al bot: ${err instanceof Error ? err.message : err}`);
+    });
+  }
+
+  // Persistir en historial
   pushAlertRecord({
     id: crypto.randomUUID(),
     siteId: config.siteId,
@@ -575,7 +595,29 @@ function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec
     createdAt: new Date().toISOString(),
   });
 
-  logger.warn(TAG, `ALERTA: ${message}`);
+  logger.warn(TAG, `ALERTA: ${message} -> notificar a ${(config.notifyPhones || []).length} telefonos`);
+}
+
+/**
+ * Enviar alerta al bot orquestador via HTTP POST.
+ * El bot se encarga de enviar WhatsApp con foto a los telefonos indicados.
+ */
+async function notifyBotOrquestador(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const res = await fetch(BOT_ALERT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.ok) {
+      logger.info(TAG, `Bot notificado OK (${res.status})`);
+    } else {
+      logger.warn(TAG, `Bot respondio ${res.status}: ${await res.text().catch(() => "")}`);
+    }
+  } catch (err) {
+    logger.error(TAG, `Error llamando bot: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

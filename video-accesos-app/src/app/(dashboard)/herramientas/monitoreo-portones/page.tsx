@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, MouseEvent as ReactMouseEvent } from "react";
 import {
   Shield,
   Clock,
   AlertTriangle,
   Activity,
   RefreshCw,
+  Settings,
+  Plus,
+  Trash2,
+  Save,
+  Camera,
+  Phone,
+  X,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +41,49 @@ interface AlertStats {
   activeAlerts: number;
 }
 
+interface PrivadaOption {
+  id: number;
+  descripcion: string;
+}
+
+interface CameraInfo {
+  index: number;
+  alias: string;
+  available: boolean;
+}
+
+interface GateZone {
+  id: string;
+  roi: { x: number; y: number; width: number; height: number };
+  alias: string;
+  threshold: number;
+  consecutive_threshold: number;
+  enabled: boolean;
+}
+
+interface GateConfigAPI {
+  siteId: string;
+  camId: number;
+  privadaName?: string;
+  intervalSec: number;
+  zones: {
+    id: string;
+    roi: { x: number; y: number; width: number; height: number };
+    alias: string;
+    threshold: number;
+    consecutiveThreshold: number;
+    referenceHistogram: number[] | null;
+    referenceImageB64: string | null;
+    enabled: boolean;
+  }[];
+  notifyPhones: string[];
+}
+
 type DateFilter = "hoy" | "7dias" | "30dias";
+type TabKey = "alertas" | "config";
+
+const ZONE_COLORS = ["#ef4444", "#3b82f6", "#22c55e"];
+const ZONE_NAMES = ["Rojo", "Azul", "Verde"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,12 +92,8 @@ type DateFilter = "hoy" | "7dias" | "30dias";
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("es-MX", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
 
@@ -64,32 +109,78 @@ function isWithinFilter(createdAt: string, filter: DateFilter): boolean {
   const created = new Date(createdAt);
   const diffMs = now.getTime() - created.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
   switch (filter) {
-    case "hoy":
-      return now.toISOString().slice(0, 10) === createdAt.slice(0, 10);
-    case "7dias":
-      return diffDays <= 7;
-    case "30dias":
-      return diffDays <= 30;
+    case "hoy": return now.toISOString().slice(0, 10) === createdAt.slice(0, 10);
+    case "7dias": return diffDays <= 7;
+    case "30dias": return diffDays <= 30;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Main Page
 // ---------------------------------------------------------------------------
 
 export default function MonitoreoPortonesPage() {
+  const [tab, setTab] = useState<TabKey>("alertas");
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Shield className="h-7 w-7 text-blue-600" />
+          Monitoreo de Portones
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Alertas, historial y configuracion de monitoreo
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          onClick={() => setTab("alertas")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${
+            tab === "alertas"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <AlertTriangle className="h-4 w-4 inline mr-1.5" />
+          Alertas
+        </button>
+        <button
+          onClick={() => setTab("config")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${
+            tab === "config"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Settings className="h-4 w-4 inline mr-1.5" />
+          Configuracion
+        </button>
+      </div>
+
+      {tab === "alertas" ? <AlertasTab /> : <ConfigTab />}
+    </div>
+  );
+}
+
+// ===========================================================================
+// ALERTAS TAB
+// ===========================================================================
+
+function AlertasTab() {
   const [alerts, setAlerts] = useState<GateAlertRecord[]>([]);
   const [stats, setStats] = useState<AlertStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("hoy");
-  const [lastUpdate, setLastUpdate] = useState<string>("");
+  const [lastUpdate, setLastUpdate] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/gate-monitor/alerts?limit=500");
-      if (!res.ok) throw new Error("Error al cargar alertas");
+      if (!res.ok) throw new Error("Error");
       const json = await res.json();
       setAlerts(json.alerts || []);
       setStats(json.stats || null);
@@ -103,199 +194,95 @@ export default function MonitoreoPortonesPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchData, 30000);
+    return () => clearInterval(iv);
   }, [fetchData]);
 
-  const filteredAlerts = alerts.filter((a) => isWithinFilter(a.createdAt, dateFilter));
-
-  const filterLabels: Record<DateFilter, string> = {
-    hoy: "Hoy",
-    "7dias": "7 dias",
-    "30dias": "30 dias",
-  };
+  const filtered = alerts.filter((a) => isWithinFilter(a.createdAt, dateFilter));
+  const filterLabels: Record<DateFilter, string> = { hoy: "Hoy", "7dias": "7 dias", "30dias": "30 dias" };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Shield className="h-7 w-7 text-blue-600" />
-            Monitoreo de Portones
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Historial de alertas y estado de portones monitoreados
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdate && (
-            <span className="text-xs text-gray-400">
-              Actualizado: {lastUpdate}
-            </span>
-          )}
-          <button
-            onClick={() => {
-              setLoading(true);
-              fetchData();
-            }}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Actualizar
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
+    <div className="space-y-4">
+      {/* Summary */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard
-            label="Total alertas hoy"
-            value={String(stats.totalToday)}
-            icon={<AlertTriangle className="h-5 w-5 text-orange-500" />}
-            color="orange"
-          />
-          <SummaryCard
-            label="Promedio tiempo abierto"
-            value={fmtDuration(stats.avgHeldSeconds)}
-            icon={<Clock className="h-5 w-5 text-blue-500" />}
-            color="blue"
-          />
-          <SummaryCard
-            label="Porton mas frecuente"
-            value={stats.mostFrequentGate || "N/A"}
-            icon={<Activity className="h-5 w-5 text-purple-500" />}
-            color="purple"
-          />
-          <SummaryCard
-            label="Alertas activas"
-            value={String(stats.activeAlerts)}
-            icon={<Shield className="h-5 w-5 text-red-500" />}
-            color={stats.activeAlerts > 0 ? "red" : "green"}
-          />
+          <SummaryCard label="Total alertas hoy" value={String(stats.totalToday)}
+            icon={<AlertTriangle className="h-5 w-5 text-orange-500" />} color="orange" />
+          <SummaryCard label="Promedio tiempo abierto" value={fmtDuration(stats.avgHeldSeconds)}
+            icon={<Clock className="h-5 w-5 text-blue-500" />} color="blue" />
+          <SummaryCard label="Porton mas frecuente" value={stats.mostFrequentGate || "N/A"}
+            icon={<Activity className="h-5 w-5 text-purple-500" />} color="purple" />
+          <SummaryCard label="Alertas activas" value={String(stats.activeAlerts)}
+            icon={<Shield className="h-5 w-5 text-red-500" />} color={stats.activeAlerts > 0 ? "red" : "green"} />
         </div>
       )}
 
-      {/* Date Filter */}
-      <div className="flex items-center gap-2">
+      {/* Filters & refresh */}
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-700">Periodo:</span>
-        {(Object.keys(filterLabels) as DateFilter[]).map((key) => (
-          <button
-            key={key}
-            onClick={() => setDateFilter(key)}
+        {(Object.keys(filterLabels) as DateFilter[]).map((k) => (
+          <button key={k} onClick={() => setDateFilter(k)}
             className={`px-3 py-1.5 text-sm rounded-lg transition ${
-              dateFilter === key
-                ? "bg-blue-600 text-white"
-                : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
-            }`}
-          >
-            {filterLabels[key]}
-          </button>
+              dateFilter === k ? "bg-blue-600 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
+            }`}>{filterLabels[k]}</button>
         ))}
-        <span className="ml-auto text-sm text-gray-400">
-          {filteredAlerts.length} alerta{filteredAlerts.length !== 1 ? "s" : ""}
-        </span>
+        <span className="ml-auto text-sm text-gray-400">{filtered.length} alerta{filtered.length !== 1 ? "s" : ""}</span>
+        {lastUpdate && <span className="text-xs text-gray-400">| {lastUpdate}</span>}
+        <button onClick={() => { setLoading(true); fetchData(); }}
+          className="flex items-center gap-1 px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Actualizar
+        </button>
       </div>
 
-      {/* Alert Table */}
+      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Fecha/Hora
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Porton
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Estado
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">
-                  Tiempo abierto
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">
-                  Diferencia %
-                </th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">
-                  Evidencia
-                </th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">
-                  Resuelto
-                </th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha/Hora</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Porton</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Tiempo abierto</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Diferencia %</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Evidencia</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Resuelto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && filteredAlerts.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
-                    Cargando alertas...
+              {loading && filtered.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-12 text-gray-400">Cargando alertas...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-12 text-gray-400">No hay alertas en este periodo</td></tr>
+              ) : filtered.map((a) => (
+                <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmtDateTime(a.createdAt)}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{a.alias}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                      {a.state === "open" ? "Abierto" : a.state}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700">{fmtDuration(a.heldSeconds)}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{a.difference}%</td>
+                  <td className="px-4 py-3 text-center">
+                    {a.imageFile ? (
+                      <a href={`/static/gate-alerts/${a.imageFile}`} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/static/gate-alerts/${a.imageFile}`} alt="Evidencia"
+                          className="h-10 w-14 object-cover rounded border border-gray-200 hover:border-blue-400 transition inline-block" />
+                      </a>
+                    ) : <span className="text-xs text-gray-400">-</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {a.resolvedAt === null ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">ACTIVA</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">RESUELTA</span>
+                    )}
                   </td>
                 </tr>
-              ) : filteredAlerts.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
-                    No hay alertas en este periodo
-                  </td>
-                </tr>
-              ) : (
-                filteredAlerts.map((alert) => (
-                  <tr
-                    key={alert.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      {fmtDateTime(alert.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {alert.alias}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                        {alert.state === "open" ? "Abierto" : alert.state}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {fmtDuration(alert.heldSeconds)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {alert.difference}%
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {alert.imageFile ? (
-                        <a
-                          href={`/static/gate-alerts/${alert.imageFile}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`/static/gate-alerts/${alert.imageFile}`}
-                            alt="Evidencia"
-                            className="h-10 w-14 object-cover rounded border border-gray-200 hover:border-blue-400 transition"
-                          />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {alert.resolvedAt === null ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          ACTIVA
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                          RESUELTA
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -304,38 +291,491 @@ export default function MonitoreoPortonesPage() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Summary Card
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// CONFIG TAB
+// ===========================================================================
 
-function SummaryCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  const bgMap: Record<string, string> = {
-    orange: "bg-orange-50 border-orange-200",
-    blue: "bg-blue-50 border-blue-200",
-    purple: "bg-purple-50 border-purple-200",
-    red: "bg-red-50 border-red-200",
-    green: "bg-green-50 border-green-200",
+function ConfigTab() {
+  const [privadas, setPrivadas] = useState<PrivadaOption[]>([]);
+  const [cameras, setCameras] = useState<CameraInfo[]>([]);
+  const [selectedPrivada, setSelectedPrivada] = useState("");
+  const [selectedPrivadaName, setSelectedPrivadaName] = useState("");
+  const [selectedCam, setSelectedCam] = useState<number | null>(null);
+  const [zones, setZones] = useState<GateZone[]>([]);
+  const [phones, setPhones] = useState<string[]>([]);
+  const [newPhone, setNewPhone] = useState("");
+  const [intervalSec, setIntervalSec] = useState(300);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [drawingZone, setDrawingZone] = useState<number | null>(null);
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+  const [configs, setConfigs] = useState<GateConfigAPI[]>([]);
+  const [capturingRef, setCapturingRef] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  // Load privadas
+  useEffect(() => {
+    fetch("/api/privadas/list").then(r => r.json()).then(data => {
+      setPrivadas(Array.isArray(data) ? data : data.privadas || []);
+    }).catch(() => {});
+  }, []);
+
+  // Load existing configs
+  useEffect(() => {
+    fetch("/api/gate-monitor/config").then(r => r.json()).then(data => {
+      if (data.ok && data.configs) setConfigs(data.configs);
+    }).catch(() => {});
+  }, []);
+
+  // Load cameras when privada changes
+  useEffect(() => {
+    if (!selectedPrivada) { setCameras([]); return; }
+    fetch(`/api/camera-proxy/lookup?privada_id=${selectedPrivada}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.found && data.cameras) setCameras(data.cameras);
+        else setCameras([]);
+      }).catch(() => setCameras([]));
+  }, [selectedPrivada]);
+
+  // Load existing config when camera changes
+  useEffect(() => {
+    if (!selectedPrivada || selectedCam === null) {
+      setZones([]); setPhones([]); setIntervalSec(300); setPreviewUrl("");
+      return;
+    }
+    const existing = configs.find(c => c.siteId === selectedPrivada && c.camId === selectedCam);
+    if (existing) {
+      setZones(existing.zones.map(z => ({
+        id: z.id,
+        roi: z.roi,
+        alias: z.alias,
+        threshold: z.threshold,
+        consecutive_threshold: z.consecutiveThreshold,
+        enabled: z.enabled,
+      })));
+      setPhones(existing.notifyPhones || []);
+      setIntervalSec(existing.intervalSec || 300);
+    } else {
+      setZones([]); setPhones([]); setIntervalSec(300);
+    }
+    // Request snapshot for preview
+    fetch("/api/camera-frames/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: selectedPrivada, cmd: "start_stream", fps: 1, duration: 30, mode: "snapshot" }),
+    }).catch(() => {});
+  }, [selectedPrivada, selectedCam, configs]);
+
+  // Refresh preview image
+  useEffect(() => {
+    if (!selectedPrivada || selectedCam === null) return;
+    const update = () => {
+      setPreviewUrl(`/api/camera-proxy?telefono=gate-config&cam=${selectedCam}&site_id=${selectedPrivada}&t=${Date.now()}`);
+    };
+    update();
+    const iv = setInterval(update, 3000);
+    return () => clearInterval(iv);
+  }, [selectedPrivada, selectedCam]);
+
+  const addZone = () => {
+    if (zones.length >= 3) return;
+    setZones([...zones, {
+      id: crypto.randomUUID(),
+      roi: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+      alias: `Zona ${zones.length + 1}`,
+      threshold: 0.3,
+      consecutive_threshold: 4,
+      enabled: true,
+    }]);
+  };
+
+  const removeZone = (idx: number) => {
+    setZones(zones.filter((_, i) => i !== idx));
+  };
+
+  const updateZone = (idx: number, patch: Partial<GateZone>) => {
+    setZones(zones.map((z, i) => i === idx ? { ...z, ...patch } : z));
+  };
+
+  const addPhone = () => {
+    const clean = newPhone.replace(/\D/g, "");
+    if (clean.length >= 10 && clean.length <= 15 && !phones.includes(clean)) {
+      setPhones([...phones, clean]);
+      setNewPhone("");
+    }
+  };
+
+  const removePhone = (idx: number) => {
+    setPhones(phones.filter((_, i) => i !== idx));
+  };
+
+  // Mouse drawing on preview
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>, zoneIdx: number) => {
+    if (!previewRef.current) return;
+    const rect = previewRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setDrawingZone(zoneIdx);
+    setDrawStart({ x, y });
+  };
+
+  const handleMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (drawingZone === null || !drawStart || !previewRef.current) return;
+    const rect = previewRef.current.getBoundingClientRect();
+    const ex = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const ey = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const roi = {
+      x: Math.min(drawStart.x, ex),
+      y: Math.min(drawStart.y, ey),
+      width: Math.abs(ex - drawStart.x),
+      height: Math.abs(ey - drawStart.y),
+    };
+    updateZone(drawingZone, { roi });
+  };
+
+  const handleMouseUp = () => {
+    setDrawingZone(null);
+    setDrawStart(null);
+  };
+
+  const handleSave = async () => {
+    if (!selectedPrivada || selectedCam === null || zones.length === 0) return;
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/gate-monitor/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: selectedPrivada,
+          cam_id: selectedCam,
+          privada_name: selectedPrivadaName,
+          interval_sec: intervalSec,
+          notify_phones: phones,
+          zones: zones.map(z => ({
+            id: z.id,
+            roi: z.roi,
+            alias: z.alias,
+            threshold: z.threshold,
+            consecutive_threshold: z.consecutive_threshold,
+            enabled: z.enabled,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setMsg({ text: "Configuracion guardada", ok: true });
+        // Refresh configs
+        const r2 = await fetch("/api/gate-monitor/config");
+        const d2 = await r2.json();
+        if (d2.ok && d2.configs) setConfigs(d2.configs);
+      } else {
+        setMsg({ text: data.error || "Error al guardar", ok: false });
+      }
+    } catch {
+      setMsg({ text: "Error de conexion", ok: false });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedPrivada || selectedCam === null) return;
+    if (!confirm("Eliminar configuracion de monitoreo para esta camara?")) return;
+    try {
+      await fetch(`/api/gate-monitor/config?site_id=${selectedPrivada}&cam_id=${selectedCam}`, { method: "DELETE" });
+      setZones([]); setPhones([]);
+      setMsg({ text: "Configuracion eliminada", ok: true });
+      const r2 = await fetch("/api/gate-monitor/config");
+      const d2 = await r2.json();
+      if (d2.ok && d2.configs) setConfigs(d2.configs);
+    } catch {
+      setMsg({ text: "Error al eliminar", ok: false });
+    }
+  };
+
+  const handleCaptureRef = async (zoneId: string) => {
+    if (!selectedPrivada || selectedCam === null) return;
+    setCapturingRef(zoneId);
+    try {
+      const res = await fetch(
+        `/api/gate-monitor/reference?site_id=${selectedPrivada}&cam_id=${selectedCam}&zone_id=${zoneId}`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (data.ok) {
+        setMsg({ text: "Referencia capturada correctamente", ok: true });
+      } else {
+        setMsg({ text: data.error || "Error al capturar referencia", ok: false });
+      }
+    } catch {
+      setMsg({ text: "Error de conexion al capturar referencia", ok: false });
+    } finally {
+      setCapturingRef(null);
+    }
   };
 
   return (
-    <div
-      className={`rounded-xl border p-4 ${bgMap[color] || "bg-gray-50 border-gray-200"}`}
-    >
+    <div className="space-y-6">
+      {/* Selectors */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Privada</label>
+            <select value={selectedPrivada} onChange={(e) => {
+              setSelectedPrivada(e.target.value);
+              const p = privadas.find(p => String(p.id) === e.target.value);
+              setSelectedPrivadaName(p?.descripcion || "");
+              setSelectedCam(null);
+            }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="">Seleccionar privada...</option>
+              {privadas.map(p => (
+                <option key={p.id} value={String(p.id)}>{p.descripcion}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Camara</label>
+            <select value={selectedCam ?? ""} onChange={(e) => setSelectedCam(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" disabled={!selectedPrivada}>
+              <option value="">Seleccionar camara...</option>
+              {cameras.map(c => (
+                <option key={c.index} value={c.index}>
+                  Cam {c.index}{c.alias ? ` - ${c.alias}` : ""}{!c.available ? " (offline)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Intervalo (seg)</label>
+            <select value={intervalSec} onChange={(e) => setIntervalSec(parseInt(e.target.value))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" disabled={selectedCam === null}>
+              <option value={60}>1 min</option>
+              <option value={120}>2 min</option>
+              <option value={300}>5 min</option>
+              <option value={600}>10 min</option>
+              <option value={900}>15 min</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {selectedPrivada && selectedCam !== null && (
+        <>
+          {/* Camera preview with zones */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                <Camera className="h-4 w-4" /> Vista previa - Dibuja zonas de monitoreo
+              </h3>
+              <div className="flex gap-2">
+                {zones.map((z, i) => (
+                  <span key={z.id} className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: ZONE_COLORS[i] }}>
+                    {z.alias}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div ref={previewRef} className="relative bg-black rounded-lg overflow-hidden select-none"
+              style={{ aspectRatio: "16/9" }}
+              onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+              {previewUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" draggable={false} />
+              )}
+              {/* Zone overlays */}
+              {zones.map((z, i) => (
+                <div key={z.id}
+                  className="absolute border-2 cursor-crosshair"
+                  style={{
+                    left: `${z.roi.x * 100}%`, top: `${z.roi.y * 100}%`,
+                    width: `${z.roi.width * 100}%`, height: `${z.roi.height * 100}%`,
+                    borderColor: ZONE_COLORS[i], backgroundColor: `${ZONE_COLORS[i]}20`,
+                  }}
+                  onMouseDown={(e) => handleMouseDown(e, i)}>
+                  <span className="absolute -top-5 left-0 text-xs font-bold px-1 rounded text-white" style={{ background: ZONE_COLORS[i] }}>
+                    {z.alias}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Haz clic y arrastra sobre una zona (color) para redibujar su area de monitoreo.
+            </p>
+          </div>
+
+          {/* Zone configs */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-700">Zonas de monitoreo ({zones.length}/3)</h3>
+              {zones.length < 3 && (
+                <button onClick={addZone}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                  <Plus className="h-3.5 w-3.5" /> Agregar zona
+                </button>
+              )}
+            </div>
+
+            {zones.length === 0 && (
+              <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-8 text-center">
+                <p className="text-gray-500 text-sm mb-3">No hay zonas configuradas</p>
+                <button onClick={addZone}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+                  <Plus className="h-4 w-4 inline mr-1" /> Crear primera zona
+                </button>
+              </div>
+            )}
+
+            {zones.map((z, i) => (
+              <div key={z.id} className="bg-white rounded-xl border-2 p-4" style={{ borderColor: ZONE_COLORS[i] }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ background: ZONE_COLORS[i] }} />
+                    <span className="text-sm font-medium">Zona {ZONE_NAMES[i]}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleCaptureRef(z.id)} disabled={capturingRef === z.id}
+                      className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 disabled:opacity-50">
+                      <Camera className="h-3 w-3 inline mr-1" />
+                      {capturingRef === z.id ? "Capturando..." : "Capturar referencia"}
+                    </button>
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input type="checkbox" checked={z.enabled} onChange={(e) => updateZone(i, { enabled: e.target.checked })}
+                        className="rounded text-blue-600" />
+                      Activa
+                    </label>
+                    <button onClick={() => removeZone(i)} className="text-red-400 hover:text-red-600 p-1">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Alias</label>
+                    <input type="text" value={z.alias} onChange={(e) => updateZone(i, { alias: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" placeholder="Porton vehicular" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Umbral (0-1)</label>
+                    <input type="number" min={0.05} max={1} step={0.05} value={z.threshold}
+                      onChange={(e) => updateZone(i, { threshold: parseFloat(e.target.value) || 0.3 })}
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Lecturas consecutivas</label>
+                    <input type="number" min={1} max={20} value={z.consecutive_threshold}
+                      onChange={(e) => updateZone(i, { consecutive_threshold: parseInt(e.target.value) || 4 })}
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Alerta despues de {z.consecutive_threshold} lecturas x {intervalSec / 60} min = {(z.consecutive_threshold * intervalSec / 60).toFixed(0)} min
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Phone numbers */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-medium text-gray-700 flex items-center gap-1.5 mb-3">
+              <Phone className="h-4 w-4" /> Telefonos de notificacion (WhatsApp)
+            </h3>
+            <div className="flex gap-2 mb-3">
+              <input type="text" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="5216672639025" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                onKeyDown={(e) => e.key === "Enter" && addPhone()} />
+              <button onClick={addPhone}
+                className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={newPhone.replace(/\D/g, "").length < 10}>
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            {phones.length === 0 ? (
+              <p className="text-xs text-gray-400">Sin telefonos configurados. Se usaran supervisores de la BD como respaldo.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {phones.map((p, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm">
+                    {p}
+                    <button onClick={() => removePhone(i)} className="text-blue-400 hover:text-blue-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-2">Formato Twilio: codigo pais + numero (ej. 5216672639025)</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between">
+            <div>
+              {msg && (
+                <span className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleDelete}
+                className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition">
+                <Trash2 className="h-4 w-4 inline mr-1" /> Eliminar
+              </button>
+              <button onClick={handleSave} disabled={saving || zones.length === 0}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1.5">
+                <Save className="h-4 w-4" /> {saving ? "Guardando..." : "Guardar configuracion"}
+              </button>
+            </div>
+          </div>
+
+          {/* Existing configs summary */}
+          {configs.length > 0 && (
+            <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Configuraciones existentes</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {configs.map(c => (
+                  <button key={`${c.siteId}:${c.camId}`}
+                    onClick={() => {
+                      setSelectedPrivada(c.siteId);
+                      setSelectedPrivadaName(c.privadaName || "");
+                      setSelectedCam(c.camId);
+                    }}
+                    className={`text-left p-3 rounded-lg border transition text-sm ${
+                      selectedPrivada === c.siteId && selectedCam === c.camId
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-gray-200 bg-white hover:border-blue-300"
+                    }`}>
+                    <p className="font-medium text-gray-900">{c.privadaName || `Sitio ${c.siteId}`}</p>
+                    <p className="text-xs text-gray-500">Cam {c.camId} - {c.zones.length} zona{c.zones.length !== 1 ? "s" : ""}</p>
+                    <p className="text-xs text-gray-400">{c.notifyPhones.length} tel. | cada {c.intervalSec / 60} min</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Summary Card (shared)
+// ===========================================================================
+
+function SummaryCard({ label, value, icon, color }: {
+  label: string; value: string; icon: React.ReactNode; color: string;
+}) {
+  const bgMap: Record<string, string> = {
+    orange: "bg-orange-50 border-orange-200", blue: "bg-blue-50 border-blue-200",
+    purple: "bg-purple-50 border-purple-200", red: "bg-red-50 border-red-200",
+    green: "bg-green-50 border-green-200",
+  };
+  return (
+    <div className={`rounded-xl border p-4 ${bgMap[color] || "bg-gray-50 border-gray-200"}`}>
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          {label}
-        </span>
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
     </div>
