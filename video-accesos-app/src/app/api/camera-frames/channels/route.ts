@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getSiteChannels, setSiteChannels, listActiveFrames } from "@/lib/frame-store";
+import { AGENT_TOKEN } from "@/lib/agent-config";
 
 const TAG = "camera-channels";
-
-const AGENT_TOKEN = process.env.AGENT_TOKEN || "b7f9dee88d9e9d141557ef6227a351048df0d105b71dfd00cdda483d7d347c47";
 
 /**
  * POST /api/camera-frames/channels
@@ -46,9 +47,6 @@ export async function GET(request: NextRequest) {
   // Auth via session o agent token
   const token = request.headers.get("x-agent-token") || "";
   if (token !== AGENT_TOKEN) {
-    // Verificar sesion
-    const { getServerSession } = await import("next-auth/next");
-    const { authOptions } = await import("@/lib/auth");
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });

@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
       : `site/${site_id}/agent/cmd`;
 
     const payload: Record<string, unknown> = { cmd };
-    let shouldPublish = true;
 
     if (cmd === "start_stream") {
       const currentViewers = getViewerCount(String(site_id));
@@ -90,18 +89,7 @@ export async function POST(request: NextRequest) {
       clearSiteFrames(String(site_id));
     }
 
-    logger.info(TAG, `Comando: ${cmd} -> topic=${topic} publish=${shouldPublish} viewers=${getViewerCount(String(site_id))}`, payload);
-
-    // Si no hay que publicar (ya habia viewers activos), retornar OK
-    if (!shouldPublish) {
-      return NextResponse.json({
-        ok: true,
-        skipped: true,
-        reason: "Agent already streaming for other viewers",
-        topic,
-        ts: new Date().toISOString(),
-      });
-    }
+    logger.info(TAG, `Comando: ${cmd} -> topic=${topic} viewers=${getViewerCount(String(site_id))}`, payload);
 
     // --- Encolar comando para que el agente lo recoja via polling HTTP ---
     pushCommand(String(site_id), {

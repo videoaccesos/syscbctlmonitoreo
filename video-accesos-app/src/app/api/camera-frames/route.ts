@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { putFrame, getFrame } from "@/lib/frame-store";
 import { logger } from "@/lib/logger";
+import { isValidAgentToken } from "@/lib/agent-config";
 
 const TAG = "camera-frames";
 
@@ -23,17 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     // --- Autenticacion del agente ---
     const agentToken = request.headers.get("x-agent-token");
-    const expectedToken = process.env.CAMERA_AGENT_TOKEN;
-
-    if (!expectedToken) {
-      logger.error(TAG, "CAMERA_AGENT_TOKEN no configurado en el servidor");
-      return NextResponse.json(
-        { error: "Server misconfigured" },
-        { status: 500 }
-      );
-    }
-
-    if (!agentToken || agentToken !== expectedToken) {
+    if (!isValidAgentToken(agentToken)) {
       logger.warn(TAG, "Token de agente invalido o ausente");
       return NextResponse.json(
         { error: "Unauthorized" },

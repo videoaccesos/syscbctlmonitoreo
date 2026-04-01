@@ -104,7 +104,7 @@ export default function CameraGrid({
     const prevKey = prevPrivadaRef.current;
 
     if (currentKey !== prevKey) {
-      console.log(`[CameraGrid] Cambio de privada: ${prevKey} -> ${currentKey}`);
+      camDiag(0, "PRIVADA_CHANGE", `${prevKey} -> ${currentKey}`);
       // Corte limpio: detener todo lo anterior
       cleanupAll();
       // Reset estado
@@ -133,8 +133,10 @@ export default function CameraGrid({
           mode: "all",
         }),
       });
-      console.log("[CameraGrid] start_stream enviado para site", siteId);
-    } catch {}
+      camDiag(0, "START_STREAM_SENT", `site=${siteId}`);
+    } catch (e) {
+      camDiag(0, "START_STREAM_ERROR", e instanceof Error ? e.message : "unknown");
+    }
   }, []);
 
   const lookupCameras = useCallback(async (silent = false): Promise<CameraLookupResult | null> => {
@@ -151,7 +153,7 @@ export default function CameraGrid({
       else if (telefono) params.set("telefono", telefono);
 
       const url = `/api/camera-proxy/lookup?${params.toString()}`;
-      console.log("[CameraGrid] Lookup:", url, silent ? "(silent)" : "");
+      camDiag(0, "LOOKUP", `${url} ${silent ? "(silent)" : ""}`);
 
       const res = await fetch(url);
       if (!res.ok) {
@@ -165,7 +167,7 @@ export default function CameraGrid({
       }
 
       const data: CameraLookupResult = await res.json();
-      console.log("[CameraGrid] Lookup result:", data.found, "cameras:", data.cameras?.length || 0);
+      camDiag(0, "LOOKUP_RESULT", `found=${data.found} cameras=${data.cameras?.length || 0}`);
 
       if (!mountedRef.current) return null;
       return data;
@@ -292,7 +294,7 @@ export default function CameraGrid({
       return;
     }
 
-    console.log("[CameraGrid] Iniciando refresh:", lookup.cameras.length, "camaras, refreshMs=", refreshMs);
+    camDiag(0, "REFRESH_INIT", `${lookup.cameras.length} camaras, refreshMs=${refreshMs}`);
 
     const proxyBase = "/api/camera-proxy";
     const params = new URLSearchParams();

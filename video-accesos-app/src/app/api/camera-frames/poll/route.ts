@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { popCommands } from "@/lib/frame-store";
 import { logger } from "@/lib/logger";
+import { AGENT_TOKEN } from "@/lib/agent-config";
 
 const TAG = "camera-poll";
-
-// Token de autenticacion del agente (mismo que usa para enviar frames)
-const AGENT_TOKEN = process.env.AGENT_TOKEN || "b7f9dee88d9e9d141557ef6227a351048df0d105b71dfd00cdda483d7d347c47";
 
 /**
  * GET /api/camera-frames/poll?site_id=70

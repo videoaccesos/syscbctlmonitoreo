@@ -61,6 +61,16 @@ interface DigestCacheEntry {
 const digestNonceCache = new Map<string, DigestCacheEntry>();
 const NONCE_CACHE_TTL = 60_000; // 60 segundos
 
+// Limpieza periodica de nonces expirados para evitar memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of digestNonceCache) {
+    if (now - entry.timestamp > NONCE_CACHE_TTL * 2) {
+      digestNonceCache.delete(key);
+    }
+  }
+}, 120_000).unref();
+
 // --- Semaforo por host: limita requests concurrentes al mismo DVR ---
 // Previene agotamiento de conexiones TCP cuando multiples camaras
 // del mismo host se refrescan simultaneamente
