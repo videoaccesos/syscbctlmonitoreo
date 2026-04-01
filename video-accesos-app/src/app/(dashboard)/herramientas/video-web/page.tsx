@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Video, RefreshCw, Play, Square, Search, X, Maximize2, GripVertical, Save, Check } from "lucide-react";
+import { Video, RefreshCw, Play, Square, Search, X, Maximize2, GripVertical, Save, Check, Shield, ShieldAlert, ShieldCheck, ShieldOff, Crosshair } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -32,6 +32,17 @@ export default function VideoWebPage() {
   const cameraRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef(false);
 
+  // Gate monitor state
+  const [gateMonitorCam, setGateMonitorCam] = useState<CameraInfo | null>(null);
+  const [gateROI, setGateROI] = useState<{x:number;y:number;width:number;height:number} | null>(null);
+  const [gateDrawing, setGateDrawing] = useState(false);
+  const [gateDrawStart, setGateDrawStart] = useState<{x:number;y:number} | null>(null);
+  const [gateStatuses, setGateStatuses] = useState<Array<{siteId:string;camId:number;alias:string;state:string;currentDiff:number;alertSent:boolean}>>([]);
+  const [gateSaving, setGateSaving] = useState(false);
+  const [gateAlias, setGateAlias] = useState("");
+  const [gateThreshold, setGateThreshold] = useState(30);
+  const [gateDebounceSec, setGateDebounceSec] = useState(30);
+
   // Cargar lista de privadas
   useEffect(() => {
     fetch("/api/privadas/list")
@@ -54,6 +65,92 @@ export default function VideoWebPage() {
       if (cameraRefreshRef.current) clearInterval(cameraRefreshRef.current);
     };
   }, []);
+
+  // Polling de estado de portones
+  useEffect(() => {
+    const poll = () => {
+      fetch("/api/gate-monitor/status").then(r => r.json()).then(data => {
+        if (data.statuses) setGateStatuses(data.statuses);
+      }).catch(() => {});
+    };
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const openGateMonitor = (cam: CameraInfo) => {
+    setGateMonitorCam(cam);
+    setGateROI(null);
+    setGateDrawing(false);
+    setGateAlias(`Porton ${cam.alias}`);
+    setGateThreshold(30);
+    setGateDebounceSec(30);
+    // Cargar config existente
+    if (selectedSiteId) {
+      fetch(`/api/gate-monitor/config?site_id=${selectedSiteId}&cam_id=${cam.index}`)
+        .then(r => r.json()).then(data => {
+          if (data.config) {
+            setGateROI(data.config.roi);
+            setGateAlias(data.config.alias || `Porton ${cam.alias}`);
+            setGateThreshold(Math.round((data.config.threshold || 0.3) * 100));
+            setGateDebounceSec(data.config.debounceSec || 30);
+          }
+        }).catch(() => {});
+    }
+  };
+
+  const handleGateCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setGateDrawStart({ x, y });
+    setGateDrawing(true);
+  };
+
+  const handleGateCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!gateDrawing || !gateDrawStart) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setGateROI({
+      x: Math.min(gateDrawStart.x, x),
+      y: Math.min(gateDrawStart.y, y),
+      width: Math.abs(x - gateDrawStart.x),
+      height: Math.abs(y - gateDrawStart.y),
+    });
+  };
+
+  const handleGateCanvasMouseUp = () => {
+    setGateDrawing(false);
+    setGateDrawStart(null);
+  };
+
+  const saveGateMonitor = async () => {
+    if (!selectedSiteId || !gateMonitorCam || !gateROI) return;
+    setGateSaving(true);
+    try {
+      // Guardar config
+      await fetch("/api/gate-monitor/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: selectedSiteId,
+          cam_id: gateMonitorCam.index,
+          roi: gateROI,
+          alias: gateAlias,
+          threshold: gateThreshold / 100,
+          debounce_sec: gateDebounceSec,
+          enabled: true,
+        }),
+      });
+      // Capturar referencia
+      await fetch(`/api/gate-monitor/reference?site_id=${selectedSiteId}&cam_id=${gateMonitorCam.index}`, {
+        method: "POST",
+      });
+      setGateMonitorCam(null);
+    } catch {}
+    setGateSaving(false);
+  };
 
   const fetchCameras = useCallback(async (siteId: string): Promise<CameraInfo[]> => {
     try {
@@ -418,10 +515,33 @@ export default function VideoWebPage() {
               {/* Live + expand indicator */}
               {streaming && !reordering && (
                 <>
-                  <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-red-600/90 rounded px-1.5 py-0.5 z-10">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                    <span className="text-white text-[10px] font-bold">LIVE</span>
+                  <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10">
+                    {/* Gate status indicator */}
+                    {(() => {
+                      const gs = gateStatuses.find(s => s.siteId === selectedSiteId && s.camId === cam.index);
+                      if (!gs) return null;
+                      return (
+                        <div className={`flex items-center gap-1 rounded px-1.5 py-0.5 mr-1 ${
+                          gs.state === "open" ? "bg-red-600/90" : gs.state === "closed" ? "bg-green-600/90" : "bg-gray-600/90"
+                        }`}>
+                          {gs.state === "open" ? <ShieldAlert className="h-3 w-3 text-white" /> : <ShieldCheck className="h-3 w-3 text-white" />}
+                          <span className="text-white text-[10px] font-bold">{gs.state === "open" ? "ABIERTO" : "CERRADO"}</span>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex items-center gap-1 bg-red-600/90 rounded px-1.5 py-0.5">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      <span className="text-white text-[10px] font-bold">LIVE</span>
+                    </div>
                   </div>
+                  {/* Monitor button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openGateMonitor(cam); }}
+                    className="absolute bottom-8 right-1.5 z-10 bg-black/60 rounded p-1 text-white/60 hover:text-white hover:bg-black/80 opacity-0 group-hover:opacity-100 transition"
+                    title="Monitorear porton"
+                  >
+                    <Shield className="h-4 w-4" />
+                  </button>
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors z-[5] flex items-center justify-center">
                     <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover:opacity-70 transition-opacity" />
                   </div>
@@ -447,6 +567,176 @@ export default function VideoWebPage() {
           <Video className="h-16 w-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-medium text-gray-500 mb-2">Selecciona una privada</h3>
           <p className="text-sm text-gray-400">Elige una privada para ver las camaras disponibles del DVR</p>
+        </div>
+      )}
+
+      {/* Gate Monitor Dashboard */}
+      {gateStatuses.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="h-5 w-5 text-orange-500" />
+            <h2 className="font-semibold text-gray-800">Monitor de Portones</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {gateStatuses.map((gs) => (
+              <div
+                key={`${gs.siteId}:${gs.camId}`}
+                className={`rounded-lg p-3 border ${
+                  gs.state === "open"
+                    ? "bg-red-50 border-red-200"
+                    : gs.state === "closed"
+                    ? "bg-green-50 border-green-200"
+                    : gs.state === "no-signal"
+                    ? "bg-gray-50 border-gray-200"
+                    : "bg-yellow-50 border-yellow-200"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  {gs.state === "open" ? (
+                    <ShieldAlert className="h-4 w-4 text-red-500" />
+                  ) : gs.state === "closed" ? (
+                    <ShieldCheck className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <ShieldOff className="h-4 w-4 text-gray-400" />
+                  )}
+                  <span className="text-xs font-medium truncate">{gs.alias}</span>
+                </div>
+                <div className="text-[10px] text-gray-500">
+                  {gs.state === "open" ? (
+                    <span className="text-red-600 font-semibold">ABIERTO {gs.alertSent ? "(alertado)" : ""}</span>
+                  ) : gs.state === "closed" ? (
+                    <span className="text-green-600">Cerrado</span>
+                  ) : gs.state === "no-signal" ? (
+                    <span className="text-gray-400">Sin señal</span>
+                  ) : (
+                    <span className="text-yellow-600">Verificando...</span>
+                  )}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">
+                  Diff: {Math.round(gs.currentDiff * 100)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gate Monitor Setup Modal */}
+      {gateMonitorCam && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setGateMonitorCam(null)}>
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-orange-500" />
+                <h3 className="font-semibold">Configurar Monitor - {gateMonitorCam.alias}</h3>
+              </div>
+              <button onClick={() => setGateMonitorCam(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Instrucciones */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+                <div className="flex items-center gap-2 mb-1">
+                  <Crosshair className="h-4 w-4" />
+                  <span className="font-medium">Marca la zona del porton</span>
+                </div>
+                <p className="text-xs">Dibuja un rectangulo sobre el porton en la imagen. El sistema comparara esa zona contra la referencia para detectar cambios.</p>
+              </div>
+
+              {/* Imagen con canvas para ROI */}
+              <div
+                className="relative bg-black rounded-lg overflow-hidden cursor-crosshair select-none"
+                style={{ aspectRatio: "4/3" }}
+                onMouseDown={handleGateCanvasMouseDown}
+                onMouseMove={handleGateCanvasMouseMove}
+                onMouseUp={handleGateCanvasMouseUp}
+                onMouseLeave={handleGateCanvasMouseUp}
+              >
+                <img
+                  src={`/api/camera-proxy?privada_id=${selectedSiteId}&cam=${gateMonitorCam.index}&t=${Date.now()}`}
+                  alt={gateMonitorCam.alias}
+                  className="w-full h-full object-contain"
+                  draggable={false}
+                />
+                {/* ROI overlay */}
+                {gateROI && (
+                  <div
+                    className="absolute border-2 border-orange-500 bg-orange-500/20"
+                    style={{
+                      left: `${gateROI.x * 100}%`,
+                      top: `${gateROI.y * 100}%`,
+                      width: `${gateROI.width * 100}%`,
+                      height: `${gateROI.height * 100}%`,
+                    }}
+                  >
+                    <span className="absolute -top-5 left-0 text-[10px] bg-orange-500 text-white px-1 rounded">
+                      ROI
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Config fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Alias del porton</label>
+                  <input
+                    type="text"
+                    value={gateAlias}
+                    onChange={e => setGateAlias(e.target.value)}
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                    placeholder="Ej: Porton principal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Umbral de cambio (%)</label>
+                  <input
+                    type="number"
+                    value={gateThreshold}
+                    onChange={e => setGateThreshold(parseInt(e.target.value) || 30)}
+                    min={5} max={90}
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Segundos antes de alertar</label>
+                  <input
+                    type="number"
+                    value={gateDebounceSec}
+                    onChange={e => setGateDebounceSec(parseInt(e.target.value) || 30)}
+                    min={5} max={600}
+                    className="w-full px-3 py-1.5 border rounded-lg text-sm"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <p className="text-xs text-gray-400">
+                    {gateROI
+                      ? `ROI: ${Math.round(gateROI.x*100)}%, ${Math.round(gateROI.y*100)}% - ${Math.round(gateROI.width*100)}%x${Math.round(gateROI.height*100)}%`
+                      : "Dibuja el ROI en la imagen"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button
+                  onClick={() => setGateMonitorCam(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveGateMonitor}
+                  disabled={!gateROI || gateSaving}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition"
+                >
+                  {gateSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                  {gateSaving ? "Guardando..." : "Activar monitoreo"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

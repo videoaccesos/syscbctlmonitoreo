@@ -142,6 +142,21 @@ export function publishCommand(siteId: string, command: Record<string, unknown>)
   }
 }
 
+/** Publicar alerta de monitoreo (portones, etc.) */
+export function publishAlert(siteId: string, alert: Record<string, unknown>): boolean {
+  try {
+    const c = getClient();
+    const topic = `${TOPIC_PREFIX}/${siteId}/alert`;
+    const payload = JSON.stringify(alert);
+    c.publish(topic, payload, { qos: 0 });
+    logger.info(TAG, `Alerta publicada: ${topic}`);
+    return true;
+  } catch (err) {
+    logger.error(TAG, `Error publicando alerta: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
 /** Verificar si un agente esta conectado */
 export function isAgentOnline(siteId: string): boolean {
   const status = agentStatus.get(siteId);
