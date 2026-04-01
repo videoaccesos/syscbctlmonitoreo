@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { getFrame, pushCommand } from "@/lib/frame-store";
+import { publishCommand as mqttPublishCommand } from "@/lib/mqtt-client";
 import crypto from "crypto";
 
 const TAG = "camera-proxy";
@@ -434,13 +435,10 @@ function autoTriggerStartStream(siteId: string, camId?: number) {
   if (now - last < AUTO_TRIGGER_DEBOUNCE_MS) return;
   autoTriggerLastSent.set(key, now);
   logger.info(TAG, `Auto-trigger start_stream para site=${siteId} cam=${camId || "all"}`);
-  pushCommand(siteId, {
-    cmd: "start_stream",
-    fps: 25,
-    duration: 0,
-    cam_id: camId,
-    ts: now,
-  });
+  const cmd = { cmd: "start_stream", fps: 25, duration: 0, cam_id: camId };
+  // MQTT (instantaneo) + HTTP polling (fallback)
+  mqttPublishCommand(siteId, cmd);
+  pushCommand(siteId, { ...cmd, ts: now });
 }
 
 export async function GET(request: NextRequest) {

@@ -3,29 +3,16 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { clearSiteFrames, addViewer, removeViewer, getViewerCount, pushCommand } from "@/lib/frame-store";
+import { publishCommand, isMqttConnected } from "@/lib/mqtt-client";
 
 const TAG = "camera-cmd";
 
 /**
  * POST /api/camera-frames/command
  *
- * Envia comandos start_stream / stop_stream a un agente remoto via MQTT.
- * El comando se publica al broker MQTT en el topico:
- *   site/{site_id}/cam/{cam_id}/cmd
- *
- * Body JSON:
- *   {
- *     "site_id": "5",
- *     "cam_id": 1,          // opcional, 0 = todas las camaras del sitio
- *     "cmd": "start_stream", // o "stop_stream"
- *     "fps": 2,              // opcional, default 2
- *     "duration": 120,       // opcional, segundos, default 120
- *     "quality": 55,         // opcional, JPEG quality 1-100, default 55
- *     "width": 640           // opcional, ancho en px, default 640
- *   }
- *
- * El comando se envia al broker MQTT via el Bot Orquestador o via
- * publicacion directa, segun configuracion.
+ * Envia comandos start_stream / stop_stream a un agente remoto.
+ * Via principal: MQTT (topico videoaccesos/{site_id}/cmd)
+ * Fallback: HTTP polling (para agentes que aun no usen MQTT)
  */
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -51,21 +38,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Construir payload MQTT
-    const camTarget = cam_id || 0; // 0 = todas
-    const topic = camTarget > 0
-      ? `site/${site_id}/cam/${camTarget}/cmd`
-      : `site/${site_id}/agent/cmd`;
-
+    const camTarget = cam_id || 0;
     const payload: Record<string, unknown> = { cmd };
 
     if (cmd === "start_stream") {
       const currentViewers = getViewerCount(String(site_id));
       if (currentViewers === 0) {
-        // Primer viewer - registrar e incrementar
         addViewer(String(site_id));
       }
-      // Siempre encolar el comando (actua como keepalive para renovar timeout)
       payload.fps = fps || 25;
       payload.duration = duration ?? 0;
       payload.quality = quality || 55;
@@ -75,23 +55,25 @@ export async function POST(request: NextRequest) {
     if (cmd === "stop_stream") {
       const remaining = removeViewer(String(site_id));
       if (remaining > 0) {
-        // Otros operadores aun necesitan el video - no detener
         logger.info(TAG, `stop_stream site=${site_id} - quedan ${remaining} viewers, NO detener agente`);
         return NextResponse.json({
           ok: true,
           skipped: true,
           reason: `${remaining} viewer(s) aun activos`,
-          topic,
           ts: new Date().toISOString(),
         });
       }
-      // Ultimo viewer - si detener
       clearSiteFrames(String(site_id));
     }
 
-    logger.info(TAG, `Comando: ${cmd} -> topic=${topic} viewers=${getViewerCount(String(site_id))}`, payload);
+    // Agregar cam_id y mode al payload
+    if (camTarget > 0) payload.cam_id = camTarget;
+    if (mode) payload.mode = mode;
 
-    // --- Encolar comando para que el agente lo recoja via polling HTTP ---
+    // --- Via 1: MQTT (instantaneo) ---
+    const mqttOk = publishCommand(String(site_id), payload);
+
+    // --- Via 2: HTTP polling (fallback para agentes sin MQTT) ---
     pushCommand(String(site_id), {
       cmd,
       fps: payload.fps as number | undefined,
@@ -103,11 +85,12 @@ export async function POST(request: NextRequest) {
       ts: Date.now(),
     });
 
-    logger.info(TAG, `Comando encolado para polling: site=${site_id} -> ${JSON.stringify(payload)}`);
+    logger.info(TAG, `Comando: ${cmd} site=${site_id} mqtt=${mqttOk} viewers=${getViewerCount(String(site_id))}`);
 
     return NextResponse.json({
       ok: true,
-      topic,
+      mqtt: mqttOk,
+      mqtt_connected: isMqttConnected(),
       payload,
       ts: new Date().toISOString(),
     });
