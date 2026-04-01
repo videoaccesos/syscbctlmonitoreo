@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { listActiveFrames, getSiteChannels } from "@/lib/frame-store";
+import { listActiveFrames, getSiteChannels, applyCameraOrder } from "@/lib/frame-store";
 
 const TAG = "camera-lookup";
 
@@ -169,16 +169,16 @@ export async function GET(request: NextRequest) {
         knownIndexes.add(af.camId);
       }
     }
-    // Ordenar por index
-    cameras.sort((a, b) => a.index - b.index);
+    // Aplicar orden personalizado si existe, sino ordenar por index
+    const orderedCameras = applyCameraOrder(siteIdStr, cameras);
 
-    logger.info(TAG, `Resultado: ${cameras.length} camaras encontradas (${agentChannels.length} canales agente, ${agentFrames.length} frames activos)`, { privada_id: privada.id, privada: privada.descripcion, cameras });
+    logger.info(TAG, `Resultado: ${orderedCameras.length} camaras encontradas (${agentChannels.length} canales agente, ${agentFrames.length} frames activos)`, { privada_id: privada.id, privada: privada.descripcion, cameras: orderedCameras });
 
     return NextResponse.json({
       found: true,
       privada_id: privada.id,
       privada: privada.descripcion,
-      cameras,
+      cameras: orderedCameras,
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);

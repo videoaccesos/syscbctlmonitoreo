@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Video, RefreshCw, Play, Square, Search, X, Maximize2 } from "lucide-react";
+import { Video, RefreshCw, Play, Square, Search, X, Maximize2, GripVertical, Save, Check } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -22,6 +22,10 @@ export default function VideoWebPage() {
   const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expandedCam, setExpandedCam] = useState<CameraInfo | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [orderSaved, setOrderSaved] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const intervalsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const mountedRef = useRef(true);
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -135,6 +139,7 @@ export default function VideoWebPage() {
     sendCommand(selectedSiteId, "start_stream", "all");
     setStreaming(true);
     streamingRef.current = true;
+    setReordering(false);
 
     let cams = cameras;
     if (cams.length === 0) {
@@ -189,9 +194,57 @@ export default function VideoWebPage() {
     setSelectedSiteId(siteId);
     setCameras([]);
     setExpandedCam(null);
+    setReordering(false);
+    setOrderSaved(false);
     const p = privadas.find((x) => String(x.id) === siteId);
     setSelectedName(p?.descripcion || "");
     if (siteId) loadCameras(siteId);
+  };
+
+  // -----------------------------------------------------------------------
+  // Drag & drop reorder
+  // -----------------------------------------------------------------------
+  const handleDragStart = (idx: number) => {
+    setDragIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  };
+
+  const handleDrop = (idx: number) => {
+    if (dragIdx === null || dragIdx === idx) {
+      setDragIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    const newCams = [...cameras];
+    const [moved] = newCams.splice(dragIdx, 1);
+    newCams.splice(idx, 0, moved);
+    setCameras(newCams);
+    setDragIdx(null);
+    setDragOverIdx(null);
+    setOrderSaved(false);
+  };
+
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const saveOrder = async () => {
+    if (!selectedSiteId) return;
+    const order = cameras.map((c) => c.index);
+    try {
+      await fetch("/api/camera-proxy/order", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ privada_id: selectedSiteId, order }),
+      });
+      setOrderSaved(true);
+      setTimeout(() => setOrderSaved(false), 3000);
+    } catch {}
   };
 
   const gridCols =
@@ -259,7 +312,34 @@ export default function VideoWebPage() {
                 Detener
               </button>
             )}
-            {selectedSiteId && !streaming && (
+            {selectedSiteId && !streaming && cameras.length > 1 && (
+              <button
+                onClick={() => setReordering((r) => !r)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition ${
+                  reordering
+                    ? "bg-orange-100 text-orange-700 border border-orange-300"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+                title="Ordenar camaras"
+              >
+                <GripVertical className="h-4 w-4" />
+                {reordering ? "Ordenando..." : "Ordenar"}
+              </button>
+            )}
+            {reordering && (
+              <button
+                onClick={saveOrder}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
+                  orderSaved
+                    ? "bg-green-100 text-green-700 border border-green-300"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {orderSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                {orderSaved ? "Guardado" : "Guardar orden"}
+              </button>
+            )}
+            {selectedSiteId && !streaming && !reordering && (
               <button
                 onClick={() => loadCameras(selectedSiteId)}
                 className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
@@ -270,18 +350,48 @@ export default function VideoWebPage() {
             )}
           </div>
         </div>
+        {reordering && (
+          <p className="mt-2 text-xs text-orange-600">
+            Arrastra las camaras para cambiar el orden. Este orden se usara tambien en la Consola Monitorista.
+          </p>
+        )}
       </div>
 
       {/* Camera Grid */}
       {cameras.length > 0 && (
         <div className={`grid ${gridCols} gap-2`}>
-          {cameras.map((cam) => (
+          {cameras.map((cam, idx) => (
             <div
               key={cam.index}
-              className="relative bg-gray-900 rounded-lg overflow-hidden cursor-pointer group"
+              draggable={reordering}
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={(e) => handleDragOver(e, idx)}
+              onDrop={() => handleDrop(idx)}
+              onDragEnd={handleDragEnd}
+              className={`relative bg-gray-900 rounded-lg overflow-hidden group transition-all ${
+                reordering ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+              } ${
+                dragOverIdx === idx && dragIdx !== idx
+                  ? "ring-2 ring-orange-400 scale-[1.02]"
+                  : ""
+              } ${
+                dragIdx === idx ? "opacity-40" : ""
+              }`}
               style={{ aspectRatio: "4/3" }}
-              onClick={() => streaming && setExpandedCam(cam)}
+              onClick={() => !reordering && streaming && setExpandedCam(cam)}
             >
+              {/* Drag handle indicator */}
+              {reordering && (
+                <div className="absolute top-1.5 left-1.5 z-20 bg-orange-500/90 rounded p-1">
+                  <GripVertical className="h-4 w-4 text-white" />
+                </div>
+              )}
+              {/* Position number */}
+              {reordering && (
+                <div className="absolute top-1.5 right-1.5 z-20 bg-orange-500 rounded-full w-6 h-6 flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">{idx + 1}</span>
+                </div>
+              )}
               {/* Placeholder cuando no hay imagen */}
               <div className="absolute inset-0 flex items-center justify-center z-0" style={{ backgroundColor: "#1a1a2e" }}>
                 {!streaming && (
@@ -306,7 +416,7 @@ export default function VideoWebPage() {
                 </div>
               </div>
               {/* Live + expand indicator */}
-              {streaming && (
+              {streaming && !reordering && (
                 <>
                   <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-red-600/90 rounded px-1.5 py-0.5 z-10">
                     <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />

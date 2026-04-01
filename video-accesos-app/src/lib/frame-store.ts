@@ -231,3 +231,63 @@ export function listSitesWithChannels(): Array<{ siteId: string; channelCount: n
   }
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// Orden de cámaras por sitio (persistido en archivo JSON)
+// ---------------------------------------------------------------------------
+import * as fs from "fs";
+import * as path from "path";
+
+const CAMERA_ORDER_FILE = path.join(process.cwd(), "data", "camera-order.json");
+
+// Cache en memoria
+let cameraOrderCache: Record<string, number[]> | null = null;
+
+function loadCameraOrder(): Record<string, number[]> {
+  if (cameraOrderCache) return cameraOrderCache;
+  try {
+    if (fs.existsSync(CAMERA_ORDER_FILE)) {
+      cameraOrderCache = JSON.parse(fs.readFileSync(CAMERA_ORDER_FILE, "utf-8"));
+      return cameraOrderCache!;
+    }
+  } catch {}
+  cameraOrderCache = {};
+  return cameraOrderCache;
+}
+
+function saveCameraOrder(data: Record<string, number[]>): void {
+  try {
+    const dir = path.dirname(CAMERA_ORDER_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CAMERA_ORDER_FILE, JSON.stringify(data, null, 2));
+    cameraOrderCache = data;
+  } catch (err) {
+    console.error("[frame-store] Error saving camera order:", err);
+  }
+}
+
+/** Obtener orden de cámaras para un sitio (array de cam indexes en orden deseado) */
+export function getCameraOrder(siteId: string): number[] | null {
+  const data = loadCameraOrder();
+  return data[siteId] || null;
+}
+
+/** Guardar orden de cámaras para un sitio */
+export function setCameraOrder(siteId: string, order: number[]): void {
+  const data = loadCameraOrder();
+  data[siteId] = order;
+  saveCameraOrder(data);
+}
+
+/** Aplicar orden guardado a una lista de cámaras */
+export function applyCameraOrder<T extends { index: number }>(siteId: string, cameras: T[]): T[] {
+  const order = getCameraOrder(siteId);
+  if (!order || order.length === 0) return cameras;
+
+  const orderMap = new Map(order.map((camIndex, position) => [camIndex, position]));
+  return [...cameras].sort((a, b) => {
+    const posA = orderMap.has(a.index) ? orderMap.get(a.index)! : 999 + a.index;
+    const posB = orderMap.has(b.index) ? orderMap.get(b.index)! : 999 + b.index;
+    return posA - posB;
+  });
+}
