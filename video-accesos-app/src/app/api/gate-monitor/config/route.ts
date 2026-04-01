@@ -8,14 +8,16 @@ import {
   listGateConfigs,
   startGateMonitor,
   type GateConfig,
+  type GateZone,
 } from "@/lib/gate-monitor";
+import crypto from "crypto";
 
 /**
  * GET /api/gate-monitor/config?site_id=72&cam_id=3
  * Lista configuraciones de monitoreo. Sin params = todas.
  *
  * PUT /api/gate-monitor/config
- * Crear o actualizar configuracion de monitoreo.
+ * Crear o actualizar configuracion (con zonas).
  *
  * DELETE /api/gate-monitor/config?site_id=72&cam_id=3
  * Eliminar configuracion.
@@ -43,41 +45,62 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { site_id, cam_id, roi, threshold, debounce_sec, interval_sec, enabled, alias } = body;
+    const { site_id, cam_id, interval_sec, zones } = body;
 
     if (!site_id || !cam_id) {
       return NextResponse.json({ error: "Se requieren site_id y cam_id" }, { status: 400 });
     }
 
-    if (!roi || typeof roi.x !== "number" || typeof roi.y !== "number" ||
-        typeof roi.width !== "number" || typeof roi.height !== "number") {
-      return NextResponse.json({ error: "ROI invalido: se requieren x, y, width, height (0-1)" }, { status: 400 });
+    if (!zones || !Array.isArray(zones) || zones.length === 0) {
+      return NextResponse.json({ error: "Se requiere al menos una zona" }, { status: 400 });
     }
 
-    // Obtener config existente o crear nueva
+    if (zones.length > 3) {
+      return NextResponse.json({ error: "Maximo 3 zonas por camara" }, { status: 400 });
+    }
+
+    // Validar cada zona
     const existing = getGateConfig(String(site_id), parseInt(cam_id));
+    const existingZonesMap = new Map<string, GateZone>();
+    if (existing) {
+      for (const z of existing.zones) existingZonesMap.set(z.id, z);
+    }
+
+    const parsedZones: GateZone[] = zones.map((z: Record<string, unknown>) => {
+      const roi = z.roi as Record<string, number> | undefined;
+      if (!roi || typeof roi.x !== "number" || typeof roi.y !== "number" ||
+          typeof roi.width !== "number" || typeof roi.height !== "number") {
+        throw new Error("Cada zona requiere un ROI valido con x, y, width, height");
+      }
+
+      const zoneId = (z.id as string) || crypto.randomUUID();
+      const prev = existingZonesMap.get(zoneId);
+
+      return {
+        id: zoneId,
+        roi: {
+          x: Math.max(0, Math.min(1, roi.x)),
+          y: Math.max(0, Math.min(1, roi.y)),
+          width: Math.max(0.01, Math.min(1, roi.width)),
+          height: Math.max(0.01, Math.min(1, roi.height)),
+        },
+        alias: (z.alias as string) || prev?.alias || `Zona ${zones.indexOf(z) + 1}`,
+        threshold: (z.threshold as number) ?? prev?.threshold ?? 0.3,
+        consecutiveThreshold: (z.consecutive_threshold as number) ?? prev?.consecutiveThreshold ?? 4,
+        referenceHistogram: prev?.referenceHistogram || null,
+        referenceImageB64: prev?.referenceImageB64 || null,
+        enabled: (z.enabled as boolean) ?? prev?.enabled ?? true,
+      };
+    });
 
     const config: GateConfig = {
       siteId: String(site_id),
       camId: parseInt(cam_id),
-      roi: {
-        x: Math.max(0, Math.min(1, roi.x)),
-        y: Math.max(0, Math.min(1, roi.y)),
-        width: Math.max(0.01, Math.min(1, roi.width)),
-        height: Math.max(0.01, Math.min(1, roi.height)),
-      },
-      referenceHistogram: existing?.referenceHistogram || null,
-      referenceImageB64: existing?.referenceImageB64 || null,
-      threshold: threshold ?? existing?.threshold ?? 0.3,
-      consecutiveThreshold: body.consecutive_threshold ?? existing?.consecutiveThreshold ?? 4,
       intervalSec: interval_sec ?? existing?.intervalSec ?? 300,
-      enabled: enabled ?? existing?.enabled ?? true,
-      alias: alias || existing?.alias || `Porton cam ${cam_id}`,
+      zones: parsedZones,
     };
 
     setGateConfig(config);
-
-    // Asegurar que el monitor este corriendo
     startGateMonitor();
 
     return NextResponse.json({ ok: true, config });

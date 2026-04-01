@@ -15,17 +15,10 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get("limit");
-  const siteId = searchParams.get("siteId");
+  const siteId = searchParams.get("siteId") || undefined;
 
   const limit = limitParam ? parseInt(limitParam, 10) : 100;
-
-  let alerts = getAlertHistory(limit);
-
-  // Filter by siteId if provided
-  if (siteId) {
-    alerts = alerts.filter((a) => a.siteId === siteId);
-  }
-
+  const alerts = getAlertHistory(limit, siteId);
   const stats = getAlertStats();
 
   return NextResponse.json({

@@ -5,12 +5,14 @@
  * Cada intervalSec (ej. 5 min) solicita un snapshot al agente via MQTT,
  * espera el frame, y compara contra la referencia.
  *
- * Si N lecturas CONSECUTIVAS superan el umbral de diferencia, genera alerta.
- * Esto evita falsos positivos por frames aislados (sombra, reflejo, etc).
+ * Soporta hasta 3 ZONAS (ROI) por camara, cada una con su propio umbral,
+ * alias y consecutivo. Esto permite monitorear multiples portones o areas
+ * dentro de una misma camara.
+ *
+ * Si N lecturas CONSECUTIVAS superan el umbral, genera alerta.
  *
  * Tecnica: histograma de luminancia en el ROI. Rapido (~2ms), sin GPU,
- * sin modelos de IA. Suficiente para detectar cambios grandes como
- * porton abierto vs cerrado.
+ * sin modelos de IA.
  */
 
 import sharp from "sharp";
@@ -34,42 +36,41 @@ export interface GateROI {
   height: number; // 0-1
 }
 
+/** Zona individual de monitoreo dentro de una camara */
+export interface GateZone {
+  id: string;           // UUID unico
+  roi: GateROI;
+  alias: string;        // "Porton vehicular", "Puerta peatonal", etc.
+  threshold: number;    // 0-1, default 0.3
+  consecutiveThreshold: number; // lecturas consecutivas para alertar, default 4
+  referenceHistogram: number[] | null;
+  referenceImageB64: string | null;
+  enabled: boolean;
+}
+
+/** Config por camara: agrupa hasta 3 zonas */
 export interface GateConfig {
   siteId: string;
   camId: number;
-  roi: GateROI;
-  /** Histograma de referencia (porton cerrado) - 256 valores normalizados */
-  referenceHistogram: number[] | null;
-  /** Imagen de referencia en base64 (para mostrar en UI) */
-  referenceImageB64: string | null;
-  /** Umbral de diferencia (0-1). Default 0.3 = 30% de cambio */
-  threshold: number;
-  /** Lecturas consecutivas "open" necesarias para alertar. Default 4 */
-  consecutiveThreshold: number;
   /** Intervalo entre snapshots en segundos. Default 300 (5 min) */
   intervalSec: number;
-  /** Activo o no */
-  enabled: boolean;
-  /** Alias para identificar el porton */
-  alias: string;
+  /** Hasta 3 zonas de monitoreo */
+  zones: GateZone[];
 }
 
 export type GateState = "closed" | "open" | "unknown" | "no-signal";
 
-export interface GateStatus {
+/** Estado en tiempo real de una zona */
+export interface GateZoneStatus {
+  zoneId: string;
   siteId: string;
   camId: number;
   alias: string;
   state: GateState;
-  /** Diferencia actual vs referencia (0-1) */
   currentDiff: number;
-  /** Lecturas consecutivas con estado "open" */
   consecutiveOpen: number;
-  /** Lecturas consecutivas necesarias para alertar */
   consecutiveThreshold: number;
-  /** Ultimo frame analizado */
   lastCheckAt: number;
-  /** Alerta enviada para este evento */
   alertSent: boolean;
   enabled: boolean;
 }
@@ -78,12 +79,13 @@ export interface GateAlertRecord {
   id: string;
   siteId: string;
   camId: number;
+  zoneId: string;
   alias: string;
   state: string;
   heldSeconds: number;
-  difference: number; // percentage 0-100
+  difference: number;
   message: string;
-  imageFile: string | null; // filename in public/static/gate-alerts/
+  imageFile: string | null;
   resolvedAt: string | null;
   createdAt: string;
 }
@@ -97,10 +99,11 @@ const CONFIG_FILE = path.join(DATA_DIR, "gate-monitors.json");
 const ALERTS_FILE = path.join(DATA_DIR, "gate-alerts.json");
 const EVIDENCE_DIR = path.join(process.cwd(), "public", "static", "gate-alerts");
 const MAX_ALERT_RECORDS = 500;
+const MAX_ZONES_PER_CAM = 3;
 
 let configCache: Record<string, GateConfig> | null = null;
 
-function gateKey(siteId: string, camId: number): string {
+function camKey(siteId: string, camId: number): string {
   return `${siteId}:${camId}`;
 }
 
@@ -108,7 +111,32 @@ function loadConfigs(): Record<string, GateConfig> {
   if (configCache) return configCache;
   try {
     if (fs.existsSync(CONFIG_FILE)) {
-      configCache = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+      const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+      // Migrar configs viejas (sin zones) al nuevo formato
+      for (const key of Object.keys(raw)) {
+        const c = raw[key];
+        if (!c.zones && c.roi) {
+          c.zones = [{
+            id: crypto.randomUUID(),
+            roi: c.roi,
+            alias: c.alias || `Zona 1`,
+            threshold: c.threshold || 0.3,
+            consecutiveThreshold: c.consecutiveThreshold || c.debounceSec ? Math.max(2, Math.round((c.debounceSec || 60) / (c.intervalSec || 300))) : 4,
+            referenceHistogram: c.referenceHistogram || null,
+            referenceImageB64: c.referenceImageB64 || null,
+            enabled: c.enabled ?? true,
+          }];
+          delete c.roi;
+          delete c.alias;
+          delete c.threshold;
+          delete c.consecutiveThreshold;
+          delete c.debounceSec;
+          delete c.referenceHistogram;
+          delete c.referenceImageB64;
+          delete c.enabled;
+        }
+      }
+      configCache = raw;
       return configCache!;
     }
   } catch (err) {
@@ -151,7 +179,6 @@ function loadAlerts(): GateAlertRecord[] {
 function saveAlerts(data: GateAlertRecord[]): void {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    // Prune to max records keeping newest
     if (data.length > MAX_ALERT_RECORDS) {
       data = data.slice(data.length - MAX_ALERT_RECORDS);
     }
@@ -168,11 +195,11 @@ function pushAlertRecord(record: GateAlertRecord): void {
   saveAlerts(alerts);
 }
 
-function resolveAlertForGate(siteId: string, camId: number): void {
+function resolveAlertsForZone(zoneId: string): void {
   const alerts = loadAlerts();
   let changed = false;
   for (let i = alerts.length - 1; i >= 0; i--) {
-    if (alerts[i].siteId === siteId && alerts[i].camId === camId && alerts[i].resolvedAt === null) {
+    if (alerts[i].zoneId === zoneId && alerts[i].resolvedAt === null) {
       alerts[i].resolvedAt = new Date().toISOString();
       changed = true;
     }
@@ -180,9 +207,9 @@ function resolveAlertForGate(siteId: string, camId: number): void {
   if (changed) saveAlerts(alerts);
 }
 
-export function getAlertHistory(limit?: number): GateAlertRecord[] {
-  const alerts = loadAlerts();
-  // Return newest first
+export function getAlertHistory(limit?: number, siteId?: string): GateAlertRecord[] {
+  let alerts = loadAlerts();
+  if (siteId) alerts = alerts.filter((a) => a.siteId === siteId);
   const sorted = [...alerts].reverse();
   if (limit && limit > 0) return sorted.slice(0, limit);
   return sorted;
@@ -199,13 +226,11 @@ export function getAlertStats(): {
 
   const todayAlerts = alerts.filter((a) => a.createdAt.startsWith(todayStr));
   const totalToday = todayAlerts.length;
-
   const avgHeldSeconds =
     todayAlerts.length > 0
       ? Math.round(todayAlerts.reduce((sum, a) => sum + a.heldSeconds, 0) / todayAlerts.length)
       : 0;
 
-  // Most frequent gate (all time from loaded records)
   const freq: Record<string, number> = {};
   for (const a of alerts) {
     freq[a.alias] = (freq[a.alias] || 0) + 1;
@@ -213,14 +238,10 @@ export function getAlertStats(): {
   let mostFrequentGate: string | null = null;
   let maxCount = 0;
   for (const [alias, count] of Object.entries(freq)) {
-    if (count > maxCount) {
-      maxCount = count;
-      mostFrequentGate = alias;
-    }
+    if (count > maxCount) { maxCount = count; mostFrequentGate = alias; }
   }
 
   const activeAlerts = alerts.filter((a) => a.resolvedAt === null).length;
-
   return { totalToday, avgHeldSeconds, mostFrequentGate, activeAlerts };
 }
 
@@ -230,20 +251,29 @@ export function getAlertStats(): {
 
 export function getGateConfig(siteId: string, camId: number): GateConfig | null {
   const configs = loadConfigs();
-  return configs[gateKey(siteId, camId)] || null;
+  return configs[camKey(siteId, camId)] || null;
 }
 
 export function setGateConfig(config: GateConfig): void {
+  if (config.zones.length > MAX_ZONES_PER_CAM) {
+    config.zones = config.zones.slice(0, MAX_ZONES_PER_CAM);
+  }
   const configs = loadConfigs();
-  configs[gateKey(config.siteId, config.camId)] = config;
+  configs[camKey(config.siteId, config.camId)] = config;
   saveConfigs(configs);
 }
 
 export function deleteGateConfig(siteId: string, camId: number): void {
   const configs = loadConfigs();
-  const key = gateKey(siteId, camId);
+  const key = camKey(siteId, camId);
+  // Limpiar estados de todas las zonas
+  const cfg = configs[key];
+  if (cfg) {
+    for (const z of cfg.zones) {
+      delete zoneStates[z.id];
+    }
+  }
   delete configs[key];
-  delete gateStates[key];
   saveConfigs(configs);
 }
 
@@ -253,124 +283,104 @@ export function listGateConfigs(): GateConfig[] {
 }
 
 // ---------------------------------------------------------------------------
-// Estado en memoria
+// Estado en memoria (por zona)
 // ---------------------------------------------------------------------------
 
-const gateStates: Record<string, GateStatus> = {};
+const zoneStates: Record<string, GateZoneStatus> = {};
 
-export function getGateStatus(siteId: string, camId: number): GateStatus | null {
-  return gateStates[gateKey(siteId, camId)] || null;
+export function getZoneStatus(zoneId: string): GateZoneStatus | null {
+  return zoneStates[zoneId] || null;
 }
 
-export function listGateStatuses(): GateStatus[] {
-  return Object.values(gateStates);
+export function listZoneStatuses(): GateZoneStatus[] {
+  return Object.values(zoneStates);
+}
+
+// Backward-compat alias
+export function listGateStatuses(): GateZoneStatus[] {
+  return listZoneStatuses();
 }
 
 // ---------------------------------------------------------------------------
 // Procesamiento de imagen con sharp
 // ---------------------------------------------------------------------------
 
-/**
- * Extrae el histograma de luminancia (256 bins) de una region ROI de un JPEG.
- * Retorna array normalizado (suma = 1).
- */
-async function extractROIHistogram(
-  jpegBuffer: Buffer,
-  roi: GateROI
-): Promise<number[]> {
-  // Obtener dimensiones de la imagen
+async function extractROIHistogram(jpegBuffer: Buffer, roi: GateROI): Promise<number[]> {
   const metadata = await sharp(jpegBuffer).metadata();
   const imgW = metadata.width || 640;
   const imgH = metadata.height || 480;
 
-  // Calcular ROI en pixeles
   const left = Math.round(roi.x * imgW);
   const top = Math.round(roi.y * imgH);
   const width = Math.max(1, Math.round(roi.width * imgW));
   const height = Math.max(1, Math.round(roi.height * imgH));
 
-  // Extraer ROI y convertir a escala de grises (1 canal, luminancia)
   const grayBuffer = await sharp(jpegBuffer)
     .extract({ left, top, width, height })
     .greyscale()
     .raw()
     .toBuffer();
 
-  // Construir histograma (256 bins)
   const histogram = new Array(256).fill(0);
   for (let i = 0; i < grayBuffer.length; i++) {
     histogram[grayBuffer[i]]++;
   }
 
-  // Normalizar
   const total = grayBuffer.length;
   if (total > 0) {
-    for (let i = 0; i < 256; i++) {
-      histogram[i] /= total;
-    }
+    for (let i = 0; i < 256; i++) histogram[i] /= total;
   }
-
   return histogram;
 }
 
-/**
- * Calcula la diferencia entre dos histogramas normalizados.
- * Usa correlacion: 1 = identico, 0 = completamente diferente.
- * Retorna diferencia (0-1): 0 = igual, 1 = totalmente distinto.
- */
 function histogramDifference(h1: number[], h2: number[]): number {
-  // Correlacion de Bhattacharyya (robusto a cambios de iluminacion)
   let sum = 0;
-  for (let i = 0; i < 256; i++) {
-    sum += Math.sqrt(h1[i] * h2[i]);
-  }
-  // Bhattacharyya distance: -ln(sum). Normalizamos a 0-1.
-  // sum=1 -> identicos (diff=0), sum=0 -> totalmente distintos (diff=1)
+  for (let i = 0; i < 256; i++) sum += Math.sqrt(h1[i] * h2[i]);
   return 1 - Math.min(sum, 1);
 }
 
 // ---------------------------------------------------------------------------
-// Captura de referencia
+// Captura de referencia (por zona)
 // ---------------------------------------------------------------------------
 
-/**
- * Captura el histograma de referencia ("porton cerrado") del frame actual.
- */
 export async function captureReference(
   siteId: string,
-  camId: number
+  camId: number,
+  zoneId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const config = getGateConfig(siteId, camId);
   if (!config) return { ok: false, error: "No hay configuracion para esta camara" };
+
+  const zone = config.zones.find((z) => z.id === zoneId);
+  if (!zone) return { ok: false, error: "Zona no encontrada" };
 
   const frame = getFrame(siteId, camId);
   if (!frame) return { ok: false, error: "No hay frame disponible de esta camara" };
 
   try {
-    const histogram = await extractROIHistogram(frame.data, config.roi);
+    const histogram = await extractROIHistogram(frame.data, zone.roi);
 
-    // Guardar thumbnail del ROI como referencia visual
     const metadata = await sharp(frame.data).metadata();
     const imgW = metadata.width || 640;
     const imgH = metadata.height || 480;
     const roiPx = {
-      left: Math.round(config.roi.x * imgW),
-      top: Math.round(config.roi.y * imgH),
-      width: Math.max(1, Math.round(config.roi.width * imgW)),
-      height: Math.max(1, Math.round(config.roi.height * imgH)),
+      left: Math.round(zone.roi.x * imgW),
+      top: Math.round(zone.roi.y * imgH),
+      width: Math.max(1, Math.round(zone.roi.width * imgW)),
+      height: Math.max(1, Math.round(zone.roi.height * imgH)),
     };
 
     const roiJpeg = await sharp(frame.data)
       .extract(roiPx)
-      .resize(200) // thumbnail
+      .resize(200)
       .jpeg({ quality: 70 })
       .toBuffer();
 
-    config.referenceHistogram = histogram;
-    config.referenceImageB64 = roiJpeg.toString("base64");
+    zone.referenceHistogram = histogram;
+    zone.referenceImageB64 = roiJpeg.toString("base64");
     setGateConfig(config);
 
-    logger.info(TAG, `Referencia capturada: site=${siteId} cam=${camId}`);
+    logger.info(TAG, `Referencia capturada: site=${siteId} cam=${camId} zone=${zone.alias}`);
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -380,43 +390,32 @@ export async function captureReference(
 }
 
 // ---------------------------------------------------------------------------
-// Loop de monitoreo (background, sin necesidad de Video Web abierto)
+// Loop de monitoreo (background)
 // ---------------------------------------------------------------------------
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
-/** Timeout maximo (ms) para esperar un frame despues de pedir snapshot */
 const SNAPSHOT_WAIT_MS = 15_000;
-/** Intervalo de polling mientras espera el frame */
 const SNAPSHOT_POLL_MS = 500;
 
-/**
- * Solicita un snapshot al agente via MQTT y espera a que llegue al frame-store.
- * Retorna el buffer JPEG o null si no llega a tiempo.
- */
 async function requestSnapshot(siteId: string, camId: number): Promise<Buffer | null> {
-  // Primero verificar si ya hay un frame reciente (< 30s) por si Video Web esta abierto
   const existing = getFrame(siteId, camId);
   if (existing) return existing.data;
 
-  // Solicitar snapshot al agente via MQTT
-  const snapshotCmd = {
+  const mqttOk = publishCommand(siteId, {
     cmd: "start_stream",
     cam_id: camId,
     fps: 1,
-    duration: 3, // solo 3 segundos, un par de frames
+    duration: 3,
     quality: 55,
     width: 640,
     mode: "snapshot",
-  };
-
-  const mqttOk = publishCommand(siteId, snapshotCmd);
+  });
   if (!mqttOk) {
     logger.warn(TAG, `No se pudo enviar snapshot request a site=${siteId}`);
     return null;
   }
 
-  // Esperar a que el frame llegue al store
   const deadline = Date.now() + SNAPSHOT_WAIT_MS;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, SNAPSHOT_POLL_MS));
@@ -428,100 +427,108 @@ async function requestSnapshot(siteId: string, camId: number): Promise<Buffer | 
   return null;
 }
 
-/**
- * Ejecuta un ciclo de verificacion para todos los monitores activos.
- * Pide snapshot al agente, analiza, y cuenta lecturas consecutivas.
- */
+/** Camaras ya solicitadas en este ciclo (evitar duplicar snapshots) */
+const snapshotCache = new Map<string, Buffer | null>();
+
 async function runMonitorCycle(): Promise<void> {
   const configs = loadConfigs();
   const now = Date.now();
+  snapshotCache.clear();
 
   for (const config of Object.values(configs)) {
-    if (!config.enabled || !config.referenceHistogram) continue;
+    if (!config.zones || config.zones.length === 0) continue;
 
-    const key = gateKey(config.siteId, config.camId);
-    const threshold = config.consecutiveThreshold || 4;
+    const ck = camKey(config.siteId, config.camId);
 
-    // Respetar intervalo por monitor
-    const status = gateStates[key];
-    if (status && (now - status.lastCheckAt) < (config.intervalSec * 1000)) continue;
+    // Respetar intervalo por camara (todas las zonas comparten el mismo snapshot)
+    const anyZoneStatus = config.zones.map((z) => zoneStates[z.id]).find(Boolean);
+    if (anyZoneStatus && (now - anyZoneStatus.lastCheckAt) < (config.intervalSec * 1000)) continue;
 
-    // Solicitar snapshot al agente (background, no requiere Video Web)
-    const jpegData = await requestSnapshot(config.siteId, config.camId);
-    if (!jpegData) {
-      gateStates[key] = {
-        siteId: config.siteId,
-        camId: config.camId,
-        alias: config.alias,
-        state: "no-signal",
-        currentDiff: 0,
-        consecutiveOpen: 0,
-        consecutiveThreshold: threshold,
-        lastCheckAt: Date.now(),
-        alertSent: status?.alertSent || false,
-        enabled: true,
-      };
-      continue;
+    // Un solo snapshot por camara
+    let jpegData: Buffer | null = null;
+    if (snapshotCache.has(ck)) {
+      jpegData = snapshotCache.get(ck) || null;
+    } else {
+      jpegData = await requestSnapshot(config.siteId, config.camId);
+      snapshotCache.set(ck, jpegData);
     }
 
-    try {
-      const currentHistogram = await extractROIHistogram(jpegData, config.roi);
-      const diff = histogramDifference(config.referenceHistogram, currentHistogram);
-      const isOpen = diff > config.threshold;
-      const prevConsecutive = status?.consecutiveOpen || 0;
-      const prevState = status?.state || "unknown";
+    // Procesar cada zona
+    for (const zone of config.zones) {
+      if (!zone.enabled || !zone.referenceHistogram) continue;
 
-      // Contar lecturas consecutivas
-      const consecutiveOpen = isOpen ? prevConsecutive + 1 : 0;
-      const newState: GateState = isOpen ? "open" : "closed";
+      const status = zoneStates[zone.id];
+      const threshold = zone.consecutiveThreshold || 4;
 
-      // Alerta si N lecturas consecutivas superan umbral
-      let alertSent = status?.alertSent || false;
-      if (consecutiveOpen >= threshold && !alertSent) {
-        alertSent = true;
-        const totalMinutes = Math.round((threshold * config.intervalSec) / 60);
-        sendGateAlert(config, diff, totalMinutes * 60, jpegData);
+      if (!jpegData) {
+        zoneStates[zone.id] = {
+          zoneId: zone.id,
+          siteId: config.siteId,
+          camId: config.camId,
+          alias: zone.alias,
+          state: "no-signal",
+          currentDiff: 0,
+          consecutiveOpen: 0,
+          consecutiveThreshold: threshold,
+          lastCheckAt: Date.now(),
+          alertSent: status?.alertSent || false,
+          enabled: true,
+        };
+        continue;
       }
 
-      // Reset cuando se cierra
-      if (newState === "closed" && prevState === "open") {
-        if (alertSent) {
-          resolveAlertForGate(config.siteId, config.camId);
+      try {
+        const currentHist = await extractROIHistogram(jpegData, zone.roi);
+        const diff = histogramDifference(zone.referenceHistogram, currentHist);
+        const isOpen = diff > zone.threshold;
+        const prevConsecutive = status?.consecutiveOpen || 0;
+        const prevState = status?.state || "unknown";
+        const consecutiveOpen = isOpen ? prevConsecutive + 1 : 0;
+        const newState: GateState = isOpen ? "open" : "closed";
+
+        let alertSent = status?.alertSent || false;
+        if (consecutiveOpen >= threshold && !alertSent) {
+          alertSent = true;
+          const totalMin = Math.round((threshold * config.intervalSec) / 60);
+          sendZoneAlert(config, zone, diff, totalMin * 60, jpegData);
         }
-        alertSent = false;
+
+        if (newState === "closed" && prevState === "open") {
+          if (alertSent) resolveAlertsForZone(zone.id);
+          alertSent = false;
+        }
+
+        zoneStates[zone.id] = {
+          zoneId: zone.id,
+          siteId: config.siteId,
+          camId: config.camId,
+          alias: zone.alias,
+          state: newState,
+          currentDiff: Math.round(diff * 1000) / 1000,
+          consecutiveOpen,
+          consecutiveThreshold: threshold,
+          lastCheckAt: Date.now(),
+          alertSent,
+          enabled: true,
+        };
+
+        logger.info(TAG, `${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold})`);
+      } catch (err) {
+        logger.error(TAG, `Error en zona ${zone.alias}: ${err instanceof Error ? err.message : err}`);
       }
-
-      gateStates[key] = {
-        siteId: config.siteId,
-        camId: config.camId,
-        alias: config.alias,
-        state: newState,
-        currentDiff: Math.round(diff * 1000) / 1000,
-        consecutiveOpen,
-        consecutiveThreshold: threshold,
-        lastCheckAt: Date.now(),
-        alertSent,
-        enabled: true,
-      };
-
-      logger.info(TAG, `${config.alias}: ${newState} (diff=${diff.toFixed(3)}, consecutivo=${consecutiveOpen}/${threshold})`);
-    } catch (err) {
-      logger.error(TAG, `Error en monitor ${key}: ${err instanceof Error ? err.message : err}`);
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Alertas via MQTT al bot orquestador
+// Alertas via MQTT
 // ---------------------------------------------------------------------------
 
-function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegData?: Buffer): void {
+function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec: number, jpegData?: Buffer): void {
   const minutes = Math.round(heldSec / 60);
   const timeLabel = minutes >= 1 ? `${minutes} min` : `${Math.round(heldSec)}s`;
+  const message = `Porton "${zone.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`;
 
-  const message = `Porton "${config.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`;
-
-  // Guardar evidencia fotografica
   let imageFile: string | null = null;
   let imageUrl: string | null = null;
   try {
@@ -529,10 +536,9 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegDa
     if (frameData) {
       if (!fs.existsSync(EVIDENCE_DIR)) fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      imageFile = `alert-${config.siteId}-${config.camId}-${ts}.jpg`;
+      imageFile = `alert-${config.siteId}-${config.camId}-${zone.id.slice(0, 8)}-${ts}.jpg`;
       fs.writeFileSync(path.join(EVIDENCE_DIR, imageFile), frameData);
       imageUrl = `/static/gate-alerts/${imageFile}`;
-      logger.info(TAG, `Evidencia guardada: ${imageFile}`);
     }
   } catch (err) {
     logger.error(TAG, `Error guardando evidencia: ${err instanceof Error ? err.message : err}`);
@@ -542,7 +548,8 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegDa
     type: "gate_alert",
     site_id: config.siteId,
     cam_id: config.camId,
-    alias: config.alias,
+    zone_id: zone.id,
+    alias: zone.alias,
     state: "open",
     held_seconds: Math.round(heldSec),
     difference: Math.round(diff * 100),
@@ -551,17 +558,14 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegDa
     ts: new Date().toISOString(),
   };
 
-  // Publicar via MQTT al topico de alertas
-  if (isMqttConnected()) {
-    publishAlert(config.siteId, alertPayload);
-  }
+  if (isMqttConnected()) publishAlert(config.siteId, alertPayload);
 
-  // Persist alert to history
-  const record: GateAlertRecord = {
+  pushAlertRecord({
     id: crypto.randomUUID(),
     siteId: config.siteId,
     camId: config.camId,
-    alias: config.alias,
+    zoneId: zone.id,
+    alias: zone.alias,
     state: "open",
     heldSeconds: Math.round(heldSec),
     difference: Math.round(diff * 100),
@@ -569,8 +573,7 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegDa
     imageFile,
     resolvedAt: null,
     createdAt: new Date().toISOString(),
-  };
-  pushAlertRecord(record);
+  });
 
   logger.warn(TAG, `ALERTA: ${message}`);
 }
@@ -581,11 +584,11 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegDa
 
 export function startGateMonitor(): void {
   if (monitorInterval) return;
-  monitorInterval = setInterval(runMonitorCycle, 30_000); // check cada 30s, cada monitor respeta su propio intervalSec
+  monitorInterval = setInterval(runMonitorCycle, 30_000);
   if (monitorInterval && typeof monitorInterval === "object" && "unref" in monitorInterval) {
     monitorInterval.unref();
   }
-  logger.info(TAG, "Gate monitor iniciado");
+  logger.info(TAG, "Gate monitor iniciado (multi-zona)");
 }
 
 export function stopGateMonitor(): void {

@@ -4,11 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { captureReference, getGateConfig, startGateMonitor } from "@/lib/gate-monitor";
 
 /**
- * POST /api/gate-monitor/reference?site_id=72&cam_id=3
- * Captura la imagen de referencia ("porton cerrado") del frame actual.
+ * POST /api/gate-monitor/reference?site_id=72&cam_id=3&zone_id=xxx
+ * Captura la imagen de referencia para una zona especifica.
  *
- * GET /api/gate-monitor/reference?site_id=72&cam_id=3
- * Obtiene la imagen de referencia en base64.
+ * GET /api/gate-monitor/reference?site_id=72&cam_id=3&zone_id=xxx
+ * Obtiene la imagen de referencia de una zona en base64.
  */
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -17,16 +17,14 @@ export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const siteId = searchParams.get("site_id");
   const camId = searchParams.get("cam_id");
+  const zoneId = searchParams.get("zone_id");
 
-  if (!siteId || !camId) {
-    return NextResponse.json({ error: "Se requieren site_id y cam_id" }, { status: 400 });
+  if (!siteId || !camId || !zoneId) {
+    return NextResponse.json({ error: "Se requieren site_id, cam_id y zone_id" }, { status: 400 });
   }
 
-  const result = await captureReference(siteId, parseInt(camId));
-
-  if (result.ok) {
-    startGateMonitor();
-  }
+  const result = await captureReference(siteId, parseInt(camId), zoneId);
+  if (result.ok) startGateMonitor();
 
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }
@@ -38,20 +36,26 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const siteId = searchParams.get("site_id");
   const camId = searchParams.get("cam_id");
+  const zoneId = searchParams.get("zone_id");
 
-  if (!siteId || !camId) {
-    return NextResponse.json({ error: "Se requieren site_id y cam_id" }, { status: 400 });
+  if (!siteId || !camId || !zoneId) {
+    return NextResponse.json({ error: "Se requieren site_id, cam_id y zone_id" }, { status: 400 });
   }
 
   const config = getGateConfig(siteId, parseInt(camId));
-  if (!config || !config.referenceImageB64) {
-    return NextResponse.json({ error: "No hay referencia capturada" }, { status: 404 });
+  if (!config) return NextResponse.json({ error: "Config no encontrada" }, { status: 404 });
+
+  const zone = config.zones.find((z) => z.id === zoneId);
+  if (!zone || !zone.referenceImageB64) {
+    return NextResponse.json({ error: "No hay referencia capturada para esta zona" }, { status: 404 });
   }
 
   return NextResponse.json({
     ok: true,
     site_id: siteId,
     cam_id: camId,
-    image_b64: config.referenceImageB64,
+    zone_id: zoneId,
+    alias: zone.alias,
+    image_b64: zone.referenceImageB64,
   });
 }
