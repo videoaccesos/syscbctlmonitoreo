@@ -1401,13 +1401,21 @@ export default function MonitoristasPage() {
                           <button
                             key={r.id}
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               setSelectedResidencia(r);
                               setResidencias([]);
                               setResidenciaSearch("");
                               setFormSolicitanteId("");
                               setFormSolicitanteNombre("");
                               setFormSolicitanteData(null);
+                              // Cargar detalle completo (residentes, visitantes)
+                              try {
+                                const detRes = await fetch(`/api/procesos/registro-accesos/detalle-residencia?id=${r.id}`);
+                                const detJson = await detRes.json();
+                                if (detJson.data) {
+                                  setSelectedResidencia(detJson.data);
+                                }
+                              } catch {}
                             }}
                             className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition text-sm border-b border-gray-100 last:border-b-0"
                           >
@@ -1602,7 +1610,9 @@ export default function MonitoristasPage() {
                             {nombre}
                           </div>
                           {r.celular && (
-                            <div className="text-[10px] text-gray-700 font-mono">{r.celular}</div>
+                            <div className="text-[10px] text-gray-700 font-mono">
+                              ****{r.celular.replace(/\D/g, "").slice(-4)}
+                            </div>
                           )}
                         </div>
                         <button
@@ -1641,6 +1651,11 @@ export default function MonitoristasPage() {
                           <div className="text-xs font-medium text-gray-900 truncate">
                             {nombre}
                           </div>
+                          {(v.celular || v.telefono) && (
+                            <div className="text-[10px] text-gray-700 font-mono">
+                              ****{(v.celular || v.telefono || "").replace(/\D/g, "").slice(-4)}
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => selectSolicitante(v.id, nombre)}
