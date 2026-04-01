@@ -347,7 +347,7 @@ function ConfigTab() {
     }
     const existing = configs.find(c => c.siteId === selectedPrivada && c.camId === selectedCam);
     if (existing) {
-      setZones(existing.zones.map(z => ({
+      setZones((existing.zones || []).map(z => ({
         id: z.id,
         roi: z.roi,
         alias: z.alias,
@@ -746,8 +746,8 @@ function ConfigTab() {
                         : "border-gray-200 bg-white hover:border-blue-300"
                     }`}>
                     <p className="font-medium text-gray-900">{c.privadaName || `Sitio ${c.siteId}`}</p>
-                    <p className="text-xs text-gray-500">Cam {c.camId} - {c.zones.length} zona{c.zones.length !== 1 ? "s" : ""}</p>
-                    <p className="text-xs text-gray-400">{c.notifyPhones.length} tel. | cada {c.intervalSec / 60} min</p>
+                    <p className="text-xs text-gray-500">Cam {c.camId} - {(c.zones || []).length} zona{(c.zones || []).length !== 1 ? "s" : ""}</p>
+                    <p className="text-xs text-gray-400">{(c.notifyPhones || []).length} tel. | cada {(c.intervalSec || 300) / 60} min</p>
                   </button>
                 ))}
               </div>
