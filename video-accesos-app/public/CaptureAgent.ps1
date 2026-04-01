@@ -270,6 +270,8 @@ function Log-Debug { param([string]$Msg) if ($script:Config.log.level -eq "DEBUG
 
 # ============================================================================
 # CLIENTE MQTT 3.1.1 (implementacion pura en PowerShell/.NET)
+# Usa MemoryStream/BinaryWriter para construir paquetes binarios
+# y evitar problemas de pipeline unrolling con byte arrays.
 # ============================================================================
 $script:MqttClient = $null      # TcpClient
 $script:MqttStream = $null      # NetworkStream
@@ -278,7 +280,6 @@ $script:MqttPacketId = 0
 $script:MqttLastPing = [DateTime]::MinValue
 $script:MqttLastMessage = [DateTime]::MinValue
 $script:MqttKeepalive = 30      # segundos
-$script:MqttPendingMessages = [System.Collections.ArrayList]::new()
 
 function Get-MqttPacketId {
     $script:MqttPacketId++
@@ -286,31 +287,24 @@ function Get-MqttPacketId {
     return $script:MqttPacketId
 }
 
-# Codificar "remaining length" segun MQTT 3.1.1
-function Get-MqttRemainingLength {
-    param([int]$Length)
-    $bytes = @()
+# Escribir "remaining length" MQTT al BinaryWriter
+function Write-MqttRemainingLength {
+    param([System.IO.BinaryWriter]$Writer, [int]$Length)
     do {
         $b = $Length % 128
         $Length = [math]::Floor($Length / 128)
         if ($Length -gt 0) { $b = $b -bor 0x80 }
-        $bytes += [byte]$b
+        $Writer.Write([byte]$b)
     } while ($Length -gt 0)
-    return [byte[]]$bytes
 }
 
-# Codificar string UTF-8 con prefijo de 2 bytes de longitud
-function Get-MqttString {
-    param([string]$Str)
+# Escribir string MQTT (2-byte length prefix + UTF-8) al BinaryWriter
+function Write-MqttString {
+    param([System.IO.BinaryWriter]$Writer, [string]$Str)
     $strBytes = [System.Text.Encoding]::UTF8.GetBytes($Str)
-    $lenBytes = [byte[]]@(
-        [byte](($strBytes.Length -shr 8) -band 0xFF),
-        [byte]($strBytes.Length -band 0xFF)
-    )
-    $result = New-Object byte[] ($lenBytes.Length + $strBytes.Length)
-    [Array]::Copy($lenBytes, 0, $result, 0, $lenBytes.Length)
-    [Array]::Copy($strBytes, 0, $result, $lenBytes.Length, $strBytes.Length)
-    return $result
+    $Writer.Write([byte](($strBytes.Length -shr 8) -band 0xFF))
+    $Writer.Write([byte]($strBytes.Length -band 0xFF))
+    if ($strBytes.Length -gt 0) { $Writer.Write($strBytes) }
 }
 
 function Connect-MqttBroker {
@@ -324,7 +318,6 @@ function Connect-MqttBroker {
     Log-Info "MQTT: Conectando a ${broker}:${port} como $clientId"
 
     try {
-        # Cerrar conexion previa si existe
         Disconnect-MqttBroker
 
         $script:MqttClient = New-Object System.Net.Sockets.TcpClient
@@ -333,54 +326,45 @@ function Connect-MqttBroker {
         $script:MqttClient.Connect($broker, $port)
         $script:MqttStream = $script:MqttClient.GetStream()
 
-        # --- Construir paquete CONNECT ---
-        # Variable header
-        $protocolName = Get-MqttString "MQTT"
-        $protocolLevel = [byte]0x04  # MQTT 3.1.1
-
-        # Connect flags: username + password + clean session + will flag + will QoS 0
+        # --- Construir variable header + payload en MemoryStream ---
         $willTopic = "videoaccesos/${siteId}/status"
         $willMessage = '{"state":"offline","site_id":"' + $siteId + '"}'
-        $connectFlags = [byte](0x02 -bor 0x04 -bor 0x40 -bor 0x80)  # clean=1, will=1, user=1, pass=1
 
-        $keepaliveBytes = [byte[]]@(
-            [byte](($script:MqttKeepalive -shr 8) -band 0xFF),
-            [byte]($script:MqttKeepalive -band 0xFF)
-        )
+        $bodyMs = New-Object System.IO.MemoryStream
+        $bodyW = New-Object System.IO.BinaryWriter($bodyMs)
 
-        # Payload: clientId, willTopic, willMessage, username, password
-        $clientIdBytes = Get-MqttString $clientId
-        $willTopicBytes = Get-MqttString $willTopic
-        $willMessageBytes = Get-MqttString $willMessage
-        $userBytes = Get-MqttString $mqttUser
-        $passBytes = Get-MqttString $mqttPass
+        # Variable header: Protocol Name + Level + Flags + Keepalive
+        Write-MqttString $bodyW "MQTT"
+        $bodyW.Write([byte]0x04)  # Protocol Level 3.1.1
+        # Flags: clean=1(0x02), will=1(0x04), willQoS=0, username=1(0x40+0x80 for pass)
+        $bodyW.Write([byte](0x02 -bor 0x04 -bor 0x40 -bor 0x80))
+        $bodyW.Write([byte](($script:MqttKeepalive -shr 8) -band 0xFF))
+        $bodyW.Write([byte]($script:MqttKeepalive -band 0xFF))
 
-        # Armar variable header
-        $varHeader = New-Object System.Collections.ArrayList
-        $varHeader.AddRange($protocolName)
-        $varHeader.Add($protocolLevel) | Out-Null
-        $varHeader.Add($connectFlags) | Out-Null
-        $varHeader.AddRange($keepaliveBytes)
+        # Payload: ClientID, Will Topic, Will Message, Username, Password
+        Write-MqttString $bodyW $clientId
+        Write-MqttString $bodyW $willTopic
+        Write-MqttString $bodyW $willMessage
+        Write-MqttString $bodyW $mqttUser
+        Write-MqttString $bodyW $mqttPass
 
-        # Armar payload
-        $payload = New-Object System.Collections.ArrayList
-        $payload.AddRange($clientIdBytes)
-        $payload.AddRange($willTopicBytes)
-        $payload.AddRange($willMessageBytes)
-        $payload.AddRange($userBytes)
-        $payload.AddRange($passBytes)
+        $bodyW.Flush()
+        $bodyBytes = $bodyMs.ToArray()
+        $bodyW.Dispose()
+        $bodyMs.Dispose()
 
-        $remainingLen = $varHeader.Count + $payload.Count
-        $remainingBytes = Get-MqttRemainingLength $remainingLen
+        # --- Construir paquete completo: fixed header + body ---
+        $pktMs = New-Object System.IO.MemoryStream
+        $pktW = New-Object System.IO.BinaryWriter($pktMs)
+        $pktW.Write([byte]0x10)  # CONNECT
+        Write-MqttRemainingLength $pktW $bodyBytes.Length
+        $pktW.Write($bodyBytes)
+        $pktW.Flush()
 
-        # Fixed header: type=CONNECT (0x10)
-        $packet = New-Object System.Collections.ArrayList
-        $packet.Add([byte]0x10) | Out-Null
-        $packet.AddRange($remainingBytes)
-        $packet.AddRange($varHeader.ToArray([byte]))
-        $packet.AddRange($payload.ToArray([byte]))
+        $packetBytes = $pktMs.ToArray()
+        $pktW.Dispose()
+        $pktMs.Dispose()
 
-        $packetBytes = [byte[]]$packet.ToArray([byte])
         $script:MqttStream.Write($packetBytes, 0, $packetBytes.Length)
         $script:MqttStream.Flush()
 
@@ -395,7 +379,6 @@ function Connect-MqttBroker {
             $script:MqttLastMessage = Get-Date
             Log-Info "MQTT: Conectado OK"
 
-            # Suscribirse al topico de comandos
             Subscribe-MqttTopic "videoaccesos/${siteId}/cmd"
             return $true
         } else {
@@ -433,26 +416,28 @@ function Subscribe-MqttTopic {
     if (-not $script:MqttConnected) { return }
 
     $packetId = Get-MqttPacketId
-    $topicBytes = Get-MqttString $Topic
-    $qosByte = [byte]0x00
 
-    # Variable header: packet ID (2 bytes)
-    $varHeader = [byte[]]@(
-        [byte](($packetId -shr 8) -band 0xFF),
-        [byte]($packetId -band 0xFF)
-    )
+    # Construir body: packetId + topic + qos
+    $bodyMs = New-Object System.IO.MemoryStream
+    $bodyW = New-Object System.IO.BinaryWriter($bodyMs)
+    $bodyW.Write([byte](($packetId -shr 8) -band 0xFF))
+    $bodyW.Write([byte]($packetId -band 0xFF))
+    Write-MqttString $bodyW $Topic
+    $bodyW.Write([byte]0x00)  # QoS 0
+    $bodyW.Flush()
+    $bodyBytes = $bodyMs.ToArray()
+    $bodyW.Dispose(); $bodyMs.Dispose()
 
-    $remainingLen = $varHeader.Length + $topicBytes.Length + 1
-    $remainingBytes = Get-MqttRemainingLength $remainingLen
+    # Paquete completo
+    $pktMs = New-Object System.IO.MemoryStream
+    $pktW = New-Object System.IO.BinaryWriter($pktMs)
+    $pktW.Write([byte]0x82)  # SUBSCRIBE
+    Write-MqttRemainingLength $pktW $bodyBytes.Length
+    $pktW.Write($bodyBytes)
+    $pktW.Flush()
+    $packetBytes = $pktMs.ToArray()
+    $pktW.Dispose(); $pktMs.Dispose()
 
-    $packet = New-Object System.Collections.ArrayList
-    $packet.Add([byte]0x82) | Out-Null  # SUBSCRIBE (type 8, flags 0x02)
-    $packet.AddRange($remainingBytes)
-    $packet.AddRange($varHeader)
-    $packet.AddRange($topicBytes)
-    $packet.Add($qosByte) | Out-Null
-
-    $packetBytes = [byte[]]$packet.ToArray([byte])
     $script:MqttStream.Write($packetBytes, 0, $packetBytes.Length)
     $script:MqttStream.Flush()
 
@@ -464,17 +449,25 @@ function Publish-MqttMessage {
     if (-not $script:MqttConnected) { return }
 
     try {
-        $topicBytes = Get-MqttString $Topic
-        $remainingLen = $topicBytes.Length + $Payload.Length
-        $remainingBytes = Get-MqttRemainingLength $remainingLen
+        # Construir body: topic + payload
+        $bodyMs = New-Object System.IO.MemoryStream
+        $bodyW = New-Object System.IO.BinaryWriter($bodyMs)
+        Write-MqttString $bodyW $Topic
+        if ($Payload.Length -gt 0) { $bodyW.Write($Payload) }
+        $bodyW.Flush()
+        $bodyBytes = $bodyMs.ToArray()
+        $bodyW.Dispose(); $bodyMs.Dispose()
 
-        $packet = New-Object System.Collections.ArrayList
-        $packet.Add([byte]0x30) | Out-Null  # PUBLISH QoS 0
-        $packet.AddRange($remainingBytes)
-        $packet.AddRange($topicBytes)
-        $packet.AddRange($Payload)
+        # Paquete completo
+        $pktMs = New-Object System.IO.MemoryStream
+        $pktW = New-Object System.IO.BinaryWriter($pktMs)
+        $pktW.Write([byte]0x30)  # PUBLISH QoS 0
+        Write-MqttRemainingLength $pktW $bodyBytes.Length
+        $pktW.Write($bodyBytes)
+        $pktW.Flush()
+        $packetBytes = $pktMs.ToArray()
+        $pktW.Dispose(); $pktMs.Dispose()
 
-        $packetBytes = [byte[]]$packet.ToArray([byte])
         $script:MqttStream.Write($packetBytes, 0, $packetBytes.Length)
         $script:MqttStream.Flush()
     } catch {
