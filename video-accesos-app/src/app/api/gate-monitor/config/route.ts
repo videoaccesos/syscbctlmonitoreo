@@ -69,8 +69,8 @@ export async function PUT(request: NextRequest) {
       referenceHistogram: existing?.referenceHistogram || null,
       referenceImageB64: existing?.referenceImageB64 || null,
       threshold: threshold ?? existing?.threshold ?? 0.3,
-      debounceSec: debounce_sec ?? existing?.debounceSec ?? 30,
-      intervalSec: interval_sec ?? existing?.intervalSec ?? 5,
+      consecutiveThreshold: body.consecutive_threshold ?? existing?.consecutiveThreshold ?? 4,
+      intervalSec: interval_sec ?? existing?.intervalSec ?? 300,
       enabled: enabled ?? existing?.enabled ?? true,
       alias: alias || existing?.alias || `Porton cam ${cam_id}`,
     };

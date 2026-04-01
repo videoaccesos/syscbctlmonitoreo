@@ -41,7 +41,7 @@ export default function VideoWebPage() {
   const [gateSaving, setGateSaving] = useState(false);
   const [gateAlias, setGateAlias] = useState("");
   const [gateThreshold, setGateThreshold] = useState(30);
-  const [gateDebounceSec, setGateDebounceSec] = useState(30);
+  const [gateConsecutive, setGateConsecutive] = useState(4);
 
   // Cargar lista de privadas
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function VideoWebPage() {
     setGateDrawing(false);
     setGateAlias(`Porton ${cam.alias}`);
     setGateThreshold(30);
-    setGateDebounceSec(30);
+    setGateConsecutive(4);
     // Cargar config existente
     if (selectedSiteId) {
       fetch(`/api/gate-monitor/config?site_id=${selectedSiteId}&cam_id=${cam.index}`)
@@ -93,7 +93,7 @@ export default function VideoWebPage() {
             setGateROI(data.config.roi);
             setGateAlias(data.config.alias || `Porton ${cam.alias}`);
             setGateThreshold(Math.round((data.config.threshold || 0.3) * 100));
-            setGateDebounceSec(data.config.debounceSec || 30);
+            setGateConsecutive(data.config.consecutiveThreshold || 4);
           }
         }).catch(() => {});
     }
@@ -139,7 +139,7 @@ export default function VideoWebPage() {
           roi: gateROI,
           alias: gateAlias,
           threshold: gateThreshold / 100,
-          debounce_sec: gateDebounceSec,
+          consecutive_threshold: gateConsecutive,
           enabled: true,
         }),
       });
@@ -700,12 +700,12 @@ export default function VideoWebPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Segundos antes de alertar</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Lecturas consecutivas para alertar</label>
                   <input
                     type="number"
-                    value={gateDebounceSec}
-                    onChange={e => setGateDebounceSec(parseInt(e.target.value) || 30)}
-                    min={5} max={600}
+                    value={gateConsecutive}
+                    onChange={e => setGateConsecutive(parseInt(e.target.value) || 4)}
+                    min={2} max={20}
                     className="w-full px-3 py-1.5 border rounded-lg text-sm"
                   />
                 </div>

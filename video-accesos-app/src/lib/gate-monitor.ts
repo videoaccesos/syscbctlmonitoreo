@@ -1,9 +1,12 @@
 /**
  * Gate Monitor - Monitoreo de estado de portones via comparacion de imagenes.
  *
- * Compara una region de interes (ROI) de cada frame contra una imagen de
- * referencia ("porton cerrado"). Si la diferencia supera un umbral durante
- * un tiempo configurable, genera una alerta.
+ * Funciona en BACKGROUND sin necesidad de tener Video Web abierto.
+ * Cada intervalSec (ej. 5 min) solicita un snapshot al agente via MQTT,
+ * espera el frame, y compara contra la referencia.
+ *
+ * Si N lecturas CONSECUTIVAS superan el umbral de diferencia, genera alerta.
+ * Esto evita falsos positivos por frames aislados (sombra, reflejo, etc).
  *
  * Tecnica: histograma de luminancia en el ROI. Rapido (~2ms), sin GPU,
  * sin modelos de IA. Suficiente para detectar cambios grandes como
@@ -16,7 +19,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { logger } from "@/lib/logger";
 import { getFrame } from "@/lib/frame-store";
-import { publishAlert, isMqttConnected } from "@/lib/mqtt-client";
+import { publishCommand, publishAlert, isMqttConnected } from "@/lib/mqtt-client";
 
 const TAG = "gate-monitor";
 
@@ -41,9 +44,9 @@ export interface GateConfig {
   referenceImageB64: string | null;
   /** Umbral de diferencia (0-1). Default 0.3 = 30% de cambio */
   threshold: number;
-  /** Segundos que el cambio debe persistir antes de alertar */
-  debounceSec: number;
-  /** Intervalo de captura en segundos */
+  /** Lecturas consecutivas "open" necesarias para alertar. Default 4 */
+  consecutiveThreshold: number;
+  /** Intervalo entre snapshots en segundos. Default 300 (5 min) */
   intervalSec: number;
   /** Activo o no */
   enabled: boolean;
@@ -60,8 +63,10 @@ export interface GateStatus {
   state: GateState;
   /** Diferencia actual vs referencia (0-1) */
   currentDiff: number;
-  /** Desde cuando esta en el estado actual */
-  stateChangedAt: number;
+  /** Lecturas consecutivas con estado "open" */
+  consecutiveOpen: number;
+  /** Lecturas consecutivas necesarias para alertar */
+  consecutiveThreshold: number;
   /** Ultimo frame analizado */
   lastCheckAt: number;
   /** Alerta enviada para este evento */
@@ -375,13 +380,57 @@ export async function captureReference(
 }
 
 // ---------------------------------------------------------------------------
-// Loop de monitoreo
+// Loop de monitoreo (background, sin necesidad de Video Web abierto)
 // ---------------------------------------------------------------------------
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
+/** Timeout maximo (ms) para esperar un frame despues de pedir snapshot */
+const SNAPSHOT_WAIT_MS = 15_000;
+/** Intervalo de polling mientras espera el frame */
+const SNAPSHOT_POLL_MS = 500;
+
+/**
+ * Solicita un snapshot al agente via MQTT y espera a que llegue al frame-store.
+ * Retorna el buffer JPEG o null si no llega a tiempo.
+ */
+async function requestSnapshot(siteId: string, camId: number): Promise<Buffer | null> {
+  // Primero verificar si ya hay un frame reciente (< 30s) por si Video Web esta abierto
+  const existing = getFrame(siteId, camId);
+  if (existing) return existing.data;
+
+  // Solicitar snapshot al agente via MQTT
+  const snapshotCmd = {
+    cmd: "start_stream",
+    cam_id: camId,
+    fps: 1,
+    duration: 3, // solo 3 segundos, un par de frames
+    quality: 55,
+    width: 640,
+    mode: "snapshot",
+  };
+
+  const mqttOk = publishCommand(siteId, snapshotCmd);
+  if (!mqttOk) {
+    logger.warn(TAG, `No se pudo enviar snapshot request a site=${siteId}`);
+    return null;
+  }
+
+  // Esperar a que el frame llegue al store
+  const deadline = Date.now() + SNAPSHOT_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, SNAPSHOT_POLL_MS));
+    const frame = getFrame(siteId, camId);
+    if (frame) return frame.data;
+  }
+
+  logger.warn(TAG, `Timeout esperando snapshot de site=${siteId} cam=${camId}`);
+  return null;
+}
+
 /**
  * Ejecuta un ciclo de verificacion para todos los monitores activos.
+ * Pide snapshot al agente, analiza, y cuenta lecturas consecutivas.
  */
 async function runMonitorCycle(): Promise<void> {
   const configs = loadConfigs();
@@ -391,50 +440,52 @@ async function runMonitorCycle(): Promise<void> {
     if (!config.enabled || !config.referenceHistogram) continue;
 
     const key = gateKey(config.siteId, config.camId);
+    const threshold = config.consecutiveThreshold || 4;
 
     // Respetar intervalo por monitor
     const status = gateStates[key];
     if (status && (now - status.lastCheckAt) < (config.intervalSec * 1000)) continue;
 
-    // Obtener frame actual
-    const frame = getFrame(config.siteId, config.camId);
-    if (!frame) {
+    // Solicitar snapshot al agente (background, no requiere Video Web)
+    const jpegData = await requestSnapshot(config.siteId, config.camId);
+    if (!jpegData) {
       gateStates[key] = {
         siteId: config.siteId,
         camId: config.camId,
         alias: config.alias,
         state: "no-signal",
         currentDiff: 0,
-        stateChangedAt: status?.stateChangedAt || now,
-        lastCheckAt: now,
-        alertSent: false,
+        consecutiveOpen: 0,
+        consecutiveThreshold: threshold,
+        lastCheckAt: Date.now(),
+        alertSent: status?.alertSent || false,
         enabled: true,
       };
       continue;
     }
 
     try {
-      const currentHistogram = await extractROIHistogram(frame.data, config.roi);
+      const currentHistogram = await extractROIHistogram(jpegData, config.roi);
       const diff = histogramDifference(config.referenceHistogram, currentHistogram);
       const isOpen = diff > config.threshold;
+      const prevConsecutive = status?.consecutiveOpen || 0;
       const prevState = status?.state || "unknown";
+
+      // Contar lecturas consecutivas
+      const consecutiveOpen = isOpen ? prevConsecutive + 1 : 0;
       const newState: GateState = isOpen ? "open" : "closed";
 
-      // Detectar cambio de estado
-      const stateChanged = prevState !== newState;
-      const stateChangedAt = stateChanged ? now : (status?.stateChangedAt || now);
-      const stateHeldSec = (now - stateChangedAt) / 1000;
-
-      // Alerta si porton abierto por mas del debounce
+      // Alerta si N lecturas consecutivas superan umbral
       let alertSent = status?.alertSent || false;
-      if (newState === "open" && stateHeldSec >= config.debounceSec && !alertSent) {
+      if (consecutiveOpen >= threshold && !alertSent) {
         alertSent = true;
-        sendGateAlert(config, diff, stateHeldSec);
+        const totalMinutes = Math.round((threshold * config.intervalSec) / 60);
+        sendGateAlert(config, diff, totalMinutes * 60, jpegData);
       }
 
-      // Reset alerta cuando se cierra y resolve alert history records
-      if (newState === "closed") {
-        if (prevState === "open") {
+      // Reset cuando se cierra
+      if (newState === "closed" && prevState === "open") {
+        if (alertSent) {
           resolveAlertForGate(config.siteId, config.camId);
         }
         alertSent = false;
@@ -446,15 +497,14 @@ async function runMonitorCycle(): Promise<void> {
         alias: config.alias,
         state: newState,
         currentDiff: Math.round(diff * 1000) / 1000,
-        stateChangedAt,
-        lastCheckAt: now,
+        consecutiveOpen,
+        consecutiveThreshold: threshold,
+        lastCheckAt: Date.now(),
         alertSent,
         enabled: true,
       };
 
-      if (stateChanged && prevState !== "unknown") {
-        logger.info(TAG, `${config.alias} (site=${config.siteId} cam=${config.camId}): ${prevState} -> ${newState} (diff=${diff.toFixed(3)})`);
-      }
+      logger.info(TAG, `${config.alias}: ${newState} (diff=${diff.toFixed(3)}, consecutivo=${consecutiveOpen}/${threshold})`);
     } catch (err) {
       logger.error(TAG, `Error en monitor ${key}: ${err instanceof Error ? err.message : err}`);
     }
@@ -465,22 +515,22 @@ async function runMonitorCycle(): Promise<void> {
 // Alertas via MQTT al bot orquestador
 // ---------------------------------------------------------------------------
 
-function sendGateAlert(config: GateConfig, diff: number, heldSec: number): void {
+function sendGateAlert(config: GateConfig, diff: number, heldSec: number, jpegData?: Buffer): void {
   const minutes = Math.round(heldSec / 60);
   const timeLabel = minutes >= 1 ? `${minutes} min` : `${Math.round(heldSec)}s`;
 
   const message = `Porton "${config.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`;
 
-  // Guardar evidencia fotografica del frame actual
+  // Guardar evidencia fotografica
   let imageFile: string | null = null;
   let imageUrl: string | null = null;
   try {
-    const frame = getFrame(config.siteId, config.camId);
-    if (frame) {
+    const frameData = jpegData || getFrame(config.siteId, config.camId)?.data;
+    if (frameData) {
       if (!fs.existsSync(EVIDENCE_DIR)) fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       imageFile = `alert-${config.siteId}-${config.camId}-${ts}.jpg`;
-      fs.writeFileSync(path.join(EVIDENCE_DIR, imageFile), frame.data);
+      fs.writeFileSync(path.join(EVIDENCE_DIR, imageFile), frameData);
       imageUrl = `/static/gate-alerts/${imageFile}`;
       logger.info(TAG, `Evidencia guardada: ${imageFile}`);
     }
@@ -531,7 +581,7 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number): void 
 
 export function startGateMonitor(): void {
   if (monitorInterval) return;
-  monitorInterval = setInterval(runMonitorCycle, 2000); // check cada 2s
+  monitorInterval = setInterval(runMonitorCycle, 30_000); // check cada 30s, cada monitor respeta su propio intervalSec
   if (monitorInterval && typeof monitorInterval === "object" && "unref" in monitorInterval) {
     monitorInterval.unref();
   }
