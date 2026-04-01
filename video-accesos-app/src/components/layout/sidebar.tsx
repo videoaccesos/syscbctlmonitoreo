@@ -72,6 +72,7 @@ const fullNavigation: NavItem[] = [
       { label: "Dashboard de Ingresos", href: "/herramientas/ingresos" },
       { label: "Prenomina Quincenal", href: "/procesos/prenomina" },
       { label: "Video Web", href: "/herramientas/video-web" },
+      { label: "Monitoreo Portones", href: "/herramientas/monitoreo-portones" },
     ],
   },
   {

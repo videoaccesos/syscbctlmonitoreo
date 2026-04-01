@@ -11,6 +11,7 @@
  */
 
 import sharp from "sharp";
+import crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "@/lib/logger";
@@ -68,12 +69,29 @@ export interface GateStatus {
   enabled: boolean;
 }
 
+export interface GateAlertRecord {
+  id: string;
+  siteId: string;
+  camId: number;
+  alias: string;
+  state: string;
+  heldSeconds: number;
+  difference: number; // percentage 0-100
+  message: string;
+  imageFile: string | null; // filename in public/static/gate-alerts/
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Persistencia (archivo JSON)
 // ---------------------------------------------------------------------------
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const CONFIG_FILE = path.join(DATA_DIR, "gate-monitors.json");
+const ALERTS_FILE = path.join(DATA_DIR, "gate-alerts.json");
+const EVIDENCE_DIR = path.join(process.cwd(), "public", "static", "gate-alerts");
+const MAX_ALERT_RECORDS = 500;
 
 let configCache: Record<string, GateConfig> | null = null;
 
@@ -103,6 +121,102 @@ function saveConfigs(data: Record<string, GateConfig>): void {
   } catch (err) {
     logger.error(TAG, `Error saving config: ${err}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Persistencia de alertas (archivo JSON)
+// ---------------------------------------------------------------------------
+
+let alertCache: GateAlertRecord[] | null = null;
+
+function loadAlerts(): GateAlertRecord[] {
+  if (alertCache) return alertCache;
+  try {
+    if (fs.existsSync(ALERTS_FILE)) {
+      alertCache = JSON.parse(fs.readFileSync(ALERTS_FILE, "utf-8"));
+      return alertCache!;
+    }
+  } catch (err) {
+    logger.error(TAG, `Error loading alerts: ${err}`);
+  }
+  alertCache = [];
+  return alertCache;
+}
+
+function saveAlerts(data: GateAlertRecord[]): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    // Prune to max records keeping newest
+    if (data.length > MAX_ALERT_RECORDS) {
+      data = data.slice(data.length - MAX_ALERT_RECORDS);
+    }
+    fs.writeFileSync(ALERTS_FILE, JSON.stringify(data, null, 2));
+    alertCache = data;
+  } catch (err) {
+    logger.error(TAG, `Error saving alerts: ${err}`);
+  }
+}
+
+function pushAlertRecord(record: GateAlertRecord): void {
+  const alerts = loadAlerts();
+  alerts.push(record);
+  saveAlerts(alerts);
+}
+
+function resolveAlertForGate(siteId: string, camId: number): void {
+  const alerts = loadAlerts();
+  let changed = false;
+  for (let i = alerts.length - 1; i >= 0; i--) {
+    if (alerts[i].siteId === siteId && alerts[i].camId === camId && alerts[i].resolvedAt === null) {
+      alerts[i].resolvedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+  if (changed) saveAlerts(alerts);
+}
+
+export function getAlertHistory(limit?: number): GateAlertRecord[] {
+  const alerts = loadAlerts();
+  // Return newest first
+  const sorted = [...alerts].reverse();
+  if (limit && limit > 0) return sorted.slice(0, limit);
+  return sorted;
+}
+
+export function getAlertStats(): {
+  totalToday: number;
+  avgHeldSeconds: number;
+  mostFrequentGate: string | null;
+  activeAlerts: number;
+} {
+  const alerts = loadAlerts();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const todayAlerts = alerts.filter((a) => a.createdAt.startsWith(todayStr));
+  const totalToday = todayAlerts.length;
+
+  const avgHeldSeconds =
+    todayAlerts.length > 0
+      ? Math.round(todayAlerts.reduce((sum, a) => sum + a.heldSeconds, 0) / todayAlerts.length)
+      : 0;
+
+  // Most frequent gate (all time from loaded records)
+  const freq: Record<string, number> = {};
+  for (const a of alerts) {
+    freq[a.alias] = (freq[a.alias] || 0) + 1;
+  }
+  let mostFrequentGate: string | null = null;
+  let maxCount = 0;
+  for (const [alias, count] of Object.entries(freq)) {
+    if (count > maxCount) {
+      maxCount = count;
+      mostFrequentGate = alias;
+    }
+  }
+
+  const activeAlerts = alerts.filter((a) => a.resolvedAt === null).length;
+
+  return { totalToday, avgHeldSeconds, mostFrequentGate, activeAlerts };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,8 +432,11 @@ async function runMonitorCycle(): Promise<void> {
         sendGateAlert(config, diff, stateHeldSec);
       }
 
-      // Reset alerta cuando se cierra
+      // Reset alerta cuando se cierra y resolve alert history records
       if (newState === "closed") {
+        if (prevState === "open") {
+          resolveAlertForGate(config.siteId, config.camId);
+        }
         alertSent = false;
       }
 
@@ -352,6 +469,25 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number): void 
   const minutes = Math.round(heldSec / 60);
   const timeLabel = minutes >= 1 ? `${minutes} min` : `${Math.round(heldSec)}s`;
 
+  const message = `Porton "${config.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`;
+
+  // Guardar evidencia fotografica del frame actual
+  let imageFile: string | null = null;
+  let imageUrl: string | null = null;
+  try {
+    const frame = getFrame(config.siteId, config.camId);
+    if (frame) {
+      if (!fs.existsSync(EVIDENCE_DIR)) fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      imageFile = `alert-${config.siteId}-${config.camId}-${ts}.jpg`;
+      fs.writeFileSync(path.join(EVIDENCE_DIR, imageFile), frame.data);
+      imageUrl = `/static/gate-alerts/${imageFile}`;
+      logger.info(TAG, `Evidencia guardada: ${imageFile}`);
+    }
+  } catch (err) {
+    logger.error(TAG, `Error guardando evidencia: ${err instanceof Error ? err.message : err}`);
+  }
+
   const alertPayload = {
     type: "gate_alert",
     site_id: config.siteId,
@@ -360,7 +496,8 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number): void 
     state: "open",
     held_seconds: Math.round(heldSec),
     difference: Math.round(diff * 100),
-    message: `Porton "${config.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%)`,
+    message,
+    image_url: imageUrl,
     ts: new Date().toISOString(),
   };
 
@@ -369,7 +506,23 @@ function sendGateAlert(config: GateConfig, diff: number, heldSec: number): void 
     publishAlert(config.siteId, alertPayload);
   }
 
-  logger.warn(TAG, `ALERTA: ${alertPayload.message}`);
+  // Persist alert to history
+  const record: GateAlertRecord = {
+    id: crypto.randomUUID(),
+    siteId: config.siteId,
+    camId: config.camId,
+    alias: config.alias,
+    state: "open",
+    heldSeconds: Math.round(heldSec),
+    difference: Math.round(diff * 100),
+    message,
+    imageFile,
+    resolvedAt: null,
+    createdAt: new Date().toISOString(),
+  };
+  pushAlertRecord(record);
+
+  logger.warn(TAG, `ALERTA: ${message}`);
 }
 
 // ---------------------------------------------------------------------------
