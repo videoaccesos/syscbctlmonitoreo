@@ -14,6 +14,7 @@ import {
   Camera,
   Phone,
   X,
+  FileText,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -80,7 +81,7 @@ interface GateConfigAPI {
 }
 
 type DateFilter = "hoy" | "7dias" | "30dias";
-type TabKey = "alertas" | "config";
+type TabKey = "alertas" | "log" | "config";
 
 const ZONE_COLORS = ["#ef4444", "#3b82f6", "#22c55e"];
 const ZONE_NAMES = ["Rojo", "Azul", "Verde"];
@@ -149,6 +150,17 @@ export default function MonitoreoPortonesPage() {
           Alertas
         </button>
         <button
+          onClick={() => setTab("log")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${
+            tab === "log"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <FileText className="h-4 w-4 inline mr-1.5" />
+          Log de Lecturas
+        </button>
+        <button
           onClick={() => setTab("config")}
           className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${
             tab === "config"
@@ -161,7 +173,9 @@ export default function MonitoreoPortonesPage() {
         </button>
       </div>
 
-      {tab === "alertas" ? <AlertasTab /> : <ConfigTab />}
+      {tab === "alertas" && <AlertasTab />}
+      {tab === "log" && <LogTab />}
+      {tab === "config" && <ConfigTab />}
     </div>
   );
 }
@@ -283,6 +297,168 @@ function AlertasTab() {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// LOG TAB
+// ===========================================================================
+
+interface ComparisonRecord {
+  id: string;
+  siteId: string;
+  camId: number;
+  zoneId: string;
+  alias: string;
+  privadaName: string;
+  threshold: number;
+  difference: number;
+  isOpen: boolean;
+  consecutiveOpen: number;
+  consecutiveThreshold: number;
+  alertTriggered: boolean;
+  createdAt: string;
+}
+
+function LogTab() {
+  const [records, setRecords] = useState<ComparisonRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("hoy");
+  const [zoneFilter, setZoneFilter] = useState("");
+
+  const fetchLog = useCallback(async () => {
+    try {
+      const res = await fetch("/api/gate-monitor/comparisons?limit=2000");
+      if (!res.ok) throw new Error("Error");
+      const json = await res.json();
+      setRecords(json.records || []);
+      setLastUpdate(new Date().toLocaleTimeString("es-MX"));
+    } catch (err) {
+      console.error("Error fetching log:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLog();
+    const iv = setInterval(fetchLog, 15000);
+    return () => clearInterval(iv);
+  }, [fetchLog]);
+
+  const filtered = records
+    .filter((r) => isWithinFilter(r.createdAt, dateFilter))
+    .filter((r) => !zoneFilter || r.alias === zoneFilter);
+
+  const uniqueZones = Array.from(new Set(records.map((r) => r.alias)));
+  const filterLabels: Record<DateFilter, string> = { hoy: "Hoy", "7dias": "7 dias", "30dias": "30 dias" };
+
+  // Stats
+  const totalReadings = filtered.length;
+  const openReadings = filtered.filter((r) => r.isOpen).length;
+  const alertsTriggered = filtered.filter((r) => r.alertTriggered).length;
+  const avgDiff = totalReadings > 0
+    ? (filtered.reduce((s, r) => s + r.difference, 0) / totalReadings).toFixed(3)
+    : "0";
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <SummaryCard label="Total lecturas" value={String(totalReadings)}
+          icon={<FileText className="h-5 w-5 text-blue-500" />} color="blue" />
+        <SummaryCard label="Lecturas abiertas" value={String(openReadings)}
+          icon={<AlertTriangle className="h-5 w-5 text-orange-500" />} color="orange" />
+        <SummaryCard label="Alertas disparadas" value={String(alertsTriggered)}
+          icon={<Shield className="h-5 w-5 text-red-500" />} color={alertsTriggered > 0 ? "red" : "green"} />
+        <SummaryCard label="Variacion promedio" value={avgDiff}
+          icon={<Activity className="h-5 w-5 text-purple-500" />} color="purple" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-gray-700">Periodo:</span>
+        {(Object.keys(filterLabels) as DateFilter[]).map((k) => (
+          <button key={k} onClick={() => setDateFilter(k)}
+            className={`px-3 py-1.5 text-sm rounded-lg transition ${
+              dateFilter === k ? "bg-blue-600 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"
+            }`}>{filterLabels[k]}</button>
+        ))}
+        <span className="text-gray-300 mx-1">|</span>
+        <span className="text-sm font-medium text-gray-700">Zona:</span>
+        <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+          <option value="">Todas</option>
+          {uniqueZones.map((z) => <option key={z} value={z}>{z}</option>)}
+        </select>
+        <span className="ml-auto text-sm text-gray-400">{filtered.length} lectura{filtered.length !== 1 ? "s" : ""}</span>
+        {lastUpdate && <span className="text-xs text-gray-400">| {lastUpdate}</span>}
+        <button onClick={() => { setLoading(true); fetchLog(); }}
+          className="flex items-center gap-1 px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Actualizar
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha/Hora</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Privada</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Zona</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Umbral</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Variacion</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Consecutivo</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Alerta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading && filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-12 text-gray-400">Cargando log...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-12 text-gray-400">No hay lecturas en este periodo</td></tr>
+              ) : filtered.map((r) => {
+                const overThreshold = r.difference > r.threshold;
+                return (
+                  <tr key={r.id} className={`transition-colors ${r.alertTriggered ? "bg-red-50" : overThreshold ? "bg-orange-50/50" : "hover:bg-gray-50"}`}>
+                    <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap text-xs">{fmtDateTime(r.createdAt)}</td>
+                    <td className="px-4 py-2.5 text-gray-700 text-xs">{r.privadaName}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-900 text-xs">{r.alias}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-500 text-xs">{r.threshold}</td>
+                    <td className={`px-4 py-2.5 text-right font-mono text-xs font-bold ${overThreshold ? "text-red-600" : "text-green-600"}`}>
+                      {r.difference}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {r.isOpen ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Abierto</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Normal</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-center text-xs">
+                      <span className={`font-mono ${r.consecutiveOpen > 0 ? "text-orange-600 font-bold" : "text-gray-400"}`}>
+                        {r.consecutiveOpen}/{r.consecutiveThreshold}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {r.alertTriggered ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">ENVIADA</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

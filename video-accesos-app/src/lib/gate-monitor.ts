@@ -79,6 +79,23 @@ export interface GateZoneStatus {
   enabled: boolean;
 }
 
+/** Registro de cada comparacion (log de lecturas) */
+export interface GateComparisonLog {
+  id: string;
+  siteId: string;
+  camId: number;
+  zoneId: string;
+  alias: string;
+  privadaName: string;
+  threshold: number;
+  difference: number;
+  isOpen: boolean;
+  consecutiveOpen: number;
+  consecutiveThreshold: number;
+  alertTriggered: boolean;
+  createdAt: string;
+}
+
 export interface GateAlertRecord {
   id: string;
   siteId: string;
@@ -101,8 +118,10 @@ export interface GateAlertRecord {
 const DATA_DIR = path.join(process.cwd(), "data");
 const CONFIG_FILE = path.join(DATA_DIR, "gate-monitors.json");
 const ALERTS_FILE = path.join(DATA_DIR, "gate-alerts.json");
+const COMPARISONS_FILE = path.join(DATA_DIR, "gate-comparisons.json");
 const EVIDENCE_DIR = path.join(process.cwd(), "public", "static", "gate-alerts");
 const MAX_ALERT_RECORDS = 500;
+const MAX_COMPARISON_RECORDS = 2000;
 const MAX_ZONES_PER_CAM = 3;
 
 let configCache: Record<string, GateConfig> | null = null;
@@ -197,6 +216,52 @@ function pushAlertRecord(record: GateAlertRecord): void {
   const alerts = loadAlerts();
   alerts.push(record);
   saveAlerts(alerts);
+}
+
+// ---------------------------------------------------------------------------
+// Persistencia: Log de comparaciones
+// ---------------------------------------------------------------------------
+
+let comparisonCache: GateComparisonLog[] | null = null;
+
+function loadComparisons(): GateComparisonLog[] {
+  if (comparisonCache) return comparisonCache;
+  try {
+    if (fs.existsSync(COMPARISONS_FILE)) {
+      comparisonCache = JSON.parse(fs.readFileSync(COMPARISONS_FILE, "utf-8"));
+      return comparisonCache!;
+    }
+  } catch {}
+  comparisonCache = [];
+  return comparisonCache;
+}
+
+function saveComparisons(records: GateComparisonLog[]): void {
+  if (records.length > MAX_COMPARISON_RECORDS) {
+    records = records.slice(records.length - MAX_COMPARISON_RECORDS);
+  }
+  comparisonCache = records;
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(COMPARISONS_FILE, JSON.stringify(records, null, 2));
+  } catch (err) {
+    logger.error(TAG, `Error al guardar comparisons: ${err}`);
+  }
+}
+
+function pushComparison(entry: GateComparisonLog): void {
+  const records = loadComparisons();
+  records.push(entry);
+  saveComparisons(records);
+}
+
+export function getComparisonLog(limit?: number, siteId?: string, zoneId?: string): GateComparisonLog[] {
+  let records = loadComparisons();
+  if (siteId) records = records.filter((r) => r.siteId === siteId);
+  if (zoneId) records = records.filter((r) => r.zoneId === zoneId);
+  const sorted = [...records].reverse();
+  if (limit && limit > 0) return sorted.slice(0, limit);
+  return sorted;
 }
 
 function resolveAlertsForZone(zoneId: string): void {
@@ -491,8 +556,10 @@ async function runMonitorCycle(): Promise<void> {
         const newState: GateState = isOpen ? "open" : "closed";
 
         let alertSent = status?.alertSent || false;
+        let alertTriggeredNow = false;
         if (consecutiveOpen >= threshold && !alertSent) {
           alertSent = true;
+          alertTriggeredNow = true;
           const totalMin = Math.round((threshold * config.intervalSec) / 60);
           sendZoneAlert(config, zone, diff, totalMin * 60, jpegData);
         }
@@ -515,6 +582,23 @@ async function runMonitorCycle(): Promise<void> {
           alertSent,
           enabled: true,
         };
+
+        // Registrar en log de comparaciones
+        pushComparison({
+          id: crypto.randomUUID(),
+          siteId: config.siteId,
+          camId: config.camId,
+          zoneId: zone.id,
+          alias: zone.alias,
+          privadaName: config.privadaName || `Sitio ${config.siteId}`,
+          threshold: zone.threshold,
+          difference: Math.round(diff * 1000) / 1000,
+          isOpen,
+          consecutiveOpen,
+          consecutiveThreshold: threshold,
+          alertTriggered: alertTriggeredNow,
+          createdAt: new Date().toISOString(),
+        });
 
         logger.info(TAG, `${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold})`);
       } catch (err) {
