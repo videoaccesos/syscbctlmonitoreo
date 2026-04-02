@@ -328,15 +328,40 @@ function ConfigTab() {
     }).catch(() => {});
   }, []);
 
-  // Load cameras when privada changes
+  // Start stream & load cameras when privada changes
   useEffect(() => {
     if (!selectedPrivada) { setCameras([]); return; }
-    fetch(`/api/camera-proxy/lookup?privada_id=${selectedPrivada}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.found && data.cameras) setCameras(data.cameras);
-        else setCameras([]);
-      }).catch(() => setCameras([]));
+
+    // 1. Request stream FIRST so agent reports its channels
+    fetch("/api/camera-frames/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_id: selectedPrivada, cmd: "start_stream", fps: 2, duration: 0, mode: "all" }),
+    }).catch(() => {});
+
+    // 2. Load cameras immediately (DB-configured ones)
+    const loadCams = () =>
+      fetch(`/api/camera-proxy/lookup?privada_id=${selectedPrivada}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.found && data.cameras) setCameras(data.cameras);
+          else setCameras([]);
+        }).catch(() => setCameras([]));
+
+    loadCams();
+
+    // 3. Reload after 3s to pick up agent-reported cameras
+    const t = setTimeout(loadCams, 3000);
+
+    // 4. Stop stream on cleanup
+    return () => {
+      clearTimeout(t);
+      fetch("/api/camera-frames/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: selectedPrivada, cmd: "stop_stream" }),
+      }).catch(() => {});
+    };
   }, [selectedPrivada]);
 
   // Load existing config when camera changes
@@ -360,20 +385,6 @@ function ConfigTab() {
     } else {
       setZones([]); setPhones([]); setIntervalSec(300);
     }
-    // Request stream for preview (same as video-web but lower fps)
-    fetch("/api/camera-frames/command", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site_id: selectedPrivada, cmd: "start_stream", fps: 2, duration: 0, mode: "all" }),
-    }).catch(() => {});
-    // Stop stream on cleanup
-    return () => {
-      fetch("/api/camera-frames/command", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site_id: selectedPrivada, cmd: "stop_stream" }),
-      }).catch(() => {});
-    };
   }, [selectedPrivada, selectedCam, configs]);
 
   // Refresh preview image
