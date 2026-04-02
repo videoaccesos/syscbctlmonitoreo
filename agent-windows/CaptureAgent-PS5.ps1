@@ -14,17 +14,42 @@
     Solo conexiones salientes. Funciona detras de NAT/CGNAT.
 
 .NOTES
-    Version compatible con PowerShell 5.1 (Windows 7/8/10/11 built-in).
-    Requiere: PowerShell 5.1+, acceso LAN al DVR, acceso a internet
+    Version compatible con PowerShell 2.0+ (Windows 7/8/10/11 built-in).
+    Requiere: acceso LAN al DVR, acceso a internet
     Ejecutar como Administrador para autoinstalacion de tarea programada.
-    Uso: .\CaptureAgent.ps1
+    Uso: powershell -ExecutionPolicy Bypass -File .\CaptureAgent-PS5.ps1
 #>
 
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.json"),
+    [string]$ConfigPath,
     [switch]$Uninstall,
     [switch]$RunAsService
 )
+
+# Fallback para $PSScriptRoot (no existe en PS 2.0)
+if (-not $PSScriptRoot) {
+    $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+}
+if (-not $ConfigPath) {
+    $ConfigPath = Join-Path $PSScriptRoot "config.json"
+}
+
+# Verificar version minima de PowerShell
+$psVer = $PSVersionTable.PSVersion.Major
+if ($psVer -lt 3) {
+    Write-Host ""
+    Write-Host "ERROR: Se requiere PowerShell 3.0 o superior." -ForegroundColor Red
+    Write-Host "  Version actual: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Para actualizar PowerShell:" -ForegroundColor Yellow
+    Write-Host "  Windows 7/8:  Instalar WMF 5.1 desde:" -ForegroundColor Yellow
+    Write-Host "  https://www.microsoft.com/en-us/download/details.aspx?id=54616" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Windows 10/11: Ya incluye PS 5.1 (abra como Administrador)" -ForegroundColor Yellow
+    Write-Host ""
+    Read-Host "Presione Enter para salir"
+    exit 1
+}
 
 $TaskName = "VideoAccesos-CaptureAgent"
 
