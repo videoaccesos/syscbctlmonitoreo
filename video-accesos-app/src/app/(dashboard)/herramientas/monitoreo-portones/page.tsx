@@ -15,6 +15,8 @@ import {
   Phone,
   X,
   FileText,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,14 @@ interface GateConfigAPI {
   notifyPhones: string[];
 }
 
+interface AgentInfo {
+  siteId: string;
+  online: boolean;
+  lastSeen: number;
+  host?: string;
+  privadaName?: string | null;
+}
+
 type DateFilter = "hoy" | "7dias" | "30dias";
 type TabKey = "alertas" | "log" | "config";
 
@@ -123,17 +133,66 @@ function isWithinFilter(createdAt: string, filter: DateFilter): boolean {
 
 export default function MonitoreoPortonesPage() {
   const [tab, setTab] = useState<TabKey>("alertas");
+  const [mqttOk, setMqttOk] = useState(false);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+
+  // Poll agent statuses
+  useEffect(() => {
+    const fetchAgents = () => {
+      fetch("/api/gate-monitor/agents").then(r => r.json()).then(data => {
+        if (data.ok) {
+          setMqttOk(data.mqttConnected);
+          setAgents(data.agents || []);
+        }
+      }).catch(() => {});
+    };
+    fetchAgents();
+    const iv = setInterval(fetchAgents, 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const onlineAgents = agents.filter(a => a.online);
+  const offlineAgents = agents.filter(a => !a.online);
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Shield className="h-7 w-7 text-blue-600" />
-          Monitoreo de Portones
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Alertas, historial y configuracion de monitoreo
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Shield className="h-7 w-7 text-blue-600" />
+            Monitoreo de Portones
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Alertas, historial y configuracion de monitoreo
+          </p>
+        </div>
+
+        {/* Agent status bar */}
+        <div className="flex items-center gap-3 text-sm flex-wrap">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+            mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+          }`}>
+            {mqttOk ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+            MQTT {mqttOk ? "Conectado" : "Desconectado"}
+          </span>
+          {onlineAgents.map(a => (
+            <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
+              title={`Host: ${a.host || "?"} | Ultimo heartbeat: ${new Date(a.lastSeen).toLocaleTimeString("es-MX")}`}>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              {a.privadaName || `Sitio ${a.siteId}`}{a.host ? ` (${a.host})` : ""}
+            </span>
+          ))}
+          {offlineAgents.map(a => (
+            <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+              title={`Offline desde: ${new Date(a.lastSeen).toLocaleString("es-MX")}`}>
+              <span className="w-2 h-2 rounded-full bg-gray-400" />
+              {a.privadaName || `Sitio ${a.siteId}`}
+            </span>
+          ))}
+          {agents.length === 0 && mqttOk && (
+            <span className="text-xs text-gray-400">Sin agentes reportados</span>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
