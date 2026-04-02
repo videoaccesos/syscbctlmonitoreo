@@ -26,6 +26,8 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   ClipboardList,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 // Softphone minimo - requires browser APIs (WebRTC, WebSocket)
@@ -257,6 +259,10 @@ export default function MonitoristasPage() {
   // Video/camera state - panel lateral izquierdo
   const [showVideo, setShowVideo] = useState(false);
 
+  // Agent health status
+  const [mqttOk, setMqttOk] = useState(false);
+  const [agentList, setAgentList] = useState<Array<{ siteId: string; online: boolean; lastSeen: number; host?: string; privadaName?: string | null }>>([]);
+
   // Form state
   const [formPrivadaId, setFormPrivadaId] = useState("");
   const [residenciaSearch, setResidenciaSearch] = useState("");
@@ -339,6 +345,21 @@ export default function MonitoristasPage() {
       timerSeconds,
     };
   }, [formPrivadaId, selectedResidencia, formTipoGestionId, formSolicitanteId, formSolicitanteNombre, solicitanteSearch, formObservaciones, timerSeconds]);
+
+  // Poll agent health status
+  useEffect(() => {
+    const fetchAgents = () => {
+      fetch("/api/gate-monitor/agents").then(r => r.json()).then(data => {
+        if (data.ok) {
+          setMqttOk(data.mqttConnected);
+          setAgentList(data.agents || []);
+        }
+      }).catch(() => {});
+    };
+    fetchAgents();
+    const iv = setInterval(fetchAgents, 15000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Duracion de la ultima gestion
   const [ultimaDuracion, setUltimaDuracion] = useState("00:00:00");
@@ -1116,6 +1137,33 @@ export default function MonitoristasPage() {
             Ultima: <span className="font-mono text-gray-700">{ultimaDuracion}</span>
           </div>
         </div>
+      </div>
+
+      {/* ================================================================= */}
+      {/* AGENT HEALTH STATUS BAR                                            */}
+      {/* ================================================================= */}
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
+          mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+        }`}>
+          {mqttOk ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+          MQTT {mqttOk ? "OK" : "OFF"}
+        </span>
+        {agentList.filter(a => a.online).map(a => (
+          <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium bg-green-100 text-green-700"
+            title={`Host: ${a.host || "?"} | Heartbeat: ${new Date(a.lastSeen).toLocaleTimeString("es-MX")}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            {a.privadaName || `Sitio ${a.siteId}`}
+          </span>
+        ))}
+        {agentList.filter(a => !a.online).map(a => (
+          <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium bg-gray-100 text-gray-500"
+            title={`Offline desde: ${new Date(a.lastSeen).toLocaleString("es-MX")}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+            {a.privadaName || `Sitio ${a.siteId}`}
+          </span>
+        ))}
+        {agentList.length === 0 && <span className="text-gray-400">Sin agentes</span>}
       </div>
 
       {/* ================================================================= */}
