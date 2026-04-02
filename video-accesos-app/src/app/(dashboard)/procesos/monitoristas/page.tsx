@@ -1140,31 +1140,36 @@ export default function MonitoristasPage() {
       </div>
 
       {/* ================================================================= */}
-      {/* AGENT HEALTH STATUS BAR                                            */}
+      {/* AGENT STATUS (solo cuando hay privada seleccionada)                */}
       {/* ================================================================= */}
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
-          mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-        }`}>
-          {mqttOk ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-          MQTT {mqttOk ? "OK" : "OFF"}
-        </span>
-        {agentList.filter(a => a.online).map(a => (
-          <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium bg-green-100 text-green-700"
-            title={`Host: ${a.host || "?"} | Heartbeat: ${new Date(a.lastSeen).toLocaleTimeString("es-MX")}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            {a.privadaName || `Sitio ${a.siteId}`}
-          </span>
-        ))}
-        {agentList.filter(a => !a.online).map(a => (
-          <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium bg-gray-100 text-gray-500"
-            title={`Offline desde: ${new Date(a.lastSeen).toLocaleString("es-MX")}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-            {a.privadaName || `Sitio ${a.siteId}`}
-          </span>
-        ))}
-        {agentList.length === 0 && <span className="text-gray-400">Sin agentes</span>}
-      </div>
+      {formPrivadaId && (() => {
+        const agent = agentList.find(a => a.siteId === formPrivadaId);
+        return (
+          <div className="flex items-center gap-2 text-xs">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
+              mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            }`}>
+              {mqttOk ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              MQTT {mqttOk ? "OK" : "OFF"}
+            </span>
+            {agent ? (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
+                agent.online ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+              }`} title={agent.online
+                ? `Host: ${agent.host || "?"} | Heartbeat: ${new Date(agent.lastSeen).toLocaleTimeString("es-MX")}`
+                : `Offline desde: ${new Date(agent.lastSeen).toLocaleString("es-MX")}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${agent.online ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
+                Agente {agent.online ? "en linea" : "offline"}{agent.host ? ` (${agent.host})` : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium bg-yellow-100 text-yellow-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                Sin agente detectado
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ================================================================= */}
       {/* INCOMING CALL BANNER                                               */}

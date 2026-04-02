@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Video, RefreshCw, Play, Square, Search, X, Maximize2, GripVertical, Save, Check } from "lucide-react";
+import { Video, RefreshCw, Play, Square, Search, X, Maximize2, GripVertical, Save, Check, Wifi, WifiOff } from "lucide-react";
 
 interface CameraInfo {
   index: number;
@@ -31,6 +31,8 @@ export default function VideoWebPage() {
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamingRef = useRef(false);
+  const [mqttOk, setMqttOk] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<{ online: boolean; lastSeen: number; host?: string } | null>(null);
 
 
   // Cargar lista de privadas
@@ -43,6 +45,23 @@ export default function VideoWebPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Poll agent status for selected privada
+  useEffect(() => {
+    if (!selectedSiteId) { setAgentStatus(null); return; }
+    const fetchAgent = () => {
+      fetch("/api/gate-monitor/agents").then(r => r.json()).then(data => {
+        if (data.ok) {
+          setMqttOk(data.mqttConnected);
+          const agent = (data.agents || []).find((a: { siteId: string }) => a.siteId === selectedSiteId);
+          setAgentStatus(agent || null);
+        }
+      }).catch(() => {});
+    };
+    fetchAgent();
+    const iv = setInterval(fetchAgent, 15000);
+    return () => clearInterval(iv);
+  }, [selectedSiteId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -288,10 +307,35 @@ export default function VideoWebPage() {
             </div>
           </div>
 
-          <div className="text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
             {loading && <span className="flex items-center gap-1"><RefreshCw className="h-4 w-4 animate-spin" /> Cargando...</span>}
             {!loading && cameras.length > 0 && (
               <span className="text-green-600 font-medium">{cameras.length} camaras</span>
+            )}
+            {selectedSiteId && (
+              <>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                }`}>
+                  {mqttOk ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                  MQTT
+                </span>
+                {agentStatus ? (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    agentStatus.online ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                  }`} title={agentStatus.online
+                    ? `Host: ${agentStatus.host || "?"} | Heartbeat: ${new Date(agentStatus.lastSeen).toLocaleTimeString("es-MX")}`
+                    : `Offline desde: ${new Date(agentStatus.lastSeen).toLocaleString("es-MX")}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${agentStatus.online ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
+                    Agente {agentStatus.online ? "en linea" : "offline"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                    Sin agente
+                  </span>
+                )}
+              </>
             )}
           </div>
 

@@ -167,30 +167,21 @@ export default function MonitoreoPortonesPage() {
           </p>
         </div>
 
-        {/* Agent status bar */}
-        <div className="flex items-center gap-3 text-sm flex-wrap">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+        {/* Agent status - compact summary */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
             mqttOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
           }`}>
             {mqttOk ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-            MQTT {mqttOk ? "Conectado" : "Desconectado"}
+            MQTT {mqttOk ? "OK" : "OFF"}
           </span>
-          {onlineAgents.map(a => (
-            <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
-              title={`Host: ${a.host || "?"} | Ultimo heartbeat: ${new Date(a.lastSeen).toLocaleTimeString("es-MX")}`}>
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              {a.privadaName || `Sitio ${a.siteId}`}{a.host ? ` (${a.host})` : ""}
+          {agents.length > 0 && (
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium ${
+              onlineAgents.length > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+            }`} title={agents.map(a => `${a.privadaName || a.siteId}: ${a.online ? "online" : "offline"}`).join("\n")}>
+              <span className={`w-2 h-2 rounded-full ${onlineAgents.length > 0 ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
+              {onlineAgents.length}/{agents.length} agentes en linea
             </span>
-          ))}
-          {offlineAgents.map(a => (
-            <span key={a.siteId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
-              title={`Offline desde: ${new Date(a.lastSeen).toLocaleString("es-MX")}`}>
-              <span className="w-2 h-2 rounded-full bg-gray-400" />
-              {a.privadaName || `Sitio ${a.siteId}`}
-            </span>
-          ))}
-          {agents.length === 0 && mqttOk && (
-            <span className="text-xs text-gray-400">Sin agentes reportados</span>
           )}
         </div>
       </div>
