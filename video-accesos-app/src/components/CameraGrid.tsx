@@ -192,6 +192,13 @@ export default function CameraGrid({
 
     const doInitialLookup = async () => {
       lookupAttemptRef.current++;
+
+      // Enviar start_stream ANTES del lookup para que el agente
+      // empiece a transmitir y reporte sus canales via MQTT
+      if (privadaId) {
+        triggerStartStream(privadaId);
+      }
+
       const data = await lookupCameras(false);
       if (cancelled) return;
 
@@ -211,7 +218,8 @@ export default function CameraGrid({
           `Conectando con ${data.privada}... El agente de captura esta iniciando la transmision. ` +
           `Esto puede tomar unos segundos si el DVR acaba de conectarse.`
         );
-        // No hay camaras aun, los re-lookups las detectaran
+        // Enviar start_stream con el privada_id resuelto (por si vino via telefono)
+        if (data.privada_id) triggerStartStream(data.privada_id);
         return;
       }
 
@@ -244,10 +252,14 @@ export default function CameraGrid({
         } else if (newCount === 0 && oldCount === 0) {
           lookupAttemptRef.current++;
           const attempt = lookupAttemptRef.current;
+          // Re-enviar start_stream cada 3 intentos para insistir al agente
+          if (attempt % 3 === 0 && data.privada_id) {
+            triggerStartStream(data.privada_id);
+          }
           if (attempt <= 3) {
             setStatus("connecting");
             setStatusMsg(
-              `Esperando video de ${data.privada}... El agente de captura esta preparando la transmision.`
+              `Esperando video de ${data.privada}... El agente de captura esta iniciando la transmision.`
             );
           } else if (attempt <= 10) {
             setStatus("connecting");
