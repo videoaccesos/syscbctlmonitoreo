@@ -360,19 +360,27 @@ function ConfigTab() {
     } else {
       setZones([]); setPhones([]); setIntervalSec(300);
     }
-    // Request snapshot for preview
+    // Request stream for preview (same as video-web but lower fps)
     fetch("/api/camera-frames/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site_id: selectedPrivada, cmd: "start_stream", fps: 1, duration: 30, mode: "snapshot" }),
+      body: JSON.stringify({ site_id: selectedPrivada, cmd: "start_stream", fps: 2, duration: 0, mode: "all" }),
     }).catch(() => {});
+    // Stop stream on cleanup
+    return () => {
+      fetch("/api/camera-frames/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: selectedPrivada, cmd: "stop_stream" }),
+      }).catch(() => {});
+    };
   }, [selectedPrivada, selectedCam, configs]);
 
   // Refresh preview image
   useEffect(() => {
     if (!selectedPrivada || selectedCam === null) return;
     const update = () => {
-      setPreviewUrl(`/api/camera-proxy?telefono=gate-config&cam=${selectedCam}&site_id=${selectedPrivada}&t=${Date.now()}`);
+      setPreviewUrl(`/api/camera-proxy?privada_id=${selectedPrivada}&cam=${selectedCam}&t=${Date.now()}`);
     };
     update();
     const iv = setInterval(update, 3000);
