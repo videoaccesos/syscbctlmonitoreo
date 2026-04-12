@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
         id: zoneId,
         roi: parsedRoi,
         alias: (z.alias as string) || prev?.alias || `Zona ${idx + 1}`,
-        threshold: (z.threshold as number) ?? prev?.threshold ?? 0.15,
+        threshold: (z.threshold as number) ?? prev?.threshold ?? 0.3,
         consecutiveThreshold: (z.consecutive_threshold as number) ?? prev?.consecutiveThreshold ?? 4,
         referenceHistogram: null,
         referencePixelsB64: roiChanged ? null : (prev?.referencePixelsB64 || null),

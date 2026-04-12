@@ -668,7 +668,7 @@ function ConfigTab() {
         ],
       },
       alias: `Zona ${zones.length + 1}`,
-      threshold: 0.15,
+      threshold: 0.3,
       consecutive_threshold: 4,
       enabled: true,
     }]);

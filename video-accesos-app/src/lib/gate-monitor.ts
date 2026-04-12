@@ -57,7 +57,7 @@ export interface GateZone {
   id: string;           // UUID unico
   roi: GateROI;
   alias: string;        // "Porton vehicular", "Puerta peatonal", etc.
-  threshold: number;    // 0-1, default 0.15
+  threshold: number;    // 0-1, default 0.30 (NCC: cerrado ~2-5%, abierto ~40-80%)
   consecutiveThreshold: number; // lecturas consecutivas para alertar, default 4
   /** @deprecated Usar referencePixelsB64 en su lugar */
   referenceHistogram: number[] | null;
@@ -594,21 +594,47 @@ async function extractROIPixels(jpegBuffer: Buffer, roi: GateROI): Promise<Buffe
 }
 
 /**
- * Mean Absolute Difference (MAD) entre dos buffers de pixeles.
+ * Comparacion por Correlacion Cruzada Normalizada (NCC).
  * Retorna 0.0 (identico) a 1.0 (completamente diferente).
  *
- * Preserva la informacion espacial: detecta DONDE cambiaron los pixeles.
- * Un porton que se abre cambia muchos pixeles de posicion, generando un
- * MAD alto incluso si los colores son similares.
+ * NCC compara la ESTRUCTURA de las imagenes, no solo el brillo.
+ * Substrae la media de cada imagen antes de comparar, haciendola
+ * inmune a cambios uniformes de iluminacion (dia/noche).
+ *
+ * Barrotes de madera vs calle abierta tienen estructuras muy
+ * diferentes -> correlacion baja -> diferencia alta (~50-80%).
+ * Misma escena con luz diferente -> correlacion alta -> diferencia baja (~2-5%).
  */
 function pixelDifference(ref: Buffer, cur: Buffer): number {
   const len = Math.min(ref.length, cur.length);
   if (len === 0) return 0;
-  let sum = 0;
+
+  // Calcular medias
+  let sumRef = 0, sumCur = 0;
   for (let i = 0; i < len; i++) {
-    sum += Math.abs(ref[i] - cur[i]);
+    sumRef += ref[i];
+    sumCur += cur[i];
   }
-  return sum / (len * 255);
+  const meanRef = sumRef / len;
+  const meanCur = sumCur / len;
+
+  // NCC: correlacion cruzada normalizada
+  let num = 0, denRef = 0, denCur = 0;
+  for (let i = 0; i < len; i++) {
+    const dr = ref[i] - meanRef;
+    const dc = cur[i] - meanCur;
+    num += dr * dc;
+    denRef += dr * dr;
+    denCur += dc * dc;
+  }
+
+  const den = Math.sqrt(denRef * denCur);
+  if (den < 1e-10) return 1; // imagenes sin variacion = no se puede comparar
+
+  const ncc = num / den; // -1 (invertida) a +1 (identica)
+
+  // Convertir a 0-1 donde 0=identico, 1=completamente diferente
+  return Math.max(0, Math.min(1, (1 - ncc) / 2));
 }
 
 // ---------------------------------------------------------------------------
