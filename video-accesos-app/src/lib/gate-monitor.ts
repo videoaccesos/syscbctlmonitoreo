@@ -412,6 +412,20 @@ export function listZoneStatuses(): GateZoneStatus[] {
   return Object.values(zoneStates);
 }
 
+/** Resetear el estado de una zona (consecutivo, alertSent, etc.) */
+export function resetZoneState(zoneId: string): void {
+  const status = zoneStates[zoneId];
+  if (status) {
+    status.consecutiveOpen = 0;
+    status.alertSent = false;
+    status.state = "unknown";
+    status.stateChangedAt = Date.now();
+    logger.info(TAG, `Estado reseteado: ${status.alias} (${status.siteId} cam${status.camId})`);
+  }
+  // Limpiar del set de warnings
+  noRefWarned.delete(zoneId);
+}
+
 // Backward-compat alias
 export function listGateStatuses(): GateZoneStatus[] {
   return listZoneStatuses();

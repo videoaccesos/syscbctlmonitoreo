@@ -7,6 +7,7 @@ import {
   deleteGateConfig,
   listGateConfigs,
   startGateMonitor,
+  resetZoneState,
   type GateConfig,
   type GateZone,
 } from "@/lib/gate-monitor";
@@ -132,6 +133,16 @@ export async function PUT(request: NextRequest) {
       zones: parsedZones,
       notifyPhones,
     };
+
+    // Limpiar estados de zonas que fueron eliminadas
+    if (existing) {
+      const newZoneIds = new Set(parsedZones.map((z) => z.id));
+      for (const oldZone of existing.zones) {
+        if (!newZoneIds.has(oldZone.id)) {
+          resetZoneState(oldZone.id);
+        }
+      }
+    }
 
     setGateConfig(config);
     startGateMonitor();

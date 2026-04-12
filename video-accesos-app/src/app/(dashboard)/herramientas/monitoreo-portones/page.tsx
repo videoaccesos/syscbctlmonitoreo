@@ -539,6 +539,7 @@ function ConfigTab() {
   const [draggingPoint, setDraggingPoint] = useState<{ zoneIdx: number; pointIdx: number } | null>(null);
   const [configs, setConfigs] = useState<GateConfigAPI[]>([]);
   const [capturingRef, setCapturingRef] = useState<string | null>(null);
+  const [resettingZone, setResettingZone] = useState<string | null>(null);
   const [testingZone, setTestingZone] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     zoneId: string;
@@ -799,6 +800,23 @@ function ConfigTab() {
     }
   };
 
+  const handleResetZone = async (zoneId: string) => {
+    setResettingZone(zoneId);
+    try {
+      const res = await fetch(`/api/gate-monitor/reset?zone_id=${zoneId}`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setMsg({ text: "Contador reseteado. La proxima lectura reinicia la deteccion.", ok: true });
+      } else {
+        setMsg({ text: data.error || "Error al resetear", ok: false });
+      }
+    } catch {
+      setMsg({ text: "Error de conexion", ok: false });
+    } finally {
+      setResettingZone(null);
+    }
+  };
+
   const handleTestComparison = async (zoneId: string) => {
     if (!selectedPrivada || selectedCam === null) return;
     setTestingZone(zoneId);
@@ -1015,6 +1033,11 @@ function ConfigTab() {
                       className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50">
                       <Activity className="h-3 w-3 inline mr-1" />
                       {testingZone === z.id ? "Probando..." : "Probar comparacion"}
+                    </button>
+                    <button onClick={() => handleResetZone(z.id)} disabled={resettingZone === z.id}
+                      className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 disabled:opacity-50">
+                      <RefreshCw className="h-3 w-3 inline mr-1" />
+                      Reiniciar
                     </button>
                     <label className="flex items-center gap-1.5 text-xs">
                       <input type="checkbox" checked={z.enabled} onChange={(e) => updateZone(i, { enabled: e.target.checked })}
