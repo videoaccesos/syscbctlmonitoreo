@@ -539,6 +539,19 @@ function ConfigTab() {
   const [draggingPoint, setDraggingPoint] = useState<{ zoneIdx: number; pointIdx: number } | null>(null);
   const [configs, setConfigs] = useState<GateConfigAPI[]>([]);
   const [capturingRef, setCapturingRef] = useState<string | null>(null);
+  const [testingZone, setTestingZone] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{
+    zoneId: string;
+    difference: number;
+    threshold: number;
+    isOpen: boolean;
+    refMean: number;
+    curMean: number;
+    refImageB64: string;
+    curImageB64: string;
+    refPixelsSample: number[];
+    curPixelsSample: number[];
+  } | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewUrl, setPreviewUrl] = useState("");
 
@@ -786,6 +799,44 @@ function ConfigTab() {
     }
   };
 
+  const handleTestComparison = async (zoneId: string) => {
+    if (!selectedPrivada || selectedCam === null) return;
+    setTestingZone(zoneId);
+    setTestResult(null);
+    setMsg({ text: "Capturando frame y comparando con referencia...", ok: true });
+    try {
+      const res = await fetch(
+        `/api/gate-monitor/test?site_id=${selectedPrivada}&cam_id=${selectedCam}&zone_id=${zoneId}`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (data.ok) {
+        setTestResult({
+          zoneId,
+          difference: data.difference,
+          threshold: data.threshold,
+          isOpen: data.isOpen,
+          refMean: data.refMean,
+          curMean: data.curMean,
+          refImageB64: data.refImageB64,
+          curImageB64: data.curImageB64,
+          refPixelsSample: data.refPixelsSample,
+          curPixelsSample: data.curPixelsSample,
+        });
+        setMsg({
+          text: `Diferencia: ${(data.difference * 100).toFixed(1)}% | Umbral: ${(data.threshold * 100).toFixed(0)}% | Estado: ${data.isOpen ? "ABIERTO" : "CERRADO"}`,
+          ok: !data.isOpen,
+        });
+      } else {
+        setMsg({ text: data.error || "Error en prueba", ok: false });
+      }
+    } catch {
+      setMsg({ text: "Error de conexion", ok: false });
+    } finally {
+      setTestingZone(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Selectors */}
@@ -952,6 +1003,11 @@ function ConfigTab() {
                       <Camera className="h-3 w-3 inline mr-1" />
                       {capturingRef === z.id ? "Capturando..." : "Capturar referencia"}
                     </button>
+                    <button onClick={() => handleTestComparison(z.id)} disabled={testingZone === z.id}
+                      className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50">
+                      <Activity className="h-3 w-3 inline mr-1" />
+                      {testingZone === z.id ? "Probando..." : "Probar comparacion"}
+                    </button>
                     <label className="flex items-center gap-1.5 text-xs">
                       <input type="checkbox" checked={z.enabled} onChange={(e) => updateZone(i, { enabled: e.target.checked })}
                         className="rounded text-blue-600" />
@@ -984,6 +1040,49 @@ function ConfigTab() {
                 <p className="text-xs text-gray-400 mt-2">
                   Alerta despues de {z.consecutive_threshold} lecturas x {intervalSec / 60} min = {(z.consecutive_threshold * intervalSec / 60).toFixed(0)} min
                 </p>
+
+                {/* Resultado de prueba de comparacion */}
+                {testResult && testResult.zoneId === z.id && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <h4 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                      <Activity className="h-3.5 w-3.5" /> Resultado de prueba
+                    </h4>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="text-center p-2 bg-white rounded border">
+                        <p className="text-2xl font-bold" style={{ color: testResult.isOpen ? "#ef4444" : "#22c55e" }}>
+                          {(testResult.difference * 100).toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-gray-500">Diferencia</p>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border">
+                        <p className="text-2xl font-bold text-blue-600">{(testResult.threshold * 100).toFixed(0)}%</p>
+                        <p className="text-xs text-gray-500">Umbral</p>
+                      </div>
+                      <div className="text-center p-2 bg-white rounded border">
+                        <p className={`text-2xl font-bold ${testResult.isOpen ? "text-red-600" : "text-green-600"}`}>
+                          {testResult.isOpen ? "ABIERTO" : "CERRADO"}
+                        </p>
+                        <p className="text-xs text-gray-500">Estado</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500 mb-1">Referencia (brillo prom: {testResult.refMean})</p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`data:image/jpeg;base64,${testResult.refImageB64}`} alt="Ref" className="w-full rounded border" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500 mb-1">Actual (brillo prom: {testResult.curMean})</p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`data:image/jpeg;base64,${testResult.curImageB64}`} alt="Actual" className="w-full rounded border" />
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      <p>Pixeles ref: [{testResult.refPixelsSample.join(", ")}...]</p>
+                      <p>Pixeles cur: [{testResult.curPixelsSample.join(", ")}...]</p>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

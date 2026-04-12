@@ -695,6 +695,86 @@ export async function captureReference(
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostico: probar comparacion en vivo
+// ---------------------------------------------------------------------------
+
+export interface TestComparisonResult {
+  ok: boolean;
+  error?: string;
+  difference?: number;
+  threshold?: number;
+  isOpen?: boolean;
+  refPixelsSample?: number[];   // primeros 20 valores de la referencia
+  curPixelsSample?: number[];   // primeros 20 valores del frame actual
+  refMean?: number;             // brillo promedio de la referencia
+  curMean?: number;             // brillo promedio del frame actual
+  refImageB64?: string;         // thumbnail del ROI de la referencia
+  curImageB64?: string;         // thumbnail del ROI del frame actual
+}
+
+/**
+ * Captura un frame en vivo, extrae el ROI, compara con la referencia
+ * y retorna toda la información de diagnóstico.
+ */
+export async function testComparison(
+  siteId: string,
+  camId: number,
+  zoneId: string
+): Promise<TestComparisonResult> {
+  const config = getGateConfig(siteId, camId);
+  if (!config) return { ok: false, error: "No hay configuracion para esta camara" };
+
+  const zone = config.zones.find((z) => z.id === zoneId);
+  if (!zone) return { ok: false, error: "Zona no encontrada" };
+
+  if (!zone.referencePixelsB64) return { ok: false, error: "No hay referencia capturada para esta zona" };
+
+  // Obtener frame actual
+  let frameData = getFrame(siteId, camId)?.data || null;
+  if (!frameData) {
+    frameData = await requestSnapshot(siteId, camId);
+  }
+  if (!frameData) return { ok: false, error: "No hay frame disponible del agente" };
+
+  try {
+    const refPixels = Buffer.from(zone.referencePixelsB64, "base64");
+    const curPixels = await extractROIPixels(frameData, zone.roi);
+    const diff = pixelDifference(refPixels, curPixels);
+
+    // Estadísticas
+    const refMean = refPixels.reduce((s, v) => s + v, 0) / refPixels.length;
+    const curMean = curPixels.reduce((s, v) => s + v, 0) / curPixels.length;
+
+    // Thumbnails para visualizar
+    const refThumb = await sharp(refPixels, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
+      .resize(200)
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    const curThumb = await sharp(curPixels, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
+      .resize(200)
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    return {
+      ok: true,
+      difference: Math.round(diff * 1000) / 1000,
+      threshold: zone.threshold,
+      isOpen: diff > zone.threshold,
+      refPixelsSample: Array.from(refPixels.slice(0, 20)),
+      curPixelsSample: Array.from(curPixels.slice(0, 20)),
+      refMean: Math.round(refMean * 10) / 10,
+      curMean: Math.round(curMean * 10) / 10,
+      refImageB64: refThumb.toString("base64"),
+      curImageB64: curThumb.toString("base64"),
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Loop de monitoreo (background)
 // ---------------------------------------------------------------------------
 
