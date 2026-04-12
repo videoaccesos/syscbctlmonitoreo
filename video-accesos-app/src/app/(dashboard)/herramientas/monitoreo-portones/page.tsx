@@ -996,6 +996,14 @@ function ConfigTab() {
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full" style={{ background: ZONE_COLORS[i] }} />
                     <span className="text-sm font-medium">Zona {ZONE_NAMES[i]}</span>
+                    {(() => {
+                      const cfg = configs.find(c => c.siteId === selectedPrivada && c.camId === selectedCam);
+                      const zCfg = cfg?.zones.find(zz => zz.id === z.id);
+                      const hasRef = !!(zCfg?.referencePixelsB64);
+                      return hasRef
+                        ? <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">Ref. guardada</span>
+                        : <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">Sin referencia</span>;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => handleCaptureRef(z.id)} disabled={capturingRef === z.id}

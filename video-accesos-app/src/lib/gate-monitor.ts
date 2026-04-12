@@ -94,6 +94,8 @@ export interface GateZoneStatus {
   consecutiveOpen: number;
   consecutiveThreshold: number;
   lastCheckAt: number;
+  /** Timestamp de cuando entró en el estado actual */
+  stateChangedAt: number;
   alertSent: boolean;
   enabled: boolean;
 }
@@ -848,6 +850,7 @@ async function runMonitorCycle(): Promise<void> {
       const threshold = zone.consecutiveThreshold || 4;
 
       if (!jpegData) {
+        const prevState = status?.state || "unknown";
         zoneStates[zone.id] = {
           zoneId: zone.id,
           siteId: config.siteId,
@@ -858,6 +861,7 @@ async function runMonitorCycle(): Promise<void> {
           consecutiveOpen: 0,
           consecutiveThreshold: threshold,
           lastCheckAt: Date.now(),
+          stateChangedAt: prevState !== "no-signal" ? Date.now() : (status?.stateChangedAt || Date.now()),
           alertSent: status?.alertSent || false,
           enabled: true,
         };
@@ -888,6 +892,7 @@ async function runMonitorCycle(): Promise<void> {
           alertSent = false;
         }
 
+        const stateChanged = newState !== prevState;
         zoneStates[zone.id] = {
           zoneId: zone.id,
           siteId: config.siteId,
@@ -898,6 +903,7 @@ async function runMonitorCycle(): Promise<void> {
           consecutiveOpen,
           consecutiveThreshold: threshold,
           lastCheckAt: Date.now(),
+          stateChangedAt: stateChanged ? Date.now() : (status?.stateChangedAt || Date.now()),
           alertSent,
           enabled: true,
         };
@@ -920,7 +926,9 @@ async function runMonitorCycle(): Promise<void> {
         });
 
         const siteLabel = config.privadaName || `Site ${config.siteId}`;
-        logger.info(TAG, `[${siteLabel} cam${config.camId}] ${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold})`);
+        const inStateSec = Math.round((Date.now() - (zoneStates[zone.id].stateChangedAt)) / 1000);
+        const inStateLabel = inStateSec >= 60 ? `${Math.round(inStateSec / 60)}min` : `${inStateSec}s`;
+        logger.info(TAG, `[${siteLabel} cam${config.camId}] ${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold}, ${inStateLabel} en ${newState}${alertSent ? ", ALERTA ENVIADA" : ""})`);
       } catch (err) {
         logger.error(TAG, `Error en zona ${zone.alias}: ${err instanceof Error ? err.message : err}`);
       }
