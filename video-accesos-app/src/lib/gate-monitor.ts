@@ -699,6 +699,8 @@ export async function captureReference(
 // ---------------------------------------------------------------------------
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
+/** Zonas que ya mostraron warning de falta de referencia (evitar spam en logs) */
+const noRefWarned = new Set<string>();
 
 /** Camaras ya solicitadas en este ciclo (evitar duplicar snapshots) */
 const snapshotCache = new Map<string, Buffer | null>();
@@ -728,7 +730,13 @@ async function runMonitorCycle(): Promise<void> {
 
     // Procesar cada zona
     for (const zone of config.zones) {
-      if (!zone.enabled || !zone.referencePixelsB64) continue;
+      if (!zone.enabled || !zone.referencePixelsB64) {
+        if (zone.enabled && !zone.referencePixelsB64 && !noRefWarned.has(zone.id)) {
+          noRefWarned.add(zone.id);
+          logger.warn(TAG, `[${config.privadaName || `Site ${config.siteId}`} cam${config.camId}] ${zone.alias}: SIN REFERENCIA - capturar referencia para activar`);
+        }
+        continue;
+      }
 
       const status = zoneStates[zone.id];
       const threshold = zone.consecutiveThreshold || 4;
@@ -805,7 +813,8 @@ async function runMonitorCycle(): Promise<void> {
           createdAt: new Date().toISOString(),
         });
 
-        logger.info(TAG, `${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold})`);
+        const siteLabel = config.privadaName || `Site ${config.siteId}`;
+        logger.info(TAG, `[${siteLabel} cam${config.camId}] ${zone.alias}: ${newState} (diff=${diff.toFixed(3)}, ${consecutiveOpen}/${threshold})`);
       } catch (err) {
         logger.error(TAG, `Error en zona ${zone.alias}: ${err instanceof Error ? err.message : err}`);
       }
