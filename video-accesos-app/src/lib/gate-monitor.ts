@@ -954,18 +954,19 @@ async function runMonitorCycle(): Promise<void> {
 // Alertas: MQTT + HTTP directo al bot orquestador
 // ---------------------------------------------------------------------------
 
-/** URL del bot orquestador para enviar alertas */
+/** Dominio publico donde nginx sirve las imagenes de evidencia */
+const PUBLIC_DOMAIN = process.env.PUBLIC_DOMAIN || "https://accesoswhatsapp.info";
 const BOT_ALERT_URL = process.env.BOT_ALERT_URL || "http://localhost:5501/api/vision/alert";
 
 function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec: number, jpegData?: Buffer): void {
   const minutes = Math.round(heldSec / 60);
   const timeLabel = minutes >= 1 ? `${minutes} min` : `${Math.round(heldSec)}s`;
   const privadaLabel = config.privadaName || `Sitio ${config.siteId}`;
-  const message = `Porton "${zone.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%) - ${privadaLabel}`;
 
   // Guardar evidencia fotografica
   let imageFile: string | null = null;
   let imageUrl: string | null = null;
+  let fullImageUrl: string | null = null;
   try {
     const frameData = jpegData || getFrame(config.siteId, config.camId)?.data;
     if (frameData) {
@@ -974,9 +975,16 @@ function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec
       imageFile = `alert-${config.siteId}-${config.camId}-${zone.id.slice(0, 8)}-${ts}.jpg`;
       fs.writeFileSync(path.join(EVIDENCE_DIR, imageFile), frameData);
       imageUrl = `/static/gate-alerts/${imageFile}`;
+      fullImageUrl = `${PUBLIC_DOMAIN}${imageUrl}`;
     }
   } catch (err) {
     logger.error(TAG, `Error guardando evidencia: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Construir mensaje con link a la evidencia
+  let message = `Porton "${zone.alias}" lleva ${timeLabel} abierto (diferencia: ${Math.round(diff * 100)}%) - ${privadaLabel}`;
+  if (fullImageUrl) {
+    message += `\nEvidencia: ${fullImageUrl}`;
   }
 
   const alertPayload = {
@@ -990,7 +998,7 @@ function sendZoneAlert(config: GateConfig, zone: GateZone, diff: number, heldSec
     held_seconds: Math.round(heldSec),
     difference: Math.round(diff * 100),
     message,
-    image_url: imageUrl,
+    image_url: fullImageUrl,
     notify_phones: config.notifyPhones || [],
     ts: new Date().toISOString(),
   };
