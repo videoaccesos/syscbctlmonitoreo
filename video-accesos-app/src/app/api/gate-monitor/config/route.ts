@@ -66,30 +66,54 @@ export async function PUT(request: NextRequest) {
       for (const z of existing.zones) existingZonesMap.set(z.id, z);
     }
 
-    const parsedZones: GateZone[] = zones.map((z: Record<string, unknown>) => {
-      const roi = z.roi as Record<string, number> | undefined;
-      if (!roi || typeof roi.x !== "number" || typeof roi.y !== "number" ||
-          typeof roi.width !== "number" || typeof roi.height !== "number") {
-        throw new Error("Cada zona requiere un ROI valido con x, y, width, height");
+    const parsedZones: GateZone[] = zones.map((z: Record<string, unknown>, idx: number) => {
+      const roi = z.roi as Record<string, unknown> | undefined;
+      if (!roi) throw new Error("Cada zona requiere un ROI");
+
+      // Soportar formato poligonal (points) y rect legacy (x,y,width,height)
+      let parsedRoi: { points?: { x: number; y: number }[]; x?: number; y?: number; width?: number; height?: number };
+      const rawPoints = roi.points as { x: number; y: number }[] | undefined;
+      if (Array.isArray(rawPoints) && rawPoints.length === 4) {
+        parsedRoi = {
+          points: rawPoints.map(p => ({
+            x: Math.max(0, Math.min(1, Number(p.x) || 0)),
+            y: Math.max(0, Math.min(1, Number(p.y) || 0)),
+          })),
+        };
+      } else if (typeof roi.x === "number" && typeof roi.y === "number" &&
+                 typeof roi.width === "number" && typeof roi.height === "number") {
+        // Convertir rect a puntos
+        const x = Math.max(0, Math.min(1, roi.x));
+        const y = Math.max(0, Math.min(1, roi.y));
+        const w = Math.max(0.01, Math.min(1, roi.width as number));
+        const h = Math.max(0.01, Math.min(1, roi.height as number));
+        parsedRoi = {
+          points: [
+            { x, y },
+            { x: Math.min(1, x + w), y },
+            { x: Math.min(1, x + w), y: Math.min(1, y + h) },
+            { x, y: Math.min(1, y + h) },
+          ],
+        };
+      } else {
+        throw new Error("Cada zona requiere un ROI con points (4 puntos) o x, y, width, height");
       }
 
       const zoneId = (z.id as string) || crypto.randomUUID();
       const prev = existingZonesMap.get(zoneId);
 
+      // Invalidar referencia si el ROI cambio
+      const roiChanged = prev ? JSON.stringify(prev.roi) !== JSON.stringify(parsedRoi) : false;
+
       return {
         id: zoneId,
-        roi: {
-          x: Math.max(0, Math.min(1, roi.x)),
-          y: Math.max(0, Math.min(1, roi.y)),
-          width: Math.max(0.01, Math.min(1, roi.width)),
-          height: Math.max(0.01, Math.min(1, roi.height)),
-        },
-        alias: (z.alias as string) || prev?.alias || `Zona ${zones.indexOf(z) + 1}`,
-        threshold: (z.threshold as number) ?? prev?.threshold ?? 0.3,
+        roi: parsedRoi,
+        alias: (z.alias as string) || prev?.alias || `Zona ${idx + 1}`,
+        threshold: (z.threshold as number) ?? prev?.threshold ?? 0.15,
         consecutiveThreshold: (z.consecutive_threshold as number) ?? prev?.consecutiveThreshold ?? 4,
         referenceHistogram: null,
-        referencePixelsB64: prev?.referencePixelsB64 || null,
-        referenceImageB64: prev?.referenceImageB64 || null,
+        referencePixelsB64: roiChanged ? null : (prev?.referencePixelsB64 || null),
+        referenceImageB64: roiChanged ? null : (prev?.referenceImageB64 || null),
         enabled: (z.enabled as boolean) ?? prev?.enabled ?? true,
       };
     });

@@ -31,11 +31,25 @@ const TAG = "gate-monitor";
 // Tipos
 // ---------------------------------------------------------------------------
 
+/** ROI poligonal (4 puntos, coordenadas 0-1 normalizadas).
+ *  Orden: top-left, top-right, bottom-right, bottom-left.
+ *  Permite trapecios que se ajustan a la perspectiva de la camara. */
+export interface GateROIPoint {
+  x: number; // 0-1
+  y: number; // 0-1
+}
+
 export interface GateROI {
-  x: number;      // 0-1 (porcentaje del ancho)
-  y: number;      // 0-1 (porcentaje del alto)
-  width: number;  // 0-1
-  height: number; // 0-1
+  /** @deprecated Usar `points` para ROI trapezoidal */
+  x?: number;
+  /** @deprecated */
+  y?: number;
+  /** @deprecated */
+  width?: number;
+  /** @deprecated */
+  height?: number;
+  /** 4 puntos del poligono: [TL, TR, BR, BL], coordenadas 0-1 */
+  points?: GateROIPoint[];
 }
 
 /** Zona individual de monitoreo dentro de una camara */
@@ -164,12 +178,27 @@ function loadConfigs(): Record<string, GateConfig> {
           delete c.referenceImageB64;
           delete c.enabled;
         }
-        // Migrar zonas existentes: agregar referencePixelsB64 si no existe
+        // Migrar zonas existentes
         if (c.zones) {
           for (const z of c.zones) {
+            // Agregar referencePixelsB64 si no existe
             if (!("referencePixelsB64" in z)) {
               z.referencePixelsB64 = null;
-              // Invalidar histogram viejo - requiere recapturar referencia
+              z.referenceHistogram = null;
+            }
+            // Migrar ROI rectangular a poligono de 4 puntos
+            if (z.roi && !z.roi.points && typeof z.roi.x === "number") {
+              const { x, y, width, height } = z.roi;
+              z.roi = {
+                points: [
+                  { x, y },
+                  { x: x + width, y },
+                  { x: x + width, y: y + height },
+                  { x, y: y + height },
+                ],
+              };
+              // Invalidar referencia (la geometria cambio)
+              z.referencePixelsB64 = null;
               z.referenceHistogram = null;
             }
           }
@@ -394,41 +423,186 @@ export function listGateStatuses(): GateZoneStatus[] {
 const CANONICAL_W = 64;
 const CANONICAL_H = 48;
 
+// ---------------------------------------------------------------------------
+// Homografia: transformacion de perspectiva para ROI trapezoidal
+// ---------------------------------------------------------------------------
+
 /**
- * Extrae el ROI de un frame JPEG, normaliza brillo, redimensiona a tamano
- * canonico (64x48) y retorna buffer de pixeles en escala de grises.
+ * Resuelve la matriz de homografia 3x3 que mapea 4 puntos fuente
+ * a 4 puntos destino. Usa eliminacion gaussiana de un sistema 8x8.
  *
- * La normalizacion (sharp.normalize) estira el histograma para que el pixel
- * mas oscuro sea 0 y el mas claro 255, manejando cambios de iluminacion
- * (dia/noche, sombras) de forma automatica.
+ * src/dst: arrays de 4 puntos [{x,y}, ...] en coordenadas de pixel.
+ * Retorna array de 8 coeficientes [a,b,c,d,e,f,g,h] donde la matriz es:
+ *   | a  b  c |
+ *   | d  e  f |
+ *   | g  h  1 |
+ */
+function solveHomography(
+  src: { x: number; y: number }[],
+  dst: { x: number; y: number }[]
+): number[] {
+  // Construir sistema Ax = b (8 ecuaciones, 8 incognitas)
+  const A: number[][] = [];
+  const b: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const sx = src[i].x, sy = src[i].y;
+    const dx = dst[i].x, dy = dst[i].y;
+    A.push([sx, sy, 1, 0, 0, 0, -dx * sx, -dx * sy]);
+    b.push(dx);
+    A.push([0, 0, 0, sx, sy, 1, -dy * sx, -dy * sy]);
+    b.push(dy);
+  }
+
+  // Eliminacion gaussiana con pivoteo parcial
+  const n = 8;
+  const aug = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let maxRow = col;
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(aug[row][col]) > Math.abs(aug[maxRow][col])) maxRow = row;
+    }
+    [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]];
+    const pivot = aug[col][col];
+    if (Math.abs(pivot) < 1e-12) continue;
+    for (let j = col; j <= n; j++) aug[col][j] /= pivot;
+    for (let row = 0; row < n; row++) {
+      if (row === col) continue;
+      const f = aug[row][col];
+      for (let j = col; j <= n; j++) aug[row][j] -= f * aug[col][j];
+    }
+  }
+  return aug.map((row) => row[n]);
+}
+
+/**
+ * Aplica homografia inversa para extraer pixeles de una region trapezoidal
+ * y mapearlos a un rectangulo canonico (CANONICAL_W x CANONICAL_H).
+ *
+ * Para cada pixel (dx, dy) en el destino, calcula la posicion fuente (sx, sy)
+ * y lee el valor del pixel con interpolacion bilineal.
+ */
+function warpPerspective(
+  srcPixels: Buffer,
+  srcW: number,
+  srcH: number,
+  srcPoints: { x: number; y: number }[],
+  dstW: number,
+  dstH: number
+): Buffer {
+  // Puntos destino = esquinas del rectangulo canonico
+  const dstPoints = [
+    { x: 0, y: 0 },
+    { x: dstW - 1, y: 0 },
+    { x: dstW - 1, y: dstH - 1 },
+    { x: 0, y: dstH - 1 },
+  ];
+
+  // Homografia inversa: de destino a fuente
+  const H = solveHomography(dstPoints, srcPoints);
+  const [a, b, c, d, e, f, g, h] = H;
+
+  const out = Buffer.alloc(dstW * dstH);
+  for (let dy = 0; dy < dstH; dy++) {
+    for (let dx = 0; dx < dstW; dx++) {
+      const w = g * dx + h * dy + 1;
+      const sx = (a * dx + b * dy + c) / w;
+      const sy = (d * dx + e * dy + f) / w;
+
+      // Interpolacion bilineal
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const x1 = x0 + 1, y1 = y0 + 1;
+      const fx = sx - x0, fy = sy - y0;
+
+      if (x0 < 0 || y0 < 0 || x1 >= srcW || y1 >= srcH) {
+        out[dy * dstW + dx] = 128; // fuera de rango
+        continue;
+      }
+
+      const v00 = srcPixels[y0 * srcW + x0];
+      const v10 = srcPixels[y0 * srcW + x1];
+      const v01 = srcPixels[y1 * srcW + x0];
+      const v11 = srcPixels[y1 * srcW + x1];
+
+      const val = v00 * (1 - fx) * (1 - fy)
+                + v10 * fx * (1 - fy)
+                + v01 * (1 - fx) * fy
+                + v11 * fx * fy;
+
+      out[dy * dstW + dx] = Math.round(val);
+    }
+  }
+  return out;
+}
+
+/**
+ * Convierte un ROI (rect legacy o poligono de 4 puntos) a puntos en pixeles.
+ */
+function roiToPixelPoints(roi: GateROI, imgW: number, imgH: number): { x: number; y: number }[] {
+  if (roi.points && roi.points.length === 4) {
+    return roi.points.map((p) => ({ x: p.x * imgW, y: p.y * imgH }));
+  }
+  // Fallback: rect legacy -> 4 esquinas
+  const x = (roi.x || 0) * imgW;
+  const y = (roi.y || 0) * imgH;
+  const w = (roi.width || 0.5) * imgW;
+  const h = (roi.height || 0.5) * imgH;
+  return [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ];
+}
+
+/**
+ * Extrae el ROI (trapezoidal o rectangular) de un frame JPEG,
+ * aplica transformacion de perspectiva, normaliza brillo,
+ * y retorna buffer de pixeles en escala de grises (64x48).
  */
 async function extractROIPixels(jpegBuffer: Buffer, roi: GateROI): Promise<Buffer> {
   const metadata = await sharp(jpegBuffer).metadata();
   const imgW = metadata.width || 640;
   const imgH = metadata.height || 480;
 
-  const left = Math.round(roi.x * imgW);
-  const top = Math.round(roi.y * imgH);
-  const width = Math.max(1, Math.round(roi.width * imgW));
-  const height = Math.max(1, Math.round(roi.height * imgH));
+  const points = roiToPixelPoints(roi, imgW, imgH);
 
-  return sharp(jpegBuffer)
-    .extract({ left, top, width, height })
+  // Bounding box del poligono para extraer solo la region necesaria
+  const minX = Math.max(0, Math.floor(Math.min(...points.map((p) => p.x))));
+  const minY = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y))));
+  const maxX = Math.min(imgW, Math.ceil(Math.max(...points.map((p) => p.x))));
+  const maxY = Math.min(imgH, Math.ceil(Math.max(...points.map((p) => p.y))));
+  const cropW = Math.max(1, maxX - minX);
+  const cropH = Math.max(1, maxY - minY);
+
+  // Extraer bounding box en escala de grises
+  const grayBuf = await sharp(jpegBuffer)
+    .extract({ left: minX, top: minY, width: cropW, height: cropH })
     .greyscale()
-    .normalize()
-    .resize(CANONICAL_W, CANONICAL_H, { fit: "fill" })
     .raw()
     .toBuffer();
+
+  // Ajustar puntos al crop
+  const croppedPoints = points.map((p) => ({ x: p.x - minX, y: p.y - minY }));
+
+  // Warp perspectiva: trapecio -> rectangulo canonico
+  const warped = warpPerspective(grayBuf, cropW, cropH, croppedPoints, CANONICAL_W, CANONICAL_H);
+
+  // Normalizar brillo (stretch histogram) sobre el buffer final
+  const normalized = await sharp(warped, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
+    .normalize()
+    .raw()
+    .toBuffer();
+
+  return normalized;
 }
 
 /**
  * Mean Absolute Difference (MAD) entre dos buffers de pixeles.
  * Retorna 0.0 (identico) a 1.0 (completamente diferente).
  *
- * A diferencia del histograma (Bhattacharyya), MAD preserva la informacion
- * espacial: detecta DONDE cambiaron los pixeles, no solo la distribucion
- * de colores. Un porton que se abre cambia muchos pixeles de posicion,
- * generando un MAD alto incluso si los colores son similares.
+ * Preserva la informacion espacial: detecta DONDE cambiaron los pixeles.
+ * Un porton que se abre cambia muchos pixeles de posicion, generando un
+ * MAD alto incluso si los colores son similares.
  */
 function pixelDifference(ref: Buffer, cur: Buffer): number {
   const len = Math.min(ref.length, cur.length);
@@ -462,18 +636,8 @@ export async function captureReference(
     // Extraer pixeles normalizados para comparacion directa
     const pixels = await extractROIPixels(frame.data, zone.roi);
 
-    const metadata = await sharp(frame.data).metadata();
-    const imgW = metadata.width || 640;
-    const imgH = metadata.height || 480;
-    const roiPx = {
-      left: Math.round(zone.roi.x * imgW),
-      top: Math.round(zone.roi.y * imgH),
-      width: Math.max(1, Math.round(zone.roi.width * imgW)),
-      height: Math.max(1, Math.round(zone.roi.height * imgH)),
-    };
-
-    const roiJpeg = await sharp(frame.data)
-      .extract(roiPx)
+    // Generar thumbnail de la region (warped a rectangulo) para la UI
+    const roiJpeg = await sharp(pixels, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
       .resize(200)
       .jpeg({ quality: 70 })
       .toBuffer();

@@ -55,9 +55,11 @@ interface CameraInfo {
   available: boolean;
 }
 
+interface ROIPoint { x: number; y: number }
+
 interface GateZone {
   id: string;
-  roi: { x: number; y: number; width: number; height: number };
+  roi: { points: ROIPoint[] };
   alias: string;
   threshold: number;
   consecutive_threshold: number;
@@ -71,7 +73,7 @@ interface GateConfigAPI {
   intervalSec: number;
   zones: {
     id: string;
-    roi: { x: number; y: number; width: number; height: number };
+    roi: { points?: ROIPoint[]; x?: number; y?: number; width?: number; height?: number };
     alias: string;
     threshold: number;
     consecutiveThreshold: number;
@@ -534,8 +536,7 @@ function ConfigTab() {
   const [intervalSec, setIntervalSec] = useState(300);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [drawingZone, setDrawingZone] = useState<number | null>(null);
-  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+  const [draggingPoint, setDraggingPoint] = useState<{ zoneIdx: number; pointIdx: number } | null>(null);
   const [configs, setConfigs] = useState<GateConfigAPI[]>([]);
   const [capturingRef, setCapturingRef] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -599,14 +600,30 @@ function ConfigTab() {
     }
     const existing = configs.find(c => c.siteId === selectedPrivada && c.camId === selectedCam);
     if (existing) {
-      setZones((existing.zones || []).map(z => ({
-        id: z.id,
-        roi: z.roi,
-        alias: z.alias,
-        threshold: z.threshold,
-        consecutive_threshold: z.consecutiveThreshold,
-        enabled: z.enabled,
-      })));
+      setZones((existing.zones || []).map(z => {
+        // Convertir ROI rect legacy a puntos si es necesario
+        let points: ROIPoint[];
+        if (z.roi.points && z.roi.points.length === 4) {
+          points = z.roi.points;
+        } else {
+          const rx = z.roi.x || 0.25, ry = z.roi.y || 0.25;
+          const rw = z.roi.width || 0.5, rh = z.roi.height || 0.5;
+          points = [
+            { x: rx, y: ry },
+            { x: rx + rw, y: ry },
+            { x: rx + rw, y: ry + rh },
+            { x: rx, y: ry + rh },
+          ];
+        }
+        return {
+          id: z.id,
+          roi: { points },
+          alias: z.alias,
+          threshold: z.threshold,
+          consecutive_threshold: z.consecutiveThreshold,
+          enabled: z.enabled,
+        };
+      }));
       setPhones(existing.notifyPhones || []);
       setIntervalSec(existing.intervalSec || 300);
     } else {
@@ -629,9 +646,16 @@ function ConfigTab() {
     if (zones.length >= 3) return;
     setZones([...zones, {
       id: crypto.randomUUID(),
-      roi: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+      roi: {
+        points: [
+          { x: 0.25, y: 0.25 },
+          { x: 0.75, y: 0.25 },
+          { x: 0.75, y: 0.75 },
+          { x: 0.25, y: 0.75 },
+        ],
+      },
       alias: `Zona ${zones.length + 1}`,
-      threshold: 0.3,
+      threshold: 0.15,
       consecutive_threshold: 4,
       enabled: true,
     }]);
@@ -657,33 +681,27 @@ function ConfigTab() {
     setPhones(phones.filter((_, i) => i !== idx));
   };
 
-  // Mouse drawing on preview
-  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>, zoneIdx: number) => {
-    if (!previewRef.current) return;
-    const rect = previewRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    setDrawingZone(zoneIdx);
-    setDrawStart({ x, y });
+  // Drag corner points of polygon zones
+  const handlePointMouseDown = (e: ReactMouseEvent, zoneIdx: number, pointIdx: number) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggingPoint({ zoneIdx, pointIdx });
   };
 
   const handleMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (drawingZone === null || !drawStart || !previewRef.current) return;
+    if (!draggingPoint || !previewRef.current) return;
     const rect = previewRef.current.getBoundingClientRect();
-    const ex = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const ey = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    const roi = {
-      x: Math.min(drawStart.x, ex),
-      y: Math.min(drawStart.y, ey),
-      width: Math.abs(ex - drawStart.x),
-      height: Math.abs(ey - drawStart.y),
-    };
-    updateZone(drawingZone, { roi });
+    const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const py = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const zone = zones[draggingPoint.zoneIdx];
+    if (!zone) return;
+    const newPoints = [...zone.roi.points];
+    newPoints[draggingPoint.pointIdx] = { x: px, y: py };
+    updateZone(draggingPoint.zoneIdx, { roi: { points: newPoints } });
   };
 
   const handleMouseUp = () => {
-    setDrawingZone(null);
-    setDrawStart(null);
+    setDraggingPoint(null);
   };
 
   const handleSave = async () => {
@@ -831,24 +849,57 @@ function ConfigTab() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" draggable={false} />
               )}
-              {/* Zone overlays */}
-              {zones.map((z, i) => (
-                <div key={z.id}
-                  className="absolute border-2 cursor-crosshair"
-                  style={{
-                    left: `${z.roi.x * 100}%`, top: `${z.roi.y * 100}%`,
-                    width: `${z.roi.width * 100}%`, height: `${z.roi.height * 100}%`,
-                    borderColor: ZONE_COLORS[i], backgroundColor: `${ZONE_COLORS[i]}20`,
-                  }}
-                  onMouseDown={(e) => handleMouseDown(e, i)}>
-                  <span className="absolute -top-5 left-0 text-xs font-bold px-1 rounded text-white" style={{ background: ZONE_COLORS[i] }}>
-                    {z.alias}
-                  </span>
-                </div>
-              ))}
+              {/* SVG overlay for polygon zones */}
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none"
+                style={{ pointerEvents: "none" }}>
+                {zones.map((z, i) => {
+                  const pts = z.roi.points;
+                  if (!pts || pts.length !== 4) return null;
+                  const polyStr = pts.map(p => `${p.x * 100},${p.y * 100}`).join(" ");
+                  return (
+                    <polygon key={z.id} points={polyStr}
+                      fill={`${ZONE_COLORS[i]}20`} stroke={ZONE_COLORS[i]} strokeWidth="0.4"
+                      vectorEffect="non-scaling-stroke" />
+                  );
+                })}
+              </svg>
+              {/* Draggable corner points + labels */}
+              {zones.map((z, i) => {
+                const pts = z.roi.points;
+                if (!pts || pts.length !== 4) return null;
+                // Label position: midpoint of top edge
+                const labelX = ((pts[0].x + pts[1].x) / 2) * 100;
+                const labelY = Math.min(pts[0].y, pts[1].y) * 100;
+                return (
+                  <div key={z.id}>
+                    <span className="absolute text-xs font-bold px-1 rounded text-white whitespace-nowrap"
+                      style={{
+                        background: ZONE_COLORS[i],
+                        left: `${labelX}%`, top: `${labelY}%`,
+                        transform: "translate(-50%, -120%)",
+                        pointerEvents: "none",
+                      }}>
+                      {z.alias}
+                    </span>
+                    {pts.map((p, pi) => (
+                      <div key={pi}
+                        className="absolute w-4 h-4 rounded-full border-2 border-white cursor-grab active:cursor-grabbing"
+                        style={{
+                          left: `${p.x * 100}%`, top: `${p.y * 100}%`,
+                          transform: "translate(-50%, -50%)",
+                          background: ZONE_COLORS[i],
+                          boxShadow: "0 0 4px rgba(0,0,0,0.5)",
+                          zIndex: 10,
+                        }}
+                        onMouseDown={(e) => handlePointMouseDown(e, i, pi)}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Haz clic y arrastra sobre una zona (color) para redibujar su area de monitoreo.
+              Arrastra las esquinas (circulos) para ajustar la zona trapezoidal al porton.
             </p>
           </div>
 
