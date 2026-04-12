@@ -11,7 +11,9 @@
  *
  * Si N lecturas CONSECUTIVAS superan el umbral, genera alerta.
  *
- * Tecnica: histograma de luminancia en el ROI. Rapido (~2ms), sin GPU,
+ * Tecnica: comparacion directa de pixeles (MAD - Mean Absolute Difference)
+ * con normalizacion de brillo. Preserva informacion espacial, detecta
+ * cambios estructurales (posicion del porton). Rapido (~3ms), sin GPU,
  * sin modelos de IA.
  */
 
@@ -41,9 +43,12 @@ export interface GateZone {
   id: string;           // UUID unico
   roi: GateROI;
   alias: string;        // "Porton vehicular", "Puerta peatonal", etc.
-  threshold: number;    // 0-1, default 0.3
+  threshold: number;    // 0-1, default 0.15
   consecutiveThreshold: number; // lecturas consecutivas para alertar, default 4
+  /** @deprecated Usar referencePixelsB64 en su lugar */
   referenceHistogram: number[] | null;
+  /** Base64 de pixeles en escala de grises normalizados (64x48) para comparacion directa */
+  referencePixelsB64: string | null;
   referenceImageB64: string | null;
   enabled: boolean;
 }
@@ -143,9 +148,10 @@ function loadConfigs(): Record<string, GateConfig> {
             id: crypto.randomUUID(),
             roi: c.roi,
             alias: c.alias || `Zona 1`,
-            threshold: c.threshold || 0.3,
+            threshold: c.threshold || 0.15,
             consecutiveThreshold: c.consecutiveThreshold || c.debounceSec ? Math.max(2, Math.round((c.debounceSec || 60) / (c.intervalSec || 300))) : 4,
-            referenceHistogram: c.referenceHistogram || null,
+            referenceHistogram: null,
+            referencePixelsB64: null,
             referenceImageB64: c.referenceImageB64 || null,
             enabled: c.enabled ?? true,
           }];
@@ -157,6 +163,16 @@ function loadConfigs(): Record<string, GateConfig> {
           delete c.referenceHistogram;
           delete c.referenceImageB64;
           delete c.enabled;
+        }
+        // Migrar zonas existentes: agregar referencePixelsB64 si no existe
+        if (c.zones) {
+          for (const z of c.zones) {
+            if (!("referencePixelsB64" in z)) {
+              z.referencePixelsB64 = null;
+              // Invalidar histogram viejo - requiere recapturar referencia
+              z.referenceHistogram = null;
+            }
+          }
         }
       }
       configCache = raw;
@@ -371,10 +387,22 @@ export function listGateStatuses(): GateZoneStatus[] {
 }
 
 // ---------------------------------------------------------------------------
-// Procesamiento de imagen con sharp
+// Procesamiento de imagen con sharp (comparacion directa de pixeles)
 // ---------------------------------------------------------------------------
 
-async function extractROIHistogram(jpegBuffer: Buffer, roi: GateROI): Promise<number[]> {
+/** Tamano canonico para comparacion de pixeles */
+const CANONICAL_W = 64;
+const CANONICAL_H = 48;
+
+/**
+ * Extrae el ROI de un frame JPEG, normaliza brillo, redimensiona a tamano
+ * canonico (64x48) y retorna buffer de pixeles en escala de grises.
+ *
+ * La normalizacion (sharp.normalize) estira el histograma para que el pixel
+ * mas oscuro sea 0 y el mas claro 255, manejando cambios de iluminacion
+ * (dia/noche, sombras) de forma automatica.
+ */
+async function extractROIPixels(jpegBuffer: Buffer, roi: GateROI): Promise<Buffer> {
   const metadata = await sharp(jpegBuffer).metadata();
   const imgW = metadata.width || 640;
   const imgH = metadata.height || 480;
@@ -384,28 +412,32 @@ async function extractROIHistogram(jpegBuffer: Buffer, roi: GateROI): Promise<nu
   const width = Math.max(1, Math.round(roi.width * imgW));
   const height = Math.max(1, Math.round(roi.height * imgH));
 
-  const grayBuffer = await sharp(jpegBuffer)
+  return sharp(jpegBuffer)
     .extract({ left, top, width, height })
     .greyscale()
+    .normalize()
+    .resize(CANONICAL_W, CANONICAL_H, { fit: "fill" })
     .raw()
     .toBuffer();
-
-  const histogram = new Array(256).fill(0);
-  for (let i = 0; i < grayBuffer.length; i++) {
-    histogram[grayBuffer[i]]++;
-  }
-
-  const total = grayBuffer.length;
-  if (total > 0) {
-    for (let i = 0; i < 256; i++) histogram[i] /= total;
-  }
-  return histogram;
 }
 
-function histogramDifference(h1: number[], h2: number[]): number {
+/**
+ * Mean Absolute Difference (MAD) entre dos buffers de pixeles.
+ * Retorna 0.0 (identico) a 1.0 (completamente diferente).
+ *
+ * A diferencia del histograma (Bhattacharyya), MAD preserva la informacion
+ * espacial: detecta DONDE cambiaron los pixeles, no solo la distribucion
+ * de colores. Un porton que se abre cambia muchos pixeles de posicion,
+ * generando un MAD alto incluso si los colores son similares.
+ */
+function pixelDifference(ref: Buffer, cur: Buffer): number {
+  const len = Math.min(ref.length, cur.length);
+  if (len === 0) return 0;
   let sum = 0;
-  for (let i = 0; i < 256; i++) sum += Math.sqrt(h1[i] * h2[i]);
-  return 1 - Math.min(sum, 1);
+  for (let i = 0; i < len; i++) {
+    sum += Math.abs(ref[i] - cur[i]);
+  }
+  return sum / (len * 255);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +459,8 @@ export async function captureReference(
   if (!frame) return { ok: false, error: "No hay frame disponible de esta camara" };
 
   try {
-    const histogram = await extractROIHistogram(frame.data, zone.roi);
+    // Extraer pixeles normalizados para comparacion directa
+    const pixels = await extractROIPixels(frame.data, zone.roi);
 
     const metadata = await sharp(frame.data).metadata();
     const imgW = metadata.width || 640;
@@ -445,7 +478,8 @@ export async function captureReference(
       .jpeg({ quality: 70 })
       .toBuffer();
 
-    zone.referenceHistogram = histogram;
+    zone.referencePixelsB64 = pixels.toString("base64");
+    zone.referenceHistogram = null; // deprecated
     zone.referenceImageB64 = roiJpeg.toString("base64");
     setGateConfig(config);
 
@@ -524,7 +558,7 @@ async function runMonitorCycle(): Promise<void> {
 
     // Procesar cada zona
     for (const zone of config.zones) {
-      if (!zone.enabled || !zone.referenceHistogram) continue;
+      if (!zone.enabled || !zone.referencePixelsB64) continue;
 
       const status = zoneStates[zone.id];
       const threshold = zone.consecutiveThreshold || 4;
@@ -547,8 +581,9 @@ async function runMonitorCycle(): Promise<void> {
       }
 
       try {
-        const currentHist = await extractROIHistogram(jpegData, zone.roi);
-        const diff = histogramDifference(zone.referenceHistogram, currentHist);
+        const currentPixels = await extractROIPixels(jpegData, zone.roi);
+        const refPixels = Buffer.from(zone.referencePixelsB64, "base64");
+        const diff = pixelDifference(refPixels, currentPixels);
         const isOpen = diff > zone.threshold;
         const prevConsecutive = status?.consecutiveOpen || 0;
         const prevState = status?.state || "unknown";

@@ -14,7 +14,7 @@ export async function GET() {
   // Iniciar monitor si hay configs con zonas que tengan referencia
   const configs = listGateConfigs();
   const hasActive = configs.some((c) =>
-    c.zones.some((z) => z.enabled && z.referenceHistogram)
+    c.zones.some((z) => z.enabled && z.referencePixelsB64)
   );
   if (hasActive) startGateMonitor();
 

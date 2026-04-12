@@ -76,6 +76,7 @@ interface GateConfigAPI {
     threshold: number;
     consecutiveThreshold: number;
     referenceHistogram: number[] | null;
+    referencePixelsB64: string | null;
     referenceImageB64: string | null;
     enabled: boolean;
   }[];

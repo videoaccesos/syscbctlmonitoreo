@@ -1154,7 +1154,7 @@ Bridge HTTP para activacion de relays (portones/plumas) desde el softphone:
 
 **Archivo:** `src/lib/gate-monitor.ts` (727 lineas)
 
-Sistema de deteccion automatica de portones abiertos basado en comparacion de histogramas de imagen. No requiere GPU ni IA - usa la libreria **sharp** (~2ms por frame).
+Sistema de deteccion automatica de portones abiertos basado en comparacion directa de pixeles (MAD - Mean Absolute Difference) con normalizacion de brillo. No requiere GPU ni IA - usa la libreria **sharp** (~3ms por frame).
 
 #### Algoritmo de Deteccion
 
@@ -1162,12 +1162,18 @@ Sistema de deteccion automatica de portones abiertos basado en comparacion de hi
 1. Solicita snapshot al agente via MQTT (start_stream temporal)
 2. Espera hasta 15 segundos por frame del agente
 3. Extrae region de interes (ROI) del frame usando coordenadas normalizadas
-4. Calcula histograma RGB de la region (bins de 16)
-5. Compara con histograma de referencia usando distancia Bhattacharyya
-6. Si diferencia > umbral (default 30%): marca como "abierto"
-7. Si N lecturas consecutivas son "abierto" (default 4): dispara alerta
-8. Alerta se publica via MQTT y HTTP al bot para WhatsApp
+4. Normaliza brillo (sharp.normalize) para compensar cambios dia/noche
+5. Redimensiona a tamano canonico (64x48 px) en escala de grises
+6. Compara pixel a pixel con la referencia usando MAD (Mean Absolute Difference)
+7. Si diferencia > umbral (default 15%): marca como "abierto"
+8. Si N lecturas consecutivas son "abierto" (default 4): dispara alerta
+9. Alerta se publica via MQTT y HTTP al bot para WhatsApp
 ```
+
+**Porque MAD en lugar de histogramas:** Los histogramas pierden informacion espacial -
+un porton abierto y uno cerrado pueden tener la misma distribucion de colores.
+MAD compara los pixeles en sus posiciones originales, detectando cambios
+estructurales (el porton se movio) incluso cuando los colores son similares.
 
 #### Modelo de Datos
 
@@ -1177,9 +1183,9 @@ interface GateZone {
   id: string;                    // UUID unico por zona
   roi: { x, y, width, height }; // Coordenadas 0-1 normalizadas
   alias: string;                 // "Porton vehicular", "Puerta peatonal"
-  threshold: number;             // 0-1, default 0.3 (30%)
+  threshold: number;             // 0-1, default 0.15 (15% diferencia de pixeles)
   consecutiveThreshold: number;  // Lecturas para alerta (default 4)
-  referenceHistogram: number[];  // Histograma de referencia
+  referencePixelsB64: string;    // Pixeles normalizados 64x48 (base64)
   referenceImageB64: string;     // Thumbnail de referencia (base64)
   enabled: boolean;
 }
@@ -1535,10 +1541,9 @@ npm run db:pull
 | **DVR** | Digital Video Recorder - grabador de video que conecta multiples camaras |
 | **Frame** | Imagen JPEG individual capturada de una camara |
 | **Frame Store** | Almacen en memoria del servidor para los ultimos frames de cada camara |
-| **Gate Monitor** | Sistema de deteccion automatica de portones abiertos por histograma |
+| **Gate Monitor** | Sistema de deteccion automatica de portones abiertos por comparacion de pixeles |
 | **ROI** | Region of Interest - area rectangular seleccionada para analisis de imagen |
-| **Histograma** | Distribucion de colores en una imagen, usado para comparar frames |
-| **Distancia Bhattacharyya** | Metrica estadistica para comparar histogramas de imagen |
+| **MAD** | Mean Absolute Difference - diferencia promedio entre pixeles de dos imagenes |
 | **LWT** | Last Will Testament - mensaje MQTT automatico al desconectarse un agente |
 | **Heartbeat** | Mensaje periodico (cada 30s) que indica que un agente esta activo |
 | **Video Web** | Modulo de visualizacion en vivo de camaras con reordenamiento drag-and-drop |

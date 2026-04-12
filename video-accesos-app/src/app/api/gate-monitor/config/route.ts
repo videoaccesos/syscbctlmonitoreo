@@ -87,7 +87,8 @@ export async function PUT(request: NextRequest) {
         alias: (z.alias as string) || prev?.alias || `Zona ${zones.indexOf(z) + 1}`,
         threshold: (z.threshold as number) ?? prev?.threshold ?? 0.3,
         consecutiveThreshold: (z.consecutive_threshold as number) ?? prev?.consecutiveThreshold ?? 4,
-        referenceHistogram: prev?.referenceHistogram || null,
+        referenceHistogram: null,
+        referencePixelsB64: prev?.referencePixelsB64 || null,
         referenceImageB64: prev?.referenceImageB64 || null,
         enabled: (z.enabled as boolean) ?? prev?.enabled ?? true,
       };
