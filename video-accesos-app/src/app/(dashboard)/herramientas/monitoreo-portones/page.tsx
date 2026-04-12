@@ -763,6 +763,7 @@ function ConfigTab() {
   const handleCaptureRef = async (zoneId: string) => {
     if (!selectedPrivada || selectedCam === null) return;
     setCapturingRef(zoneId);
+    setMsg({ text: "Solicitando frame al agente... puede tardar hasta 15s", ok: true });
     try {
       const res = await fetch(
         `/api/gate-monitor/reference?site_id=${selectedPrivada}&cam_id=${selectedCam}&zone_id=${zoneId}`,
@@ -770,7 +771,11 @@ function ConfigTab() {
       );
       const data = await res.json();
       if (data.ok) {
-        setMsg({ text: "Referencia capturada correctamente", ok: true });
+        setMsg({ text: "Referencia capturada correctamente. El monitoreo esta activo.", ok: true });
+        // Refresh configs to update UI
+        const r2 = await fetch("/api/gate-monitor/config");
+        const d2 = await r2.json();
+        if (d2.ok && d2.configs) setConfigs(d2.configs);
       } else {
         setMsg({ text: data.error || "Error al capturar referencia", ok: false });
       }
@@ -825,6 +830,15 @@ function ConfigTab() {
           </div>
         </div>
       </div>
+
+      {/* Floating message */}
+      {msg && (
+        <div className={`rounded-lg px-4 py-3 text-sm font-medium flex items-center gap-2 ${msg.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          {msg.ok ? <Activity className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          {msg.text}
+          <button onClick={() => setMsg(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+        </div>
+      )}
 
       {selectedPrivada && selectedCam !== null && (
         <>

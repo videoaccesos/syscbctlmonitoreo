@@ -615,52 +615,8 @@ function pixelDifference(ref: Buffer, cur: Buffer): number {
 }
 
 // ---------------------------------------------------------------------------
-// Captura de referencia (por zona)
+// Solicitud de snapshot al agente
 // ---------------------------------------------------------------------------
-
-export async function captureReference(
-  siteId: string,
-  camId: number,
-  zoneId: string
-): Promise<{ ok: boolean; error?: string }> {
-  const config = getGateConfig(siteId, camId);
-  if (!config) return { ok: false, error: "No hay configuracion para esta camara" };
-
-  const zone = config.zones.find((z) => z.id === zoneId);
-  if (!zone) return { ok: false, error: "Zona no encontrada" };
-
-  const frame = getFrame(siteId, camId);
-  if (!frame) return { ok: false, error: "No hay frame disponible de esta camara" };
-
-  try {
-    // Extraer pixeles normalizados para comparacion directa
-    const pixels = await extractROIPixels(frame.data, zone.roi);
-
-    // Generar thumbnail de la region (warped a rectangulo) para la UI
-    const roiJpeg = await sharp(pixels, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
-      .resize(200)
-      .jpeg({ quality: 70 })
-      .toBuffer();
-
-    zone.referencePixelsB64 = pixels.toString("base64");
-    zone.referenceHistogram = null; // deprecated
-    zone.referenceImageB64 = roiJpeg.toString("base64");
-    setGateConfig(config);
-
-    logger.info(TAG, `Referencia capturada: site=${siteId} cam=${camId} zone=${zone.alias}`);
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error(TAG, `Error capturando referencia: ${msg}`);
-    return { ok: false, error: msg };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Loop de monitoreo (background)
-// ---------------------------------------------------------------------------
-
-let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
 const SNAPSHOT_WAIT_MS = 15_000;
 const SNAPSHOT_POLL_MS = 500;
@@ -693,6 +649,59 @@ async function requestSnapshot(siteId: string, camId: number): Promise<Buffer | 
   logger.warn(TAG, `Timeout esperando snapshot de site=${siteId} cam=${camId}`);
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Captura de referencia (por zona)
+// ---------------------------------------------------------------------------
+
+export async function captureReference(
+  siteId: string,
+  camId: number,
+  zoneId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const config = getGateConfig(siteId, camId);
+  if (!config) return { ok: false, error: "No hay configuracion para esta camara" };
+
+  const zone = config.zones.find((z) => z.id === zoneId);
+  if (!zone) return { ok: false, error: "Zona no encontrada" };
+
+  // Intentar obtener frame: primero del store, luego solicitar al agente
+  let frameData = getFrame(siteId, camId)?.data || null;
+  if (!frameData) {
+    logger.info(TAG, `No hay frame en store, solicitando snapshot al agente site=${siteId} cam=${camId}`);
+    frameData = await requestSnapshot(siteId, camId);
+  }
+  if (!frameData) return { ok: false, error: "No hay frame disponible. Verifica que el agente este conectado y la camara activa." };
+
+  try {
+    // Extraer pixeles normalizados para comparacion directa
+    const pixels = await extractROIPixels(frameData, zone.roi);
+
+    // Generar thumbnail de la region (warped a rectangulo) para la UI
+    const roiJpeg = await sharp(pixels, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
+      .resize(200)
+      .jpeg({ quality: 70 })
+      .toBuffer();
+
+    zone.referencePixelsB64 = pixels.toString("base64");
+    zone.referenceHistogram = null; // deprecated
+    zone.referenceImageB64 = roiJpeg.toString("base64");
+    setGateConfig(config);
+
+    logger.info(TAG, `Referencia capturada: site=${siteId} cam=${camId} zone=${zone.alias}`);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error(TAG, `Error capturando referencia: ${msg}`);
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Loop de monitoreo (background)
+// ---------------------------------------------------------------------------
+
+let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
 /** Camaras ya solicitadas en este ciclo (evitar duplicar snapshots) */
 const snapshotCache = new Map<string, Buffer | null>();
