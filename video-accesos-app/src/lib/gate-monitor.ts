@@ -587,13 +587,10 @@ async function extractROIPixels(jpegBuffer: Buffer, roi: GateROI): Promise<Buffe
   // Warp perspectiva: trapecio -> rectangulo canonico
   const warped = warpPerspective(grayBuf, cropW, cropH, croppedPoints, CANONICAL_W, CANONICAL_H);
 
-  // Normalizar brillo (stretch histogram) sobre el buffer final
-  const normalized = await sharp(warped, { raw: { width: CANONICAL_W, height: CANONICAL_H, channels: 1 } })
-    .normalize()
-    .raw()
-    .toBuffer();
-
-  return normalized;
+  // Retornar píxeles crudos sin normalize() - las cámaras de seguridad
+  // tienen exposición estable y normalize() amplifica ruido en zonas
+  // uniformes (portón metálico), causando baselines altos (~20%).
+  return warped;
 }
 
 /**
