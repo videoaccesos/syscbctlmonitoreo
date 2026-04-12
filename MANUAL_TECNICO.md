@@ -1,7 +1,7 @@
 # Manual Tecnico - Sistema de Control de Acceso y Videomonitoreo (Video Accesos)
 
-**Version:** 2.1
-**Fecha:** Marzo 2026
+**Version:** 3.0
+**Fecha:** Abril 2026
 **Nombre del proyecto:** syscbctlmonitoreo / Video Accesos
 **Repositorio:** videoaccesos/syscbctlmonitoreo
 
@@ -19,11 +19,13 @@
 8. [Modulos Funcionales](#8-modulos-funcionales)
 9. [API REST - Endpoints](#9-api-rest---endpoints)
 10. [Sistema VoIP/SIP - AccesPhone](#10-sistema-voipsip---accesphone)
-11. [Sistema de Autenticacion y Seguridad](#11-sistema-de-autenticacion-y-seguridad)
-12. [Flujo Operativo Principal](#12-flujo-operativo-principal)
-13. [Configuracion y Despliegue](#13-configuracion-y-despliegue)
-14. [Diagrama de Arquitectura](#14-diagrama-de-arquitectura)
-15. [Glosario](#15-glosario)
+11. [Sistema MQTT y Agentes de Captura](#11-sistema-mqtt-y-agentes-de-captura)
+12. [Sistema de Monitoreo de Portones](#12-sistema-de-monitoreo-de-portones)
+13. [Sistema de Autenticacion y Seguridad](#13-sistema-de-autenticacion-y-seguridad)
+14. [Flujo Operativo Principal](#14-flujo-operativo-principal)
+15. [Configuracion y Despliegue](#15-configuracion-y-despliegue)
+16. [Diagrama de Arquitectura](#16-diagrama-de-arquitectura)
+17. [Glosario](#17-glosario)
 
 ---
 
@@ -33,14 +35,19 @@
 
 - **Registro de accesos** con identificacion de solicitante
 - **Comunicacion VoIP/SIP** (softphone integrado) para contactar residentes via interfon
-- **Videomonitoreo** de camaras en accesos de las privadas
+- **Videomonitoreo en tiempo real** de camaras en accesos de las privadas via agentes MQTT
+- **Video Web** con visualizacion en vivo de camaras, drag-and-drop para reordenar
+- **Monitoreo automatico de portones** con deteccion por histograma de imagen y alertas WhatsApp
+- **Agentes de captura (CaptureAgent)** en Windows para transmision de frames desde DVRs/camaras IP
+- **Comunicacion MQTT** en tiempo real entre servidor y agentes remotos
 - **Gestion de tarjetas RFID** para acceso vehicular y peatonal
 - **Reportes y graficas** de actividad operativa
 - **Supervision de calidad** de llamadas de operadores
 - **Ordenes de servicio** para mantenimiento de equipos
 - **Control de gastos** operativos por privada
+- **Bot de alertas WhatsApp** para notificacion de portones abiertos
 
-El proyecto inicio en enero de 2013 como una aplicacion PHP con CodeIgniter (v1) y fue migrado en 2025-2026 a una arquitectura moderna con **Next.js 16, React 19, Prisma ORM y TailwindCSS** (v2), conservando la misma base de datos MySQL de produccion.
+El proyecto inicio en enero de 2013 como una aplicacion PHP con CodeIgniter (v1) y fue migrado en 2025-2026 a una arquitectura moderna con **Next.js 16, React 19, Prisma ORM y TailwindCSS** (v2), conservando la misma base de datos MySQL de produccion. En 2026 se agrego una capa de comunicacion **MQTT** para conectar agentes de captura remotos (Windows) con el servidor, habilitando videomonitoreo en tiempo real y deteccion automatica de portones abiertos.
 
 ---
 
@@ -57,22 +64,28 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 |  |   PHP / CodeIgniter       |   |   Next.js 16 / React 19       |  |
 |  |   Puerto 80 (Apache)      |   |   Puerto 3000 (Node.js)       |  |
 |  |   /syscbctlmonitoreo/     |   |   /video-accesos-app/         |  |
-|  +------------+--------------+   +---------------+---------------+  |
-|               |                                  |                  |
-|               +----------------------------------+                  |
-|                              |                                      |
-|                   +----------v----------+                           |
-|                   |   MySQL 5.7         |                           |
-|                   |   wwwvideo_video_   |                           |
-|                   |   accesos           |                           |
-|                   +---------------------+                           |
+|  +------------+--------------+   +------+----------------+------+  |
+|               |                         |                |         |
+|               +-------------------------+                |         |
+|                          |                               |         |
+|              +-----------v-----------+    +--------------v------+  |
+|              |   MySQL 5.7           |    |   MQTT Broker       |  |
+|              |   wwwvideo_video_     |    |   Mosquitto :1883   |  |
+|              |   accesos             |    |                     |  |
+|              +-----------------------+    +----------+----------+  |
+|                                                      |             |
+|              +-------------------------------+       |             |
+|              |   Bot Orquestador :5501       |<------+             |
+|              |   (WhatsApp/Twilio alertas)    |                     |
+|              +-------------------------------+                     |
 +---------------------------------------------------------------------+
-              |                                    |
-    +---------v---------+              +-----------v-----------+
-    |   PBX SIP         |              |   Camaras IP          |
-    |   accessbotpbx    |              |   (RTSP/HTTP)         |
-    |   .info:8089/ws   |              |   via proxy camara    |
-    +-------------------+              +-----------------------+
+         |                    |                        |
++---------v-------+  +--------v--------+  +-----------v-----------+
+|   PBX SIP       |  | Agentes Windows |  |   Camaras IP          |
+|   accessbotpbx  |  | (CaptureAgent)  |  |   DVR Hikvision/Dahua |
+|   .info:8089/ws |  | PowerShell      |  |   (RTSP/HTTP)         |
++-----------------+  | MQTT + HTTP POST|  +-----------------------+
+                     +-----------------+
 ```
 
 ### Componentes Clave
@@ -86,7 +99,12 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 | Autenticacion | NextAuth.js 4 (JWT) | Login con credenciales legacy DES crypt |
 | Softphone | JsSIP 3.13 + WebRTC | Comunicacion SIP integrada en el navegador |
 | PBX | Asterisk/FreePBX | Central telefonica SIP (servidor externo) |
-| Camaras | IP Cameras + Proxy PHP (`camera_proxy.php`) | Videovigilancia en accesos de privadas |
+| MQTT Broker | Mosquitto 1883 | Mensajeria en tiempo real servidor-agentes |
+| CaptureAgent | PowerShell (Windows) | Captura de frames desde DVRs/camaras IP |
+| Frame Store | Node.js in-memory | Almacen de frames con limpieza automatica |
+| Gate Monitor | sharp + histograma | Deteccion de portones abiertos por imagen |
+| Bot Vision | Python + paho-mqtt + Twilio | Alertas de portones abiertos via WhatsApp |
+| Camaras | IP Cameras + Proxy API + Agentes MQTT | Videovigilancia en accesos de privadas |
 | CameraGrid | React component + diagnosticos | Grid de visualizacion de camaras con refresco automatico |
 | Legacy v1 | PHP/CodeIgniter + Apache | Sistema original (en coexistencia) |
 
@@ -111,6 +129,14 @@ El sistema opera con una arquitectura de dos generaciones coexistentes:
 - **unix-crypt-td-js** - Compatibilidad con hashes DES legacy
 - **ExcelJS 4.4** - Exportacion de reportes a Excel
 - **Nodemailer 7** - Envio de correos electronicos
+- **mqtt (npm)** - Cliente MQTT para comunicacion con agentes
+- **sharp** - Procesamiento de imagenes (histogramas, ROI, ~2ms/frame)
+
+### MQTT y Agentes
+- **Mosquitto** - Broker MQTT (puerto 1883, servidor 50.62.182.131)
+- **CaptureAgent (PowerShell)** - Agente de captura en Windows (PS 5.1+ y PS 7+)
+- **paho-mqtt (Python)** - Cliente MQTT para bot plugin vision
+- **Twilio** - Envio de alertas WhatsApp desde bot vision
 
 ### Base de Datos
 - **MySQL 5.7** - Motor relacional
@@ -140,6 +166,7 @@ syscbctlmonitoreo/
 |-- .htaccess                    # Rewrite rules para Apache + CORS
 |-- LEEME.txt                    # Nota historica del proyecto (inicio 2013)
 |-- Manual tecnico.pdf           # Manual tecnico anterior (referencia)
+|-- MANUAL_TECNICO.md            # Este documento
 |
 |-- application/                 # Aplicacion CodeIgniter (legacy v1)
 |   |-- _controllers/            # Controladores MVC
@@ -183,7 +210,22 @@ syscbctlmonitoreo/
 |-- bd/                          # Scripts de base de datos (referencia)
 |
 |-- softphone/                   # Softphone legacy standalone
-|   +-- jssip.min.js             # JsSIP v3.10 (version standalone)
+|   |-- jssip.min.js             # JsSIP v3.10 (version standalone)
+|   +-- mqtt_relay.php           # Bridge HTTP-MQTT para activacion de relays
+|
+|-- agent-windows/               # === AGENTES DE CAPTURA (Windows) ===
+|   |-- CaptureAgent.ps1         # Agente PowerShell 7+ (948 lineas)
+|   |-- CaptureAgent-PS5.ps1     # Agente PowerShell 5.1 compatible (1200+ lineas)
+|   +-- config.json              # Configuracion del agente (site_id, DVR, MQTT)
+|
+|-- bot-plugin-vision/           # === PLUGIN BOT ALERTAS DE PORTONES ===
+|   |-- plugin_vision.py         # Suscriptor MQTT -> WhatsApp via Twilio
+|   +-- README.md                # Documentacion del plugin
+|
+|-- zk_mqtt_bridge/              # === BRIDGE ZK ACCESS CONTROL -> MQTT ===
+|
+|-- documentacion bot orquestador/  # Documentacion del bot orquestador
+|   +-- Manual_Tecnico_Control_Remoto_MQTT.md
 |
 +-- video-accesos-app/           # === APLICACION MODERNA (v2) ===
     |-- package.json             # Dependencias Node.js
@@ -191,6 +233,15 @@ syscbctlmonitoreo/
     |-- prisma/
     |   |-- schema.prisma        # Esquema de BD (734 lineas, 30+ modelos)
     |   +-- seed.ts              # Datos semilla para desarrollo
+    |-- data/                    # Datos persistentes en archivo (JSON)
+    |   |-- gate-monitors.json   # Configuracion de monitoreo de portones
+    |   |-- gate-alerts.json     # Historial de alertas de portones
+    |   |-- gate-comparisons.json # Log de lecturas/comparaciones
+    |   +-- camera-order.json    # Orden de camaras (drag-and-drop)
+    |-- public/
+    |   |-- CaptureAgent.ps1     # Agente servido para descarga por PCs remotas
+    |   +-- static/
+    |       +-- gate-alerts/     # Evidencia fotografica de alertas de portones
     +-- src/
         |-- middleware.ts         # Proteccion de rutas (NextAuth)
         |-- app/
@@ -202,12 +253,19 @@ syscbctlmonitoreo/
         |   |   |-- page.tsx       # Dashboard principal
         |   |   |-- catalogos/     # Paginas de catalogos (8 modulos)
         |   |   |-- procesos/      # Paginas de procesos (6 modulos)
+        |   |   |   +-- monitoristas/page.tsx  # Consola monitorista (1100+ lineas)
+        |   |   |-- herramientas/  # === NUEVAS HERRAMIENTAS ===
+        |   |   |   |-- video-web/page.tsx         # Video Web en vivo (400+ lineas)
+        |   |   |   +-- monitoreo-portones/page.tsx # Monitoreo de portones (900+ lineas)
         |   |   |-- reportes/      # Paginas de reportes (3 modulos)
         |   |   +-- seguridad/     # Paginas de seguridad (3 modulos)
         |   +-- api/               # API Routes (endpoints REST)
         |       |-- auth/          # Autenticacion NextAuth
         |       |-- dashboard/     # Estadisticas dashboard
         |       |-- camera-proxy/  # Proxy de camaras IP (snapshot, lookup, diag)
+        |       |-- camera-frames/ # Recepcion de frames de agentes + comandos MQTT
+        |       |-- gate-monitor/  # APIs de monitoreo de portones
+        |       |-- privadas/      # API de listado de privadas
         |       |-- catalogos/     # APIs de catalogos
         |       |-- procesos/      # APIs de procesos
         |       |-- reportes/      # APIs de reportes
@@ -222,7 +280,11 @@ syscbctlmonitoreo/
         |-- lib/
         |   |-- auth.ts           # Configuracion NextAuth + DES crypt
         |   |-- logger.ts         # Logger del servidor con rotacion de archivos
-        |   +-- prisma.ts         # Singleton del cliente Prisma
+        |   |-- prisma.ts         # Singleton del cliente Prisma
+        |   |-- mqtt-client.ts    # Cliente MQTT singleton (broker, topics, comandos)
+        |   |-- frame-store.ts    # Almacen de frames en memoria + orden de camaras
+        |   |-- gate-monitor.ts   # Motor de deteccion de portones (histograma)
+        |   +-- agent-config.ts   # Configuracion y token de agentes
         +-- types/
             +-- next-auth.d.ts    # Extensiones de tipo para NextAuth
 ```
@@ -281,7 +343,10 @@ El layout principal (`(dashboard)/layout.tsx`) consta de:
 1. **Sidebar** (`sidebar.tsx`): Menu lateral con navegacion jerarquica
    - Inicio (Dashboard)
    - Catalogos (8 submenus)
-   - Procesos (6 submenus)
+   - Procesos (6 submenus, incluye Terminal de Monitoreo)
+   - Herramientas
+     - Video Web (visualizacion de camaras en vivo)
+     - Monitoreo Portones (deteccion de portones abiertos)
    - Reportes (3 submenus)
    - Seguridad (3 submenus)
    - Cerrar Sesion
@@ -323,6 +388,13 @@ El layout principal (`(dashboard)/layout.tsx`) consta de:
 | Accesos Consultas | `/reportes/accesos-consultas` | Busqueda y filtrado de accesos |
 | Accesos Graficas | `/reportes/accesos-graficas` | Graficas por tipo, estatus, dia y hora |
 | Supervision Llamadas | `/reportes/supervision-llamadas` | Reporte de evaluaciones |
+
+#### Herramientas (Videomonitoreo y Portones)
+
+| Pagina | Ruta | Descripcion |
+|---|---|---|
+| Video Web | `/herramientas/video-web` | Visualizacion en vivo de camaras con drag-and-drop |
+| Monitoreo Portones | `/herramientas/monitoreo-portones` | Dashboard de deteccion de portones abiertos |
 
 #### Seguridad (Administracion)
 
@@ -627,6 +699,78 @@ Registro de gastos operativos por privada:
 - Reporte de evaluaciones por supervisor
 - Filtros por fecha
 
+### 8.10 Video Web (Visualizacion en Vivo)
+
+**Ruta:** `/herramientas/video-web`
+**Archivo:** `src/app/(dashboard)/herramientas/video-web/page.tsx`
+**Permiso requerido:** Video Web (configurable por grupo de usuario)
+
+Modulo de visualizacion en tiempo real de camaras IP via agentes MQTT:
+
+1. **Selector de privada** con lista de sitios que tienen agentes activos
+2. **Grid de camaras** con refresco automatico (200ms, sin flicker)
+3. **Drag-and-drop** para reordenar camaras (orden persistido por sitio en `data/camera-order.json`)
+4. **Click-to-expand** para vista ampliada de una camara individual
+5. **Indicador de estado** del agente (online/offline, last seen, hostname)
+6. **Indicador MQTT** muestra estado de conexion al broker
+
+**Flujo de datos:**
+```
+Agente (Windows) --MQTT cmd--> start_stream
+Agente captura frames del DVR (Hikvision/Dahua)
+Agente --HTTP POST--> /api/camera-frames (JPEG buffer)
+Frame Store (memoria) almacena ultimo frame por camara
+Navegador --GET--> /api/camera-proxy/lookup (descubre camaras)
+Navegador renderiza frames con patron preload+swap (sin flicker)
+```
+
+### 8.11 Monitoreo de Portones (Gate Monitor)
+
+**Ruta:** `/herramientas/monitoreo-portones`
+**Archivo:** `src/app/(dashboard)/herramientas/monitoreo-portones/page.tsx`
+
+Dashboard de monitoreo automatico de portones con tres pestanas:
+
+#### Pestana: Alertas
+- **Tarjetas resumen:** Alertas hoy, promedio tiempo abierto, porton mas frecuente, alertas activas
+- **Historial de alertas** con timestamp, duracion, diferencia de histograma
+- **Evidencia fotografica** (thumbnails de la camara al momento de la alerta)
+- **Filtros por fecha:** Hoy, 7 dias, 30 dias
+
+#### Pestana: Log de Lecturas
+- **Tarjetas resumen:** Total lecturas, abiertas, alertas, variacion promedio
+- **Tabla color-coded:** verde=normal, naranja=abierto, rojo=alerta disparada
+- **Contador consecutivo** (ej: 2/4 lecturas necesarias para alerta)
+- **Filtros** por fecha y zona
+
+#### Pestana: Configuracion
+- **Selector de privada y camara** con preview en vivo
+- **Dibujo interactivo de zonas ROI** (hasta 3 por camara, colores rojo/azul/verde)
+- **Captura de imagen de referencia** por zona
+- **Gestion de telefonos WhatsApp** para notificaciones
+- **Configuracion de intervalo** de verificacion (default 5 min)
+- **Umbral de consecutivos** (lecturas consecutivas de "abierto" antes de alertar)
+
+### 8.12 Consola Monitorista (Terminal de Monitoreo)
+
+**Ruta:** `/procesos/monitoristas`
+**Archivo:** `src/app/(dashboard)/procesos/monitoristas/page.tsx` (1100+ lineas)
+
+Consola integrada para operadores de monitoreo que combina:
+
+1. **Softphone AccesPhone** para recibir/hacer llamadas SIP
+2. **CameraGrid** para visualizacion de camaras en vivo
+3. **Formulario de registro de accesos** con busqueda de residentes
+4. **Lookup automatico** de residencia por CallerID de interfon
+5. **Enmascaramiento de telefonos** (solo ultimos 4 digitos visibles)
+6. **Indicadores MQTT** mostrando estado de conexion y agentes activos
+
+**Integracion con MQTT:**
+- Consulta `/api/gate-monitor/agents` cada 15 segundos
+- Muestra badge de estado MQTT (verde=conectado, rojo=desconectado)
+- Lista agentes con indicador pulsante (online) o gris (offline)
+- Solo muestra estado de agentes cuando hay una privada seleccionada
+
 ---
 
 ## 9. API REST - Endpoints
@@ -704,6 +848,7 @@ Cada catalogo implementa el patron CRUD estandar:
 | GET | `/api/camera-proxy` | Proxy de snapshot de camara IP con autenticacion HTTP Digest |
 | GET | `/api/camera-proxy/lookup` | Descubrimiento de camaras por telefono o privada_id |
 | GET | `/api/camera-proxy/diag` | Diagnosticos del sistema de camaras (memoria, version Node) |
+| GET | `/api/camera-proxy/order` | Guardar orden de camaras (drag-and-drop) |
 
 **Parametros de `/api/camera-proxy`:**
 - `telefono` o `privada_id` - Identifica la privada
@@ -715,6 +860,35 @@ Cada catalogo implementa el patron CRUD estandar:
 - Placeholder SVG en caso de error ("Sin senal")
 - Soporte de cancelacion por desconexion del cliente
 - Diagnosticos por request (auth, fetch, retry)
+
+### Camera Frames (Agentes de Captura)
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| POST | `/api/camera-frames` | Recepcion de frames JPEG desde agentes (auth: Bearer token) |
+| POST | `/api/camera-frames/command` | Enviar comando MQTT al agente (start_stream, stop_stream) |
+| GET | `/api/camera-frames/channels` | Listar canales descubiertos por agente |
+| GET | `/api/camera-frames/poll` | Agente consulta comandos pendientes (fallback sin MQTT) |
+
+### Gate Monitor (Monitoreo de Portones)
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/gate-monitor/status` | Estado actual de todas las zonas monitoreadas |
+| GET | `/api/gate-monitor/config` | Obtener configuracion de monitoreo por siteId+camId |
+| PUT | `/api/gate-monitor/config` | Crear/actualizar configuracion de monitoreo |
+| DELETE | `/api/gate-monitor/config` | Eliminar configuracion de monitoreo |
+| GET | `/api/gate-monitor/alerts` | Historial de alertas con estadisticas |
+| GET | `/api/gate-monitor/comparisons` | Log de lecturas/comparaciones por zona |
+| GET | `/api/gate-monitor/agents` | Estado de conexion MQTT y agentes online/offline |
+| POST | `/api/gate-monitor/reference` | Capturar imagen de referencia para una zona |
+| GET | `/api/gate-monitor/reference` | Obtener imagen de referencia de una zona |
+
+### Privadas
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/privadas/list` | Listar privadas disponibles (para selectores) |
 
 ---
 
@@ -828,7 +1002,260 @@ Componente React que muestra un grid de hasta 3 camaras IP por privada, obtenien
 
 ---
 
-## 11. Sistema de Autenticacion y Seguridad
+## 11. Sistema MQTT y Agentes de Captura
+
+### 11.1 Arquitectura MQTT
+
+El sistema utiliza un broker **Mosquitto** para comunicacion bidireccional en tiempo real entre el servidor Next.js y los agentes de captura remotos (Windows).
+
+**Archivo principal:** `src/lib/mqtt-client.ts`
+
+#### Configuracion del Broker
+
+| Parametro | Valor | Variable de entorno |
+|---|---|---|
+| URL | `mqtt://50.62.182.131:1883` | `MQTT_BROKER_URL` |
+| Usuario | `admin` | `MQTT_USER` |
+| Contrasena | `v1de0acces0s` | `MQTT_PASSWORD` |
+
+#### Topicos MQTT
+
+| Topico | Direccion | Proposito |
+|---|---|---|
+| `videoaccesos/{site_id}/cmd` | Servidor -> Agente | Comandos (start_stream, stop_stream) |
+| `videoaccesos/{site_id}/channels` | Agente -> Servidor | Canales descubiertos en el DVR |
+| `videoaccesos/{site_id}/status` | Agente -> Servidor | Heartbeat cada 30s + LWT offline |
+| `videoaccesos/{site_id}/alert` | Servidor -> Suscriptores | Alertas de portones abiertos |
+
+#### Formato de Comandos
+
+```json
+{
+  "cmd": "start_stream",
+  "cam_id": 3,
+  "fps": 10,
+  "duration": 0,
+  "quality": 55,
+  "width": 640,
+  "mode": "snapshot"
+}
+```
+
+#### Funciones Exportadas
+
+| Funcion | Descripcion |
+|---|---|
+| `initMqtt()` | Inicializa conexion al broker (llamado al arrancar el servidor) |
+| `publishCommand(siteId, cmd)` | Envia comando start/stop stream al agente |
+| `publishAlert(siteId, alert)` | Publica alerta de porton abierto |
+| `isAgentOnline(siteId)` | Verifica si el agente esta activo (timeout 90s) |
+| `getAgentStatuses()` | Array de todos los agentes con estado online/offline |
+| `isMqttConnected()` | Health check de la conexion al broker |
+
+### 11.2 Frame Store (Almacen de Frames)
+
+**Archivo:** `src/lib/frame-store.ts`
+
+Almacen en memoria del ultimo frame JPEG de cada camara de cada agente:
+
+- **Limpieza automatica** de frames con mas de 15 segundos de antiguedad
+- **Reference counting** de viewers (saber cuantos operadores ven cada sitio)
+- **Persistencia de orden** de camaras (drag-and-drop) en `data/camera-order.json`
+- **Cola de comandos** pendientes para agentes (fallback sin MQTT)
+- **Tracking de canales** descubiertos por agente
+
+| Funcion | Descripcion |
+|---|---|
+| `putFrame(siteId, camId, buffer)` | Almacena frame JPEG entrante |
+| `getFrame(siteId, camId)` | Obtiene ultimo frame (si < 15s) |
+| `getFrameAge(siteId, camId)` | Edad del frame en milisegundos |
+| `setSiteChannels(siteId, channels)` | Registra canales del DVR |
+| `getCameraOrder(siteId)` / `setCameraOrder()` | Orden de camaras persistido |
+| `addViewer(siteId)` / `removeViewer(siteId)` | Tracking de operadores activos |
+
+### 11.3 Agentes de Captura (CaptureAgent)
+
+**Archivos:**
+- `agent-windows/CaptureAgent.ps1` - PowerShell 7+ (948 lineas)
+- `agent-windows/CaptureAgent-PS5.ps1` - PowerShell 5.1 compatible (1200+ lineas)
+
+Los agentes son scripts PowerShell que corren en PCs Windows en cada privada, conectados al DVR local via red LAN.
+
+#### Flujo de Operacion
+
+```
+1. Agente inicia -> lee config.json (site_id, DVR IP, MQTT broker)
+2. Conecta al broker MQTT -> suscribe a videoaccesos/{site_id}/cmd
+3. Publica heartbeat cada 30s en videoaccesos/{site_id}/status
+4. Configura LWT (Last Will Testament) para notificar desconexion
+5. Al recibir "start_stream":
+   a. Descubre canales del DVR (API ISAPI/Hikvision o Dahua)
+   b. Publica canales en videoaccesos/{site_id}/channels
+   c. Captura snapshots JPEG en paralelo de cada camara
+   d. Envia frames via HTTP POST a /api/camera-frames (Bearer token)
+6. Al recibir "stop_stream": detiene captura
+```
+
+#### Configuracion del Agente (`config.json`)
+
+```json
+{
+  "site_id": "72",
+  "dvr_ip": "192.168.1.64",
+  "dvr_username": "admin",
+  "dvr_password": "...",
+  "backend_url": "https://accesoswhatsapp.info/api/camera-frames",
+  "agent_token": "b7f9dee88d...",
+  "mqtt_broker": "50.62.182.131",
+  "mqtt_port": 1883,
+  "mqtt_user": "admin",
+  "mqtt_password": "..."
+}
+```
+
+#### Caracteristicas
+
+- **Auto-instalacion** como Tarea Programada de Windows (se ejecuta al iniciar sesion)
+- **Wizard interactivo** de configuracion en primer inicio
+- **DVRs soportados:** Hikvision (ISAPI), Dahua, camaras RTSP/HTTP genericas
+- **Auto-recovery:** watchdog timer reinicia si el proceso muere
+- **Operacion 24/7** probada con uptime de 90+ dias
+- **Dos versiones:** PS7+ (usa -shr/-shl) y PS5.1 (usa [math]::Floor para compatibilidad)
+
+#### Token de Autenticacion
+
+| Parametro | Valor |
+|---|---|
+| Variable de entorno | `AGENT_TOKEN` o `CAMERA_AGENT_TOKEN` |
+| Configuracion servidor | `src/lib/agent-config.ts` |
+| Metodo de auth | Header `Authorization: Bearer {token}` |
+
+### 11.4 MQTT Relay (Softphone)
+
+**Archivo:** `softphone/mqtt_relay.php`
+
+Bridge HTTP para activacion de relays (portones/plumas) desde el softphone:
+
+| Accion | Metodo | Descripcion |
+|---|---|---|
+| `activate` | POST/GET | Activa relay via bot orquestador (PULSE/ON/OFF/TOGGLE) |
+| `status` | GET | Estado de todos los relays |
+| `relays` | GET | Lista relays filtrados por residencial |
+| `health` | GET | Health check del bot orquestador |
+| `mqtt_direct` | POST/GET | Publicacion directa a MQTT (fallback) |
+
+**Dispositivos soportados:** ESP32, ESP32 Legacy, Dingtian
+
+---
+
+## 12. Sistema de Monitoreo de Portones
+
+### 12.1 Motor de Deteccion (Gate Monitor)
+
+**Archivo:** `src/lib/gate-monitor.ts` (727 lineas)
+
+Sistema de deteccion automatica de portones abiertos basado en comparacion de histogramas de imagen. No requiere GPU ni IA - usa la libreria **sharp** (~2ms por frame).
+
+#### Algoritmo de Deteccion
+
+```
+1. Solicita snapshot al agente via MQTT (start_stream temporal)
+2. Espera hasta 15 segundos por frame del agente
+3. Extrae region de interes (ROI) del frame usando coordenadas normalizadas
+4. Calcula histograma RGB de la region (bins de 16)
+5. Compara con histograma de referencia usando distancia Bhattacharyya
+6. Si diferencia > umbral (default 30%): marca como "abierto"
+7. Si N lecturas consecutivas son "abierto" (default 4): dispara alerta
+8. Alerta se publica via MQTT y HTTP al bot para WhatsApp
+```
+
+#### Modelo de Datos
+
+**Configuracion por zona:**
+```typescript
+interface GateZone {
+  id: string;                    // UUID unico por zona
+  roi: { x, y, width, height }; // Coordenadas 0-1 normalizadas
+  alias: string;                 // "Porton vehicular", "Puerta peatonal"
+  threshold: number;             // 0-1, default 0.3 (30%)
+  consecutiveThreshold: number;  // Lecturas para alerta (default 4)
+  referenceHistogram: number[];  // Histograma de referencia
+  referenceImageB64: string;     // Thumbnail de referencia (base64)
+  enabled: boolean;
+}
+```
+
+**Estados de zona:** `closed` | `open` | `unknown` | `no-signal`
+
+#### Persistencia (Archivos JSON)
+
+| Archivo | Contenido | Limite |
+|---|---|---|
+| `data/gate-monitors.json` | Configuracion de todos los monitores | Sin limite |
+| `data/gate-alerts.json` | Historial de alertas disparadas | Sin limite |
+| `data/gate-comparisons.json` | Log de todas las lecturas | Max 2000 registros |
+
+#### Ciclo de Monitoreo
+
+- El motor corre en background con intervalo de 30 segundos
+- Cada configuracion define su propio intervalo (default 300s = 5 min)
+- Con 4 lecturas consecutivas necesarias: ~20 min para disparar alerta
+- Evidencia fotografica guardada en `public/static/gate-alerts/`
+
+### 12.2 Enrutamiento de Alertas
+
+```
+Gate Monitor detecta porton abierto
+        |
+        +---> MQTT: videoaccesos/{siteId}/alert
+        |         |
+        |         +---> Bot Plugin Vision (Python)
+        |                   |
+        |                   +---> WhatsApp via Twilio
+        |                         (a telefonos configurados + supervisores)
+        |
+        +---> HTTP POST: http://localhost:5501/api/vision/alert
+                  |
+                  +---> Bot Orquestador (Flask)
+```
+
+#### Payload de Alerta
+
+```json
+{
+  "type": "gate_alert",
+  "site_id": "72",
+  "cam_id": 3,
+  "zone_id": "uuid-xxx",
+  "alias": "Porton Principal",
+  "privada": "Privada Los Pinos",
+  "state": "open",
+  "held_seconds": 120,
+  "difference": 45,
+  "message": "Porton 'Porton Principal' lleva 2 min abierto (diferencia: 45%)",
+  "image_url": "/static/gate-alerts/alert-72-3-uuid-2026-04-01.jpg",
+  "notify_phones": ["5216672639025"],
+  "ts": "2026-04-01T12:00:00.000Z"
+}
+```
+
+### 12.3 Bot Plugin Vision
+
+**Archivo:** `bot-plugin-vision/plugin_vision.py`
+
+Plugin para el bot orquestador (Flask) que:
+
+1. **Suscribe a MQTT** topico `videoaccesos/+/alert` para recibir alertas
+2. **Envia WhatsApp** con foto evidencia via Twilio a supervisores
+3. **Throttling:** Maximo 1 alerta por porton cada 5 minutos
+4. **Intent de consulta:** Responde a "portones", "estado portones" con estado actual
+5. **Health check** para verificar conexion MQTT
+
+**Dependencias Python:** `paho-mqtt`, `requests`, `mysql-connector-python`, `twilio`
+
+---
+
+## 13. Sistema de Autenticacion y Seguridad
 
 ### Autenticacion
 
@@ -881,7 +1308,7 @@ Cada inicio de sesion se registra en `BitacoraInicio`:
 
 ---
 
-## 12. Flujo Operativo Principal
+## 14. Flujo Operativo Principal
 
 ### Escenario Tipico: Visitante Solicita Acceso
 
@@ -936,7 +1363,7 @@ Visitante            Interfon             Operador (Navegador)
 
 ---
 
-## 13. Configuracion y Despliegue
+## 15. Configuracion y Despliegue
 
 ### Variables de Entorno Requeridas (v2)
 
@@ -947,6 +1374,14 @@ DATABASE_URL="mysql://usuario:contrasena@host:3306/wwwvideo_video_accesos"
 # NextAuth
 NEXTAUTH_SECRET="clave-secreta-aleatoria"
 NEXTAUTH_URL="http://dominio-o-ip:3000"
+
+# MQTT (comunicacion con agentes)
+MQTT_BROKER_URL="mqtt://50.62.182.131:1883"
+MQTT_USER="admin"
+MQTT_PASSWORD="..."
+
+# Agentes de captura
+AGENT_TOKEN="token-secreto-para-autenticacion-de-agentes"
 ```
 
 ### Comandos de Desarrollo
@@ -1012,7 +1447,7 @@ npm run db:pull
 
 ---
 
-## 14. Diagrama de Arquitectura
+## 16. Diagrama de Arquitectura
 
 ### Arquitectura de Red
 
@@ -1024,29 +1459,25 @@ npm run db:pull
                     |  Firewall   |
                     +------+------+
                            |
-              +------------+------------+
-              |                         |
-      +-------v-------+       +--------v--------+
-      | Servidor Web   |       | PBX SIP         |
-      | 50.62.182.131  |       | accessbotpbx    |
-      |                |       | .info           |
-      | - Apache :80   |       |                 |
-      |   (PHP/CI)     |       | - WSS :8089     |
-      |                |       | - SIP :5060     |
-      | - Node.js :3000|       |                 |
-      |   (Next.js)    |       +--------+--------+
-      |                |                |
-      | - MySQL :3306  |       +--------v--------+
-      |                |       | Interfones IP   |
-      +----------------+       | (por privada)   |
-                               +-----------------+
-
-                               +------------------+
-                               | Camaras IP       |
-                               | (RTSP/HTTP)      |
-                               | Por privada:     |
-                               | video_1, 2, 3    |
-                               +------------------+
+     +------------+--------+--------+-------------+
+     |            |                  |             |
++----v------+ +---v----------+ +----v--------+ +--v-----------+
+| Servidor  | | PBX SIP      | | PC Privada  | | PC Privada   |
+| Web       | | accessbotpbx | | (Agente 1)  | | (Agente N)   |
+| 50.62.182 | | .info        | |             | |              |
+| .131      | |              | | CaptureAgent| | CaptureAgent |
+|           | | - WSS :8089  | | PowerShell  | | PowerShell   |
+| - Apache  | | - SIP :5060  | |      |      | |      |       |
+|   :80     | |              | |  +---v---+  | |  +---v---+   |
+| - Node.js | +------+-------+ |  | DVR   |  | |  | DVR   |   |
+|   :3000   |        |         |  | Hikv/ |  | |  | Hikv/ |   |
+| - MySQL   | +------v-------+ |  | Dahua |  | |  | Dahua |   |
+|   :3306   | | Interfones   | |  +-------+  | |  +-------+   |
+| - MQTT    | | IP (privada) | +-------------+ +--------------+
+|   :1883   | +--------------+
+| - Bot     |
+|   :5501   |
++-----------+
 ```
 
 ### Flujo de Datos
@@ -1056,12 +1487,22 @@ npm run db:pull
      |                        |
      |--WSS (SIP)----------> [PBX Asterisk]
      |                        |
-     |--HTTP (proxy)-------> [Camaras IP]
+     |--HTTP (frames)------> [Frame Store (memoria)]
+     |                        |
+     |                  [MQTT Broker :1883]
+     |                   /          \
+     |          [Agente 1]    ...  [Agente N]  (CaptureAgent PowerShell)
+     |              |                  |
+     |          [DVR/Camaras]    [DVR/Camaras]  (LAN privada)
+     |
+     |          [Gate Monitor] --sharp--> [Deteccion histograma]
+     |                |
+     |          [Bot Plugin Vision] --Twilio--> [WhatsApp alertas]
 ```
 
 ---
 
-## 15. Glosario
+## 17. Glosario
 
 | Termino | Definicion |
 |---|---|
@@ -1088,6 +1529,24 @@ npm run db:pull
 | **Supervision de Llamada** | Evaluacion de calidad del servicio del operador |
 | **Orden de Servicio** | Solicitud de mantenimiento tecnico |
 | **Recuperacion Patrimonial** | Registro de danos o incidentes patrimoniales |
+| **MQTT** | Message Queuing Telemetry Transport - protocolo de mensajeria ligero |
+| **Mosquitto** | Broker MQTT open-source utilizado para comunicacion servidor-agentes |
+| **CaptureAgent** | Script PowerShell que corre en PCs Windows para capturar frames de DVRs |
+| **DVR** | Digital Video Recorder - grabador de video que conecta multiples camaras |
+| **Frame** | Imagen JPEG individual capturada de una camara |
+| **Frame Store** | Almacen en memoria del servidor para los ultimos frames de cada camara |
+| **Gate Monitor** | Sistema de deteccion automatica de portones abiertos por histograma |
+| **ROI** | Region of Interest - area rectangular seleccionada para analisis de imagen |
+| **Histograma** | Distribucion de colores en una imagen, usado para comparar frames |
+| **Distancia Bhattacharyya** | Metrica estadistica para comparar histogramas de imagen |
+| **LWT** | Last Will Testament - mensaje MQTT automatico al desconectarse un agente |
+| **Heartbeat** | Mensaje periodico (cada 30s) que indica que un agente esta activo |
+| **Video Web** | Modulo de visualizacion en vivo de camaras con reordenamiento drag-and-drop |
+| **Bot Orquestador** | Servicio Python/Flask que gestiona WhatsApp, relays y alertas |
+| **Bot Plugin Vision** | Plugin del bot que recibe alertas MQTT y envia WhatsApp via Twilio |
+| **Twilio** | Servicio cloud para envio de mensajes WhatsApp programaticos |
+| **sharp** | Libreria Node.js de procesamiento de imagenes de alto rendimiento |
+| **ISAPI** | Protocolo HTTP de Hikvision para control y captura de camaras/DVRs |
 
 ---
 
@@ -1102,13 +1561,25 @@ npm run db:pull
 | 2025 | Implementacion de softphone JsSIP/WebRTC |
 | 2025-2026 | Desarrollo de modulos CRUD, reportes y graficas |
 | Febrero 2026 | Comunicacion SIP funcional entre extensiones |
-| Febrero 2026 | Documentacion tecnica completa (este manual) |
+| Febrero 2026 | Documentacion tecnica completa (manual v1.0) |
 | Marzo 2026 | Selector de microfono en panel de configuracion del softphone |
 | Marzo 2026 | Sistema de diagnosticos SIP (`window.__sipDiag()`) |
 | Marzo 2026 | Eliminacion de configuracion TURN Server (no necesaria) |
 | Marzo 2026 | Actualizacion de documentacion tecnica v2.1 |
+| Marzo-Abril 2026 | Sistema de monitoreo de portones (gate monitor) con deteccion por histograma |
+| Marzo-Abril 2026 | Alertas WhatsApp automaticas via bot plugin vision + Twilio |
+| Abril 2026 | Migracion de comunicacion agentes de HTTP polling a MQTT |
+| Abril 2026 | CaptureAgent PowerShell con soporte MQTT (start/stop stream, heartbeat, LWT) |
+| Abril 2026 | CaptureAgent-PS5 compatible con PowerShell 5.1 (Windows built-in) |
+| Abril 2026 | Video Web: visualizacion en vivo de camaras con drag-and-drop |
+| Abril 2026 | Monitoreo de portones: multi-zona (hasta 3 ROI por camara) |
+| Abril 2026 | Consola monitorista integrada (softphone + camaras + registro de accesos) |
+| Abril 2026 | Indicadores de estado MQTT y agentes en todas las interfaces |
+| Abril 2026 | Frame Store en memoria con limpieza automatica (15s TTL) |
+| Abril 2026 | MQTT Relay para activacion de relays desde softphone |
+| Abril 2026 | Actualizacion de documentacion tecnica v3.0 |
 
 ---
 
 *Este manual fue generado como parte del desarrollo del sistema Video Accesos v2.*
-*Ultima actualizacion: 8 de marzo de 2026.*
+*Ultima actualizacion: 12 de abril de 2026.*
