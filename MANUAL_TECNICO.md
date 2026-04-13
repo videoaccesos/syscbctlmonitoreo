@@ -890,6 +890,17 @@ Cada catalogo implementa el patron CRUD estandar:
 |---|---|---|
 | GET | `/api/privadas/list` | Listar privadas disponibles (para selectores) |
 
+### Relay (Apertura Remota)
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| POST | `/api/relay/ejecutar` | Proxy al bot orquestador para activar relays (portones/plumas) |
+
+**Parametros de `/api/relay/ejecutar`:**
+- `trigger_value` (requerido): `abrir_visitas_api`, `abrir_residentes_api`, `apertura_especial_api`
+- `residencial_id` (requerido): `privada_id` de MySQL (ej: `72` para Arcadia)
+- `source` (opcional): `softphone` (default)
+
 ---
 
 ## 10. Sistema VoIP/SIP - AccesPhone
@@ -1130,11 +1141,108 @@ Los agentes son scripts PowerShell que corren en PCs Windows en cada privada, co
 | Configuracion servidor | `src/lib/agent-config.ts` |
 | Metodo de auth | Header `Authorization: Bearer {token}` |
 
-### 11.4 MQTT Relay (Softphone)
+### 11.4 Sistema de Apertura Remota (Relays)
+
+El sistema permite a los operadores abrir portones, plumas y accesos de forma
+remota desde el softphone. La cadena de comunicacion es:
+
+```
+Softphone (AccesPhone.tsx)
+    |
+    | POST /api/relay/ejecutar
+    | { trigger_value, residencial_id, source }
+    v
+Next.js Proxy (api/relay/ejecutar/route.ts)
+    |
+    | POST http://localhost:5501/api/relay/ejecutar
+    v
+Bot Orquestador (plugin_mqtt_relay.py)
+    |
+    | 1. Busca escenario por trigger_value + residencial_id
+    | 2. Ejecuta pasos del escenario (cada paso activa un relay)
+    | 3. Publica comando MQTT al dispositivo Dingtian/ESP32
+    v
+MQTT Broker -> Dispositivo fisico (Dingtian/ESP32) -> Porton/Pluma abre
+```
+
+#### Botones del Softphone
+
+| Boton | Color | trigger_value | Uso |
+|---|---|---|---|
+| **Visita** | Verde | `abrir_visitas_api` | Abre acceso de visitas (pluma + porton visitas) |
+| **Residente** | Azul | `abrir_residentes_api` | Abre acceso de residentes (pluma + porton residentes) |
+| **Especial** | Naranja | `apertura_especial_api` | Apertura prolongada de todos los accesos |
+
+Los botones aparecen cuando el softphone esta conectado y hay una privada seleccionada.
+El `residencial_id` enviado es el `privada_id` de la tabla `privadas` de MySQL.
+
+#### Base de Datos del Bot (wwwvideo_acceso_codigo)
+
+La configuracion de relays vive en la BD del bot orquestador, NO en la BD
+de Next.js. Las tablas clave son:
+
+**`residenciales`** — Registro de cada privada en el bot
+- `id`: DEBE coincidir con `privada_id` de MySQL (`wwwvideo_video_accesos.privadas`)
+- `nombre`: Nombre de la privada
+- `mqtt_device_1`, `mqtt_device_2`: Topicos MQTT de los dispositivos relay
+
+**`escenarios`** — Define que hacer cuando se recibe un trigger
+- `residencial_id`: FK a `residenciales.id` (= `privada_id` de MySQL)
+- `trigger_value`: `abrir_visitas_api`, `abrir_residentes_api`, `apertura_especial_api`
+- `nombre`: Descripcion del escenario
+- `activo`: Habilitado/deshabilitado
+
+**`escenario_pasos`** — Secuencia de acciones por escenario
+- `escenario_id`: FK a `escenarios.id`
+- `funcion_relay`: `relay_1`, `relay_2`, etc. (referencia a `device_relays`)
+- `accion`: `PULSE`, `ON`, `OFF`, `TOGGLE`, `PULSE_LONG`
+
+**`device_relays`** — Mapeo de relays fisicos por dispositivo
+- `residencial_id`: FK a `residenciales.id` (= `privada_id` de MySQL)
+- `mqtt_device`: Topico MQTT del dispositivo (ej: `arcadia/relay42365`)
+- `relay_number`: Numero del relay en el dispositivo (1-8)
+- `funcion_relay`: Identificador (`relay_1`, `relay_2`, etc.)
+- `nombre`: Descripcion (ej: "Porton Visitas", "Pluma Residentes")
+- `tipo_funcion`: `porton`, `pluma`, `reinicio`, `alimentacion`, `otro`
+- `device_type`: `dingtian`, `esp32`, `esp32_legacy`
+- `pulse_duration_ms`: Duracion del pulso en milisegundos
+
+#### Relacion de IDs (CRITICO)
+
+El `residenciales.id` del bot DEBE coincidir con `privadas.privada_id` de MySQL.
+Si no coinciden, el softphone envia un ID que el bot no reconoce.
+
+Ejemplo correcto:
+```
+MySQL (privadas):     privada_id=72, descripcion="ARCADIA"
+Bot (residenciales):  id=72, nombre="Arcadia"
+Bot (escenarios):     residencial_id=72, trigger_value="abrir_visitas_api"
+Bot (device_relays):  residencial_id=72, mqtt_device="arcadia/relay42365"
+```
+
+Para verificar alineacion:
+```sql
+SELECT r.id as bot_id, r.nombre as bot_nombre, p.privada_id as mysql_id, p.descripcion as mysql_nombre
+FROM wwwvideo_acceso_codigo.residenciales r
+LEFT JOIN wwwvideo_video_accesos.privadas p
+  ON UPPER(p.descripcion) = UPPER(r.nombre)
+WHERE r.id != p.privada_id;
+```
+Si retorna filas, hay desajuste de IDs que causara fallas en el softphone.
+
+#### Dispositivos Soportados
+
+| Tipo | Protocolo | Relays | Ejemplo topico MQTT |
+|---|---|---|---|
+| **Dingtian** | MQTT (relay board) | Hasta 8 | `arcadia/relay42365` |
+| **ESP32** | MQTT | Variable | `privada/esp32_xxx` |
+| **ESP32 Legacy** | MQTT | Variable | `privada/legacy_xxx` |
+
+#### Bridge PHP (Legacy)
 
 **Archivo:** `softphone/mqtt_relay.php`
 
-Bridge HTTP para activacion de relays (portones/plumas) desde el softphone:
+Bridge HTTP alternativo para activacion de relays, usado como fallback:
 
 | Accion | Metodo | Descripcion |
 |---|---|---|
@@ -1144,8 +1252,6 @@ Bridge HTTP para activacion de relays (portones/plumas) desde el softphone:
 | `health` | GET | Health check del bot orquestador |
 | `mqtt_direct` | POST/GET | Publicacion directa a MQTT (fallback) |
 
-**Dispositivos soportados:** ESP32, ESP32 Legacy, Dingtian
-
 ---
 
 ## 12. Sistema de Monitoreo de Portones
@@ -1154,7 +1260,11 @@ Bridge HTTP para activacion de relays (portones/plumas) desde el softphone:
 
 **Archivo:** `src/lib/gate-monitor.ts` (727 lineas)
 
-Sistema de deteccion automatica de portones abiertos basado en comparacion directa de pixeles (MAD - Mean Absolute Difference) con normalizacion de brillo. No requiere GPU ni IA - usa la libreria **sharp** (~3ms por frame).
+Sistema de deteccion automatica de portones abiertos basado en Correlacion
+Cruzada Normalizada (NCC) de pixeles. Compara la estructura de la imagen
+(no solo el brillo), inmune a cambios de iluminacion. Soporta ROI trapezoidal
+con correccion de perspectiva via homografia. No requiere GPU ni IA - usa
+la libreria **sharp** (~3ms por frame).
 
 #### Algoritmo de Deteccion
 
@@ -1162,18 +1272,20 @@ Sistema de deteccion automatica de portones abiertos basado en comparacion direc
 1. Solicita snapshot al agente via MQTT (start_stream temporal)
 2. Espera hasta 15 segundos por frame del agente
 3. Extrae region de interes (ROI) del frame usando coordenadas normalizadas
-4. Normaliza brillo (sharp.normalize) para compensar cambios dia/noche
+4. Aplica transformacion de perspectiva (homografia) si el ROI es trapezoidal
 5. Redimensiona a tamano canonico (64x48 px) en escala de grises
-6. Compara pixel a pixel con la referencia usando MAD (Mean Absolute Difference)
-7. Si diferencia > umbral (default 15%): marca como "abierto"
+6. Compara con la referencia usando NCC (Normalized Cross-Correlation)
+7. Si diferencia > umbral (default 30%): marca como "abierto"
 8. Si N lecturas consecutivas son "abierto" (default 4): dispara alerta
 9. Alerta se publica via MQTT y HTTP al bot para WhatsApp
 ```
 
-**Porque MAD en lugar de histogramas:** Los histogramas pierden informacion espacial -
-un porton abierto y uno cerrado pueden tener la misma distribucion de colores.
-MAD compara los pixeles en sus posiciones originales, detectando cambios
-estructurales (el porton se movio) incluso cuando los colores son similares.
+**Porque NCC en lugar de histogramas o MAD:**
+- Histogramas pierden informacion espacial (misma distribucion de colores abierto/cerrado)
+- MAD (Mean Absolute Difference) es insensible cuando el brillo promedio es similar
+- NCC compara la ESTRUCTURA (patron de pixeles), no solo valores absolutos
+- Substrae la media de cada imagen → inmune a cambios uniformes de luz
+- Valores tipicos: cerrado ~2-5%, abierto ~40-80%
 
 #### Modelo de Datos
 
@@ -1543,7 +1655,11 @@ npm run db:pull
 | **Frame Store** | Almacen en memoria del servidor para los ultimos frames de cada camara |
 | **Gate Monitor** | Sistema de deteccion automatica de portones abiertos por comparacion de pixeles |
 | **ROI** | Region of Interest - area rectangular seleccionada para analisis de imagen |
-| **MAD** | Mean Absolute Difference - diferencia promedio entre pixeles de dos imagenes |
+| **NCC** | Normalized Cross-Correlation - correlacion cruzada normalizada entre imagenes |
+| **Homografia** | Transformacion de perspectiva 3x3 que convierte un trapecio en rectangulo |
+| **Dingtian** | Placa de relays (hasta 8) controlada por MQTT para abrir portones/plumas |
+| **Escenario** | Secuencia de pasos (activaciones de relays) para una accion de apertura |
+| **trigger_value** | Identificador de la accion de apertura (abrir_visitas_api, etc.) |
 | **LWT** | Last Will Testament - mensaje MQTT automatico al desconectarse un agente |
 | **Heartbeat** | Mensaje periodico (cada 30s) que indica que un agente esta activo |
 | **Video Web** | Modulo de visualizacion en vivo de camaras con reordenamiento drag-and-drop |
