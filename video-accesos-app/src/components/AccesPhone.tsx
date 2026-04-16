@@ -736,6 +736,13 @@ export default function AccesPhone({
         register_expires: 600,
         session_timers: false,
         user_agent: "Access Phone v3.1",
+        // Enviar CRLF keep-alive cada 30s sobre el WebSocket para evitar
+        // que el NAT del router cierre la conexion por inactividad.
+        // Sin esto, en redes residenciales (Telmex/cable) el WS muere
+        // cada 3-5 min, JsSIP reconecta y genera nuevo Contact con
+        // distinto puerto NAT, causando flapping en PJSIP (Reachable/Unreachable).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({ keepAliveInterval: 30 } as any),
       });
 
       ua.on("connected", () => {
