@@ -944,10 +944,46 @@ export default function AccesPhone({
   const disconnectSIP = useCallback(() => {
     manualDisconnectRef.current = true;
     cancelReconnect();
-    if (uaRef.current) {
-      uaRef.current.unregister();
-      uaRef.current.stop();
+    const ua = uaRef.current;
+    if (ua) {
+      // Marcar nulo en el ref para evitar re-uso, pero no detener todavía
       uaRef.current = null;
+
+      // Esperar a que el PBX confirme el unregister (evento "unregistered")
+      // antes de cerrar el WebSocket. Si solo llamamos stop() inmediatamente,
+      // el REGISTER Expires:0 se aborta y el AOR queda "ghost" en PJSIP
+      // hasta que expire naturalmente (puede tomar varios minutos), causando
+      // que Asterisk siga ruteando llamadas a esta extension.
+      let stopped = false;
+      const finalize = () => {
+        if (stopped) return;
+        stopped = true;
+        try { ua.stop(); } catch { /* ignore */ }
+        diag("DISCONNECT_SIP", "ua.stop() completado");
+      };
+
+      ua.once("unregistered", () => {
+        diag("UNREGISTERED_OK", "PBX confirmó unregister");
+        finalize();
+      });
+
+      try {
+        diag("UNREGISTER_SENT", "esperando confirmacion del PBX...");
+        ua.unregister();
+      } catch (err) {
+        diag("UNREGISTER_ERROR", err instanceof Error ? err.message : String(err));
+        finalize();
+        return;
+      }
+
+      // Fallback: si el PBX no responde en 3 segundos, forzar el stop
+      // (mejor desconectar que dejar el WS colgado)
+      setTimeout(() => {
+        if (!stopped) {
+          diag("UNREGISTER_TIMEOUT", "PBX no confirmo en 3s, cerrando WS");
+          finalize();
+        }
+      }, 3000);
     }
     setConnected(false);
     setConnecting(false);
@@ -1215,16 +1251,41 @@ export default function AccesPhone({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount + capturar cierre de pestaña/navegacion
   useEffect(() => {
+    // Best-effort unregister al cerrar/recargar pestana.
+    // El navegador NO espera Promise asincronas en pagehide, pero el
+    // unregister() de JsSIP escribe el REGISTER al WebSocket de inmediato;
+    // muchos navegadores alcanzan a flushear el frame antes de cerrar.
+    // pagehide es preferible a beforeunload (mejor soporte mobile + bfcache).
+    const handlePageHide = () => {
+      const ua = uaRef.current;
+      if (!ua) return;
+      try { ua.unregister(); } catch { /* ignore */ }
+      // No llamamos stop() aqui para no abortar el unregister en flight
+    };
+    window.addEventListener("pagehide", handlePageHide);
+
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
       mountedRef.current = false;
       manualDisconnectRef.current = true; // prevent reconnect after unmount
       cancelReconnect();
-      if (uaRef.current) {
-        uaRef.current.unregister();
-        uaRef.current.stop();
+      const ua = uaRef.current;
+      if (ua) {
         uaRef.current = null;
+        // Mismo patron que disconnectSIP: esperar unregister antes de stop()
+        // para que PJSIP marque el AOR como Unavailable y no rutee llamadas
+        // a una extension fantasma.
+        let stopped = false;
+        const finalize = () => {
+          if (stopped) return;
+          stopped = true;
+          try { ua.stop(); } catch { /* ignore */ }
+        };
+        ua.once("unregistered", finalize);
+        try { ua.unregister(); } catch { finalize(); return; }
+        setTimeout(finalize, 3000);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
