@@ -152,7 +152,9 @@ function loadConfig(): AccesPhoneConfig {
 function saveConfigToStorage(cfg: AccesPhoneConfig) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    // Merge with existing storage to preserve other keys (autoAnswer, dnd, etc.)
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...existing, ...cfg }));
   } catch {
     // ignore
   }
@@ -182,7 +184,10 @@ export default function AccesPhone({
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AccesPhoneConfig>(DEFAULT_CONFIG);
   const [statusText, setStatusText] = useState("Desconectado");
-  const [dndActive, setDndActive] = useState(false);
+  const [dndActive, setDndActive] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").dnd || false; } catch { return false; }
+  });
   const [autoAnswerActive, setAutoAnswerActive] = useState(() => {
     if (typeof window === "undefined") return false;
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").autoAnswer || false; } catch { return false; }
@@ -194,6 +199,17 @@ export default function AccesPhone({
   useEffect(() => { dndRef.current = dndActive; }, [dndActive]);
   useEffect(() => { autoAnswerRef.current = autoAnswerActive; }, [autoAnswerActive]);
   useEffect(() => { ringingRef.current = ringing; }, [ringing]);
+
+  // Persist toggle states to localStorage so they survive page reloads
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      existing.autoAnswer = autoAnswerActive;
+      existing.dnd = dndActive;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    } catch {}
+  }, [autoAnswerActive, dndActive]);
 
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -862,8 +878,24 @@ export default function AccesPhone({
           if (autoAnswerRef.current) {
             console.log("[AccesPhone] Auto-answer enabled, answering immediately");
             diag("AUTO_ANSWER", `num=${callerNumber}`);
-            // Small delay to let UI update with caller info
-            setTimeout(() => answerCallRef.current(), 300);
+            // Poll for session ready (status=4 WAITING_FOR_ANSWER) up to 5s
+            // and retry if needed - more robust than single setTimeout
+            const tryAnswer = (attempt = 0) => {
+              if (!sessionRef.current || sessionRef.current !== session) {
+                diag("AUTO_ANSWER_ABORT", `attempt=${attempt} session changed`);
+                return;
+              }
+              if (sessionRef.current.status === 4) {
+                diag("AUTO_ANSWER_TRY", `attempt=${attempt}`);
+                answerCallRef.current();
+              } else if (attempt < 25) {
+                // Retry every 200ms up to 5 seconds
+                setTimeout(() => tryAnswer(attempt + 1), 200);
+              } else {
+                diag("AUTO_ANSWER_TIMEOUT", `status=${sessionRef.current.status}`);
+              }
+            };
+            setTimeout(() => tryAnswer(), 200);
           }
           // Otherwise Asterisk's ringback tone plays via remote audio
         }
@@ -1015,6 +1047,8 @@ export default function AccesPhone({
         },
       });
       console.log("[AccesPhone] answer() called successfully with provided stream");
+      // Reset flag on success - cleanupCall will also reset it on disconnect
+      answeringRef.current = false;
     } catch (err) {
       console.error("[AccesPhone] Error answering call:", err);
       answeringRef.current = false;
