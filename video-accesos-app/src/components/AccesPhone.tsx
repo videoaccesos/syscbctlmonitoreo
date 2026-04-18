@@ -1022,9 +1022,12 @@ export default function AccesPhone({
     // Try to get real microphone (use selected device if configured)
     try {
       const selectedMic = configRef.current.micDeviceId;
-      const audioConstraints: MediaTrackConstraints | boolean = selectedMic
-        ? { deviceId: { exact: selectedMic } }
-        : true;
+      const audioConstraints: MediaTrackConstraints = {
+        ...(selectedMic ? { deviceId: { exact: selectedMic } } : {}),
+        echoCancellation: true,
+        noiseSuppression: false,
+        autoGainControl: false,
+      };
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
       // Log which device was actually picked
       const usedTrack = stream.getAudioTracks()[0];
