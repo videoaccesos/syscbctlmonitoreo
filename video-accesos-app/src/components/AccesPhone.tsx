@@ -88,6 +88,8 @@ interface AccesPhoneConfig {
   displayName: string;
   micDeviceId: string; // "" = default del navegador
   autoAnswer: boolean; // auto-answer incoming calls without ringing
+  micGain: number; // 0-200 mic volume (100 = normal, 200 = 2x boost)
+  speakerVolume: number; // 0-200 speaker volume (100 = normal)
   ringVolume: number; // 0-100 ringtone volume
   ringTone: string; // ringtone file name
   cameraProxyUrl: string;
@@ -119,6 +121,8 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   displayName: "Monitoreo",
   micDeviceId: "",
   autoAnswer: false,
+  micGain: 150,
+  speakerVolume: 100,
   ringVolume: 70,
   ringTone: "ringtone-classic.wav",
   cameraProxyUrl: "camera_proxy.php",
@@ -211,6 +215,19 @@ export default function AccesPhone({
     } catch {}
   }, [autoAnswerActive, dndActive]);
 
+  // Apply mic gain and speaker volume in real-time when config changes
+  useEffect(() => {
+    if (micGainNodeRef.current) {
+      micGainNodeRef.current.gain.value = (config.micGain ?? 150) / 100;
+    }
+  }, [config.micGain]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current && !remoteAudioRef.current.muted) {
+      remoteAudioRef.current.volume = Math.min(1.0, (config.speakerVolume ?? 100) / 100);
+    }
+  }, [config.speakerVolume]);
+
   // Auto-reconnect state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
@@ -261,6 +278,7 @@ export default function AccesPhone({
   const sessionRef = useRef<RTCSession | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const micGainNodeRef = useRef<GainNode | null>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
@@ -427,7 +445,7 @@ export default function AccesPhone({
         setInCall(true);
         // Restore remote audio volume after ringing (was muted to suppress Asterisk early media)
         if (remoteAudioRef.current) {
-          remoteAudioRef.current.volume = 1.0;
+          remoteAudioRef.current.volume = Math.min(1.0, (configRef.current.speakerVolume ?? 100) / 100);
           console.log("[AccesPhone] Remote audio volume restored after answer");
         }
         onCallAnsweredRef.current?.(callerNumber);
@@ -545,7 +563,7 @@ export default function AccesPhone({
                 remoteAudioRef.current.volume = 0;
                 console.log("[AccesPhone] Remote audio muted during ringing (early media suppressed)");
               } else {
-                remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+                remoteAudioRef.current.volume = speakerOn ? Math.min(1.0, (configRef.current.speakerVolume ?? 100) / 100) : 0;
               }
               remoteAudioRef.current.play().catch(() => {});
             }
@@ -562,7 +580,7 @@ export default function AccesPhone({
                 if (ringingRef.current) {
                   remoteAudioRef.current.volume = 0;
                 } else {
-                  remoteAudioRef.current.volume = speakerOn ? 1.0 : 0;
+                  remoteAudioRef.current.volume = speakerOn ? Math.min(1.0, (configRef.current.speakerVolume ?? 100) / 100) : 0;
                 }
                 remoteAudioRef.current.play().catch(() => {});
               }
@@ -1041,11 +1059,13 @@ export default function AccesPhone({
         const ctx = new AudioContext();
         const source = ctx.createMediaStreamSource(stream);
         const gainNode = ctx.createGain();
-        gainNode.gain.value = 2.0;
+        const micGainPct = configRef.current.micGain ?? 150;
+        gainNode.gain.value = micGainPct / 100;
+        micGainNodeRef.current = gainNode;
         const dst = ctx.createMediaStreamDestination();
         source.connect(gainNode);
         gainNode.connect(dst);
-        console.log("[AccesPhone] Mic gain boost applied: 2.0x (+6dB)");
+        console.log(`[AccesPhone] Mic gain applied: ${micGainPct}% (${gainNode.gain.value}x)`);
         return dst.stream;
       } catch (gainErr) {
         console.warn("[AccesPhone] Could not apply gain boost, using raw mic:", gainErr);
@@ -1871,6 +1891,56 @@ export default function AccesPhone({
                 </select>
                 <p className="text-[10px] text-gray-700 mt-1">
                   Evite &quot;Stereo Mix&quot; - no es un microfono real
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Volumen de microfono (envio)
+                </label>
+                <div className="flex items-center gap-3">
+                  <Mic className="h-4 w-4 text-gray-600 flex-shrink-0" />
+                  <input
+                    type="range"
+                    min={50}
+                    max={300}
+                    step={10}
+                    value={config.micGain ?? 150}
+                    onChange={(e) =>
+                      setConfig({ ...config, micGain: parseInt(e.target.value) })
+                    }
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-xs font-mono text-gray-600 w-10 text-right">
+                    {config.micGain ?? 150}%
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-700 mt-1">
+                  Que tan fuerte te escuchan los clientes (150% recomendado)
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-900 mb-1">
+                  Volumen de bocina (recepcion)
+                </label>
+                <div className="flex items-center gap-3">
+                  <Volume2 className="h-4 w-4 text-gray-600 flex-shrink-0" />
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={config.speakerVolume ?? 100}
+                    onChange={(e) =>
+                      setConfig({ ...config, speakerVolume: parseInt(e.target.value) })
+                    }
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-xs font-mono text-gray-600 w-10 text-right">
+                    {config.speakerVolume ?? 100}%
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-700 mt-1">
+                  Que tan fuerte escuchas a los clientes
                 </p>
               </div>
               <div>
