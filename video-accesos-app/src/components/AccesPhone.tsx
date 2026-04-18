@@ -121,7 +121,7 @@ const DEFAULT_CONFIG: AccesPhoneConfig = {
   displayName: "Monitoreo",
   micDeviceId: "",
   autoAnswer: false,
-  micGain: 150,
+  micGain: 200,
   speakerVolume: 100,
   ringVolume: 70,
   ringTone: "ringtone-classic.wav",
@@ -1057,15 +1057,28 @@ export default function AccesPhone({
       // Gain de 2.0 = +6dB (duplica el volumen percibido).
       try {
         const ctx = new AudioContext();
+        // CRITICO: Chrome suspende AudioContext sin interaccion del usuario.
+        // En auto-answer el usuario no hizo click → ctx queda suspended →
+        // el GainNode no procesa audio → se envia SILENCIO al WebRTC.
+        if (ctx.state === "suspended") {
+          console.log("[AccesPhone] AudioContext suspended, resuming...");
+          await ctx.resume();
+          console.log("[AccesPhone] AudioContext state after resume:", ctx.state);
+        }
         const source = ctx.createMediaStreamSource(stream);
         const gainNode = ctx.createGain();
-        const micGainPct = configRef.current.micGain ?? 150;
+        const micGainPct = configRef.current.micGain ?? 200;
         gainNode.gain.value = micGainPct / 100;
         micGainNodeRef.current = gainNode;
         const dst = ctx.createMediaStreamDestination();
         source.connect(gainNode);
         gainNode.connect(dst);
-        console.log(`[AccesPhone] Mic gain applied: ${micGainPct}% (${gainNode.gain.value}x)`);
+        console.log(`[AccesPhone] Mic gain applied: ${micGainPct}% (${gainNode.gain.value}x) ctx.state=${ctx.state}`);
+        // Verificar que el stream de salida tiene tracks activos
+        const outTrack = dst.stream.getAudioTracks()[0];
+        if (outTrack) {
+          console.log(`[AccesPhone] Gain output track: enabled=${outTrack.enabled} readyState=${outTrack.readyState} muted=${outTrack.muted}`);
+        }
         return dst.stream;
       } catch (gainErr) {
         console.warn("[AccesPhone] Could not apply gain boost, using raw mic:", gainErr);
@@ -1902,7 +1915,7 @@ export default function AccesPhone({
                   <input
                     type="range"
                     min={50}
-                    max={300}
+                    max={400}
                     step={10}
                     value={config.micGain ?? 150}
                     onChange={(e) =>
