@@ -1025,8 +1025,6 @@ export default function AccesPhone({
       const audioConstraints: MediaTrackConstraints = {
         ...(selectedMic ? { deviceId: { exact: selectedMic } } : {}),
         echoCancellation: true,
-        noiseSuppression: false,
-        autoGainControl: false,
       };
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
       // Log which device was actually picked
