@@ -1025,12 +1025,32 @@ export default function AccesPhone({
       const audioConstraints: MediaTrackConstraints = {
         ...(selectedMic ? { deviceId: { exact: selectedMic } } : {}),
         echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       };
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
       // Log which device was actually picked
       const usedTrack = stream.getAudioTracks()[0];
       console.log("[AccesPhone] Microphone acquired OK:", usedTrack?.label || "unknown", "settings:", JSON.stringify(usedTrack?.getSettings?.()));
-      return stream;
+
+      // Amplificar el audio del micrófono antes de enviarlo por WebRTC.
+      // Muchos headsets/mics USB tienen nivel bajo por defecto y los
+      // clientes reportan que "casi no escuchan" al monitorista.
+      // Gain de 2.0 = +6dB (duplica el volumen percibido).
+      try {
+        const ctx = new AudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 2.0;
+        const dst = ctx.createMediaStreamDestination();
+        source.connect(gainNode);
+        gainNode.connect(dst);
+        console.log("[AccesPhone] Mic gain boost applied: 2.0x (+6dB)");
+        return dst.stream;
+      } catch (gainErr) {
+        console.warn("[AccesPhone] Could not apply gain boost, using raw mic:", gainErr);
+        return stream;
+      }
     } catch (micErr) {
       console.warn("[AccesPhone] Microphone unavailable:", micErr);
       console.log("[AccesPhone] Creating silent audio stream as fallback (listen-only mode)");
